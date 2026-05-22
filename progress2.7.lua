@@ -11,6 +11,10 @@ return function(env)
     local Theme = env.Theme
     local SendNotification = env.SendNotification
 
+    -- =========================================================================
+    -- VARIÁVEIS DE CONTROLE GLOBAL (Módulo)
+    -- =========================================================================
+    
     -- Vars Beast Power
     local BeastPowerConnection1 = nil
     local BeastPowerConnection2 = nil
@@ -18,22 +22,17 @@ return function(env)
     local trackedPowerValue = nil
     local lastPercent = 0
     local isDraining = false
-    local BeastPowerLoop2
-    
+    local BeastPowerLoop2 = nil
+
+    -- Vars Computer Progress
+    local CompProgLoop = nil
+    local CompProgConns = {}
+
     -- Vars Door Progress
     local DoorProgLoop = nil
     local DoorProgHeartbeat = nil
     local trackedNormalDoors = {}
-    local DT_CONFIG = { VISIBILITY_DISTANCE = 75, DOOR_NAMES = {["SingleDoor"]=true,["DoubleDoor"]=true,["SlidingDoor"]=true}, BLACKLIST = {["ExitDoor"]=true,["Decorative"]=true,["FakeDoor"]=true,["ElevatorDoor"]=true, ["Closet"]=false} }
-    local DT_COLORS = { 
-        BAR_BG = Color3.fromRGB(35, 30, 30), 
-        MUSTARD = Color3.fromRGB(205, 135, 25), 
-        WHITE = Color3.fromRGB(230, 230, 230),
-        HL_CLOSE = Color3.fromRGB(255, 0, 0),
-        HL_OPENING = Color3.fromRGB(255, 200, 0),
-        HL_OPEN = Color3.fromRGB(0, 255, 0)
-    }
-    
+
     -- Vars ExitDoor Progress
     local ExitDoorConn = nil
     local ExitDoorAdded = nil
@@ -41,15 +40,241 @@ return function(env)
     local trackedExitDoors = {}
     local actionValCache = {}
 
+    -- Vars WalkSpeed Detector
+    local speedRenderConn = nil
+    local speedPlayerAdded = nil
+    local speedPlayerRemoving = nil
+    local activePlayers = {}
+    local speedCharConns = {}
+
+    -- Vars Wallhop Counter
+    local WallhopStateConn = nil
+    local WallhopCharConn = nil
+    local WallhopTimerConn = nil
+
+    -- Vars GetUp Timer
+    local getupActive = false
+    local getupConns = {} 
+    local activeConnections = {} 
+    local getupGui = nil
+    local getupList = nil
+    local activeGetUp = {}
+
+    -- Vars Beast Spawn Timer
+    local BeastSpawnActive = false
+    local BeastSpawnLoopThread = nil
+    local BeastSpawnRenderConn = nil
+    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
+
     -- =========================================================================
     -- SECTION: ACTION TIMERS (Coluna Esquerda)
     -- =========================================================================
     Library:CreateSection(Page, "Action Timers")
     
+    -- 1. Computer Progress
     Library:CreateToggle(Page, "Computer Progress", false, function(state)
-        -- Código removido. Toggle vazia pronta para novos scripts.
+        if state then
+            local function createProgressBar(parent)
+                local billboard = Instance.new("BillboardGui")
+                billboard.Name = "ProgressBar"
+                billboard.Adornee = parent
+                billboard.Size = UDim2.new(0, 80, 0, 26)
+                billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+                billboard.AlwaysOnTop = true
+                billboard.Parent = parent
+
+                local background = Instance.new("Frame")
+                background.Name = "BgBar"
+                background.Size = UDim2.new(1, 0, 1, 0)
+                background.BackgroundTransparency = 1
+                background.BorderSizePixel = 0
+                background.Parent = billboard
+
+                local text = Instance.new("TextLabel")
+                text.Name = "ProgressText"
+                text.Size = UDim2.new(1, 0, 0, 14)
+                text.Position = UDim2.new(0, 0, 0, 0)
+                text.BackgroundTransparency = 1
+                text.TextColor3 = Color3.fromRGB(255, 255, 255)
+                text.TextSize = 12
+                text.Font = Enum.Font.GothamBold
+                text.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                text.TextStrokeTransparency = 0
+                text.Text = "0.0%"
+                text.Parent = background
+
+                local track = Instance.new("Frame")
+                track.Name = "Track"
+                track.Size = UDim2.new(0, 70, 0, 6)
+                track.Position = UDim2.new(0.5, -35, 0, 16)
+                track.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+                track.BorderSizePixel = 0
+                track.Parent = background
+
+                local trackCorner = Instance.new("UICorner")
+                trackCorner.CornerRadius = UDim.new(0, 2)
+                trackCorner.Parent = track
+
+                local trackStroke = Instance.new("UIStroke")
+                trackStroke.Thickness = 1
+                trackStroke.Color = Color3.fromRGB(0, 0, 0)
+                trackStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+                trackStroke.Parent = track
+
+                local bar = Instance.new("Frame")
+                bar.Name = "Bar"
+                bar.Size = UDim2.new(0, 0, 1, 0)
+                bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+                bar.BorderSizePixel = 0
+                bar.Parent = track
+
+                local barCorner = Instance.new("UICorner")
+                barCorner.CornerRadius = UDim.new(0, 2)
+                barCorner.Parent = bar
+
+                return billboard, bar, text
+            end
+
+            local function setupComputer(tableModel)
+                if tableModel:FindFirstChild("ProgressBar") then return end
+
+                local billboard, bar, text = createProgressBar(tableModel)
+                
+                local highlight = tableModel:FindFirstChildOfClass("Highlight") or Instance.new("Highlight")
+                highlight.Name = "ComputerHighlight"
+                highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
+                highlight.OutlineTransparency = 0
+                highlight.Parent = tableModel
+
+                local screen = tableModel:FindFirstChild("Screen")
+                local triggers = {}
+                for _, child in ipairs(tableModel:GetChildren()) do
+                    if child:IsA("BasePart") and child.Name:find("ComputerTrigger") then
+                        table.insert(triggers, child)
+                    end
+                end
+
+                local savedProgress = 0
+                local lastSize = -1
+                local overlapParams = OverlapParams.new()
+                overlapParams.FilterType = Enum.RaycastFilterType.Include
+
+                local updateInterval = 0.08
+                local accumulatedTime = 0
+
+                local connection
+                connection = RunService.Heartbeat:Connect(function(dt)
+                    accumulatedTime = accumulatedTime + dt
+                    if accumulatedTime < updateInterval then return end
+                    accumulatedTime = 0
+
+                    if not tableModel or not tableModel.Parent or not bar or not text then
+                        connection:Disconnect()
+                        return
+                    end
+
+                    local isGreen = false
+                    if screen and screen.Parent then
+                        highlight.FillColor = screen.Color
+                        if screen.Color.G > screen.Color.R and screen.Color.G > screen.Color.B then
+                            isGreen = true
+                        end
+                    end
+
+                    if isGreen then
+                        savedProgress = 1
+                    else
+                        local highestTouch = 0
+                        local characterParts = {}
+                        local playersList = Players:GetPlayers()
+                        
+                        for i = 1, #playersList do
+                            local char = playersList[i].Character
+                            if char then
+                                table.insert(characterParts, char)
+                            end
+                        end
+
+                        if #characterParts > 0 then
+                            overlapParams.FilterDescendantsInstances = characterParts
+                            for i = 1, #triggers do
+                                local part = triggers[i]
+                                if part and part.Parent then
+                                    local touchingParts = Workspace:GetPartsInPart(part, overlapParams)
+                                    for j = 1, #touchingParts do
+                                        local character = touchingParts[j].Parent
+                                        local plr = Players:GetPlayerFromCharacter(character)
+                                        if plr then
+                                            local tpsm = plr:FindFirstChild("TempPlayerStatsModule")
+                                            if tpsm then
+                                                local ragdoll = tpsm:FindFirstChild("Ragdoll")
+                                                local ap = tpsm:FindFirstChild("ActionProgress")
+                                                if ragdoll and typeof(ragdoll.Value) == "boolean" and not ragdoll.Value then
+                                                    if ap and typeof(ap.Value) == "number" then
+                                                        highestTouch = math.max(highestTouch, ap.Value)
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                        savedProgress = math.max(savedProgress, highestTouch)
+                    end
+
+                    if savedProgress ~= lastSize then
+                        lastSize = savedProgress
+                        local tweenInfo = TweenInfo.new(0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+                        local tween = TweenService:Create(bar, tweenInfo, {Size = UDim2.new(savedProgress, 0, 1, 0)})
+                        tween:Play()
+                    end
+
+                    if savedProgress >= 1 then
+                        bar.BackgroundColor3 = Color3.fromRGB(0, 255, 140)
+                        text.TextColor3 = Color3.fromRGB(0, 255, 140)
+                        text.Text = "COMPLETED"
+                    else
+                        bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+                        text.TextColor3 = Color3.fromRGB(255, 255, 255)
+                        text.Text = string.format("%.1f%%", math.floor(savedProgress * 200 + 0.1) / 2)
+                    end
+                end)
+                table.insert(CompProgConns, connection)
+            end
+
+            CompProgLoop = task.spawn(function()
+                while state do
+                    local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
+                    if currentMap and currentMap.Value ~= "" then
+                        local mapName = tostring(currentMap.Value)
+                        local map = Workspace:FindFirstChild(mapName)
+                        if map then
+                            for _, obj in ipairs(map:GetChildren()) do
+                                if obj.Name == "ComputerTable" then
+                                    setupComputer(obj)
+                                end
+                            end
+                        end
+                    end
+                    task.wait(1.5)
+                end
+            end)
+        else
+            if CompProgLoop then task.cancel(CompProgLoop); CompProgLoop = nil end
+            for _, c in ipairs(CompProgConns) do 
+                if c then c:Disconnect() end 
+            end
+            table.clear(CompProgConns)
+            for _, obj in ipairs(Workspace:GetDescendants()) do
+                if obj.Name == "ProgressBar" and obj:IsA("BillboardGui") then obj:Destroy() end
+                if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then obj:Destroy() end
+            end
+        end
     end)
     
+    -- 2. Door Progress
     Library:CreateToggle(Page, "Door Progress", false, function(state)
         if state then
             local function createDoorHUD(parent)
@@ -116,12 +341,23 @@ return function(env)
             local function getRealDoorPart(model)
                 local explicitDoor = model:FindFirstChild("Door") or model:FindFirstChild("Left") or model:FindFirstChild("Right")
                 if explicitDoor and explicitDoor:IsA("BasePart") then return explicitDoor end
+                
                 local biggestPart = nil
                 local maxVolume = 0
-                for _, part in ipairs(model:GetDescendants()) do
-                    if part:IsA("BasePart") and not string.match(part.Name, "Frame") and not string.match(part.Name, "Wall") and part.Transparency < 1 then
-                        local v = part.Size.X * part.Size.Y * part.Size.Z
-                        if v > maxVolume then maxVolume = v; biggestPart = part end
+                local descendants = model:GetDescendants()
+                
+                for i = 1, #descendants do
+                    local part = descendants[i]
+                    if part:IsA("BasePart") then
+                        local name = part.Name
+                        if not string.find(name, "Frame", 1, true) and not string.find(name, "Wall", 1, true) and part.Transparency < 1 then
+                            local size = part.Size
+                            local v = size.X * size.Y * size.Z
+                            if v > maxVolume then 
+                                maxVolume = v
+                                biggestPart = part 
+                            end
+                        end
                     end
                 end
                 return biggestPart or model.PrimaryPart
@@ -130,7 +366,9 @@ return function(env)
             local function setupNormalDoor(doorModel)
                 if trackedNormalDoors[doorModel] then return end
                 if DT_CONFIG.BLACKLIST[doorModel.Name] then return end
-                if string.match(doorModel.Name, "Exit") or string.match(doorModel.Name, "Decor") then return end
+                
+                local name = doorModel.Name
+                if string.find(name, "Exit", 1, true) or string.find(name, "Decor", 1, true) then return end
                 
                 local anchorPart = getRealDoorPart(doorModel)
                 if not anchorPart then return end
@@ -147,7 +385,9 @@ return function(env)
                     Billboard = billboard, 
                     Bar = bar, 
                     Text = text,
-                    Highlight = highlight
+                    Highlight = highlight,
+                    LastState = "Closed",
+                    LastProgress = -1
                 }
             end
 
@@ -168,7 +408,9 @@ return function(env)
                         table.clear(trackedNormalDoors)
 
                         if map then
-                            for _, obj in ipairs(map:GetDescendants()) do
+                            local descendants = map:GetDescendants()
+                            for i = 1, #descendants do
+                                local obj = descendants[i]
                                 if obj:IsA("Model") and DT_CONFIG.DOOR_NAMES[obj.Name] and not DT_CONFIG.BLACKLIST[obj.Name] then 
                                     setupNormalDoor(obj) 
                                 end
@@ -187,14 +429,18 @@ return function(env)
             end)
 
             local accum = 0
+            local currentDoorInteractions = {}
+
             DoorProgHeartbeat = RunService.Heartbeat:Connect(function(dt)
                 accum = accum + dt
                 if accum < 0.1 then return end
                 accum = 0
                 
-                local currentDoorInteractions = {}
+                table.clear(currentDoorInteractions)
+                local playersList = Players:GetPlayers()
 
-                for _, player in ipairs(Players:GetPlayers()) do
+                for i = 1, #playersList do
+                    local player = playersList[i]
                     local stats = player:FindFirstChild("TempPlayerStatsModule")
                     if stats then
                         local action = stats:FindFirstChild("ActionProgress")
@@ -212,13 +458,19 @@ return function(env)
                                 
                                 if hrp then
                                     local closestDoor = nil
-                                    local minDistance = 15
+                                    local minDistanceSq = 225
+                                    local hrpPos = hrp.Position
                                     
                                     for doorModel, data in pairs(trackedNormalDoors) do
                                         if data.Anchor and data.Anchor.Parent then
-                                            local dist = (data.Anchor.Position - hrp.Position).Magnitude
-                                            if dist < minDistance then
-                                                minDistance = dist
+                                            local anchorPos = data.Anchor.Position
+                                            local dx = anchorPos.X - hrpPos.X
+                                            local dy = anchorPos.Y - hrpPos.Y
+                                            local dz = anchorPos.Z - hrpPos.Z
+                                            local distSq = dx*dx + dy*dy + dz*dz
+                                            
+                                            if distSq < minDistanceSq then
+                                                minDistanceSq = distSq
                                                 closestDoor = doorModel
                                             end
                                         end
@@ -246,43 +498,59 @@ return function(env)
                     end
 
                     local currentCF = data.Anchor.CFrame
-                    local distMoved = (currentCF.Position - data.InitialCFrame.Position).Magnitude
+                    local initialPos = data.InitialCFrame.Position
+                    local currentPos = currentCF.Position
+                    
+                    local mx = currentPos.X - initialPos.X
+                    local my = currentPos.Y - initialPos.Y
+                    local mz = currentPos.Z - initialPos.Z
+                    local distMovedSq = mx*mx + my*my + mz*mz
+                    
                     local dot = currentCF.LookVector:Dot(data.InitialCFrame.LookVector)
                     
                     if data.Anchor.CanCollide == true then
-                        if dot < 0.9 or distMoved > 0.5 then
+                        if dot < 0.9 or distMovedSq > 0.25 then
                             data.InitialCFrame = currentCF
                             dot = 1
+                            distMovedSq = 0
                         end
                     end
 
                     local isPhysicallyOpen = false
-                    if not data.Anchor.CanCollide or dot < 0.85 or distMoved > 0.5 or data.Anchor.Transparency > 0.8 then
+                    if not data.Anchor.CanCollide or dot < 0.85 or distMovedSq > 0.25 or data.Anchor.Transparency > 0.8 then
                         isPhysicallyOpen = true
                     end
                     
                     local interactionVal = currentDoorInteractions[doorModel] or 0
 
                     if isPhysicallyOpen then
-                        data.Bar.Size = UDim2.new(1, 0, 1, 0)
-                        data.Bar.BackgroundColor3 = DT_COLORS.WHITE
-                        data.Text.TextColor3 = DT_COLORS.WHITE
-                        data.Text.Text = "100.0%"
-                        data.Highlight.FillColor = DT_COLORS.HL_OPEN
-                        
+                        if data.LastState ~= "Open" then
+                            data.LastState = "Open"
+                            data.Bar.Size = UDim2.new(1, 0, 1, 0)
+                            data.Bar.BackgroundColor3 = DT_COLORS.WHITE
+                            data.Text.TextColor3 = DT_COLORS.WHITE
+                            data.Text.Text = "100.0%"
+                            data.Highlight.FillColor = DT_COLORS.HL_OPEN
+                        end
                     elseif interactionVal > 0.001 then 
-                        data.Bar.Size = UDim2.new(math.clamp(interactionVal, 0, 1), 0, 1, 0)
-                        data.Bar.BackgroundColor3 = DT_COLORS.MUSTARD
-                        data.Text.TextColor3 = DT_COLORS.MUSTARD
-                        data.Text.Text = string.format("%.1f%%", interactionVal * 100)
-                        data.Highlight.FillColor = DT_COLORS.HL_OPENING
-                        
+                        if data.LastState ~= "Opening" or math.abs(data.LastProgress - interactionVal) > 0.005 then
+                            data.LastState = "Opening"
+                            data.LastProgress = interactionVal
+                            data.Bar.Size = UDim2.new(math.clamp(interactionVal, 0, 1), 0, 1, 0)
+                            data.Bar.BackgroundColor3 = DT_COLORS.MUSTARD
+                            data.Text.TextColor3 = DT_COLORS.MUSTARD
+                            data.Text.Text = string.format("%.1f%%", interactionVal * 100)
+                            data.Highlight.FillColor = DT_COLORS.HL_OPENING
+                        end
                     else
-                        data.Bar.Size = UDim2.new(0, 0, 1, 0)
-                        data.Bar.BackgroundColor3 = DT_COLORS.MUSTARD
-                        data.Text.TextColor3 = DT_COLORS.MUSTARD
-                        data.Text.Text = "0.0%"
-                        data.Highlight.FillColor = DT_COLORS.HL_CLOSE
+                        if data.LastState ~= "Closed" then
+                            data.LastState = "Closed"
+                            data.Bar.Size = UDim2.new(0, 0, 1, 0)
+                            data.Bar.BackgroundColor3 = DT_COLORS.MUSTARD
+                            data.Text.TextColor3 = DT_COLORS.MUSTARD
+                            data.Text.Text = "0.0%"
+                            data.Highlight.FillColor = DT_COLORS.HL_CLOSE
+                        end
                     end
                 end
             end)
@@ -297,6 +565,7 @@ return function(env)
         end
     end)
     
+    -- 3. ExitDoor Progress
     Library:CreateToggle(Page, "ExitDoor Progress", false, function(state)
         if state then
             local guiName = "FTF_ExitDoorESP_Premium"
@@ -594,12 +863,280 @@ return function(env)
         end
     end)
     
+    -- 4. WalkSpeed Detector
     Library:CreateToggle(Page, "WalkSpeed Detector", false, function(state)
-        -- Código removido. Toggle vazia pronta para novos scripts.
+        if state then
+            local function createSpeedTag(character, head)
+                local tag = character:FindFirstChild("SpeedTag")
+                local label
+                
+                if not tag then
+                    tag = Instance.new("BillboardGui")
+                    tag.Name = "SpeedTag"
+                    tag.Adornee = head
+                    tag.Size = UDim2.new(0, 60, 0, 20)
+                    tag.StudsOffset = Vector3.new(0, 2.5, 0)
+                    tag.AlwaysOnTop = true
+
+                    label = Instance.new("TextLabel")
+                    label.Name = "SpeedText"
+                    label.Size = UDim2.new(1, 0, 1, 0)
+                    label.BackgroundTransparency = 1
+                    label.TextSize = 18
+                    label.Font = Enum.Font.Code
+                    label.TextStrokeTransparency = 0
+                    label.TextStrokeColor3 = Color3.new(0, 0, 0)
+                    label.TextColor3 = Color3.new(1, 1, 1)
+                    label.Parent = tag
+                    
+                    tag.Parent = character
+                else
+                    label = tag:FindFirstChild("SpeedText")
+                end
+                
+                return label
+            end
+
+            local function setupCharacter(player, character)
+                local humanoid = character:WaitForChild("Humanoid", 5)
+                local root = character:WaitForChild("HumanoidRootPart", 5)
+                local head = character:WaitForChild("Head", 5)
+                
+                if not (humanoid and root and head) then return end
+                
+                local label = createSpeedTag(character, head)
+                if label then
+                    activePlayers[player] = {
+                        root = root,
+                        humanoid = humanoid,
+                        label = label
+                    }
+                end
+            end
+
+            local function onPlayerAdded(player)
+                local connection = player.CharacterAdded:Connect(function(character)
+                    setupCharacter(player, character)
+                end)
+                speedCharConns[player] = connection
+                
+                if player.Character then
+                    setupCharacter(player, player.Character)
+                end
+            end
+
+            speedPlayerAdded = Players.PlayerAdded:Connect(onPlayerAdded)
+            speedPlayerRemoving = Players.PlayerRemoving:Connect(function(player)
+                activePlayers[player] = nil
+                if speedCharConns[player] then
+                    speedCharConns[player]:Disconnect()
+                    speedCharConns[player] = nil
+                end
+            end)
+
+            for _, player in ipairs(Players:GetPlayers()) do
+                onPlayerAdded(player)
+            end
+
+            speedRenderConn = RunService.RenderStepped:Connect(function()
+                for player, data in pairs(activePlayers) do
+                    local root = data.root
+                    local humanoid = data.humanoid
+                    
+                    if root and root.Parent and humanoid and humanoid.Health > 0 then
+                        if humanoid.MoveDirection.Magnitude == 0 then
+                            data.label.Text = "0.0"
+                        else
+                            local vel = root.AssemblyLinearVelocity
+                            local vx = vel.X
+                            local vz = vel.Z
+                            
+                            local speed = math.sqrt(vx * vx + vz * vz)
+                            data.label.Text = string.format("%.1f", speed)
+                        end
+                    else
+                        activePlayers[player] = nil
+                    end
+                end
+            end)
+        else
+            if speedPlayerAdded then speedPlayerAdded:Disconnect(); speedPlayerAdded = nil end
+            if speedPlayerRemoving then speedPlayerRemoving:Disconnect(); speedPlayerRemoving = nil end
+            if speedRenderConn then speedRenderConn:Disconnect(); speedRenderConn = nil end
+            for player, conn in pairs(speedCharConns) do
+                if conn then conn:Disconnect() end
+            end
+            table.clear(speedCharConns)
+            for _, player in ipairs(Players:GetPlayers()) do
+                local char = player.Character
+                if char and char:FindFirstChild("SpeedTag") then
+                    char.SpeedTag:Destroy()
+                end
+            end
+            table.clear(activePlayers)
+        end
     end)
 
+    -- 5. Wallhop Counter
     Library:CreateToggle(Page, "Wallhop Counter", false, function(state)
-        -- Código removido. Toggle vazia pronta para novos scripts.
+        if state then
+            if CoreGui:FindFirstChild("WallhopCounterUI") then
+                CoreGui.WallhopCounterUI:Destroy()
+            end
+
+            local sg = Instance.new("ScreenGui")
+            sg.Name = "WallhopCounterUI"
+            sg.DisplayOrder = 1000
+            sg.Parent = CoreGui
+
+            local label = Instance.new("TextLabel")
+            label.Name = "ComboLabel"
+            label.Size = UDim2.new(0, 200, 0, 40)
+            label.Position = UDim2.new(0.85, 0, 0.6, 0)
+            label.AnchorPoint = Vector2.new(0.5, 0.5)
+            label.BackgroundTransparency = 1
+            label.Font = Enum.Font.GothamBlack
+            label.TextSize = 28
+            label.TextColor3 = Color3.fromRGB(255, 255, 255)
+            label.TextTransparency = 1
+            label.Text = "Wallhops: 0"
+            label.Parent = sg
+
+            local stroke = Instance.new("UIStroke")
+            stroke.Color = Color3.fromRGB(0, 0, 0)
+            stroke.Thickness = 2.5
+            stroke.Transparency = 1
+            stroke.Parent = label
+
+            local timerLabel = Instance.new("TextLabel")
+            timerLabel.Name = "TimerLabel"
+            timerLabel.Size = UDim2.new(1, 0, 0, 20)
+            timerLabel.Position = UDim2.new(0.5, 0, 1, 0)
+            timerLabel.AnchorPoint = Vector2.new(0.5, 0)
+            timerLabel.BackgroundTransparency = 1
+            timerLabel.Font = Enum.Font.GothamBold
+            timerLabel.TextSize = 18
+            timerLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+            timerLabel.TextTransparency = 1
+            timerLabel.Text = "0.0s"
+            timerLabel.Parent = label
+
+            local timerStroke = Instance.new("UIStroke")
+            timerStroke.Color = Color3.fromRGB(0, 0, 0)
+            timerStroke.Thickness = 2
+            timerStroke.Transparency = 1
+            timerStroke.Parent = timerLabel
+
+            local uiVisivel = false
+
+            local function MostrarUI()
+                if not uiVisivel then
+                    uiVisivel = true
+                    TweenService:Create(label, TweenInfo.new(0.15), {TextTransparency = 0}):Play()
+                    TweenService:Create(stroke, TweenInfo.new(0.15), {Transparency = 0}):Play()
+                    TweenService:Create(timerLabel, TweenInfo.new(0.15), {TextTransparency = 0}):Play()
+                    TweenService:Create(timerStroke, TweenInfo.new(0.15), {Transparency = 0}):Play()
+                end
+            end
+
+            local function EsconderUI()
+                if uiVisivel then
+                    uiVisivel = false
+                    TweenService:Create(label, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
+                    TweenService:Create(stroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
+                    TweenService:Create(timerLabel, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
+                    TweenService:Create(timerStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
+                end
+            end
+
+            local function EfeitoPulo()
+                label.TextSize = 38
+                TweenService:Create(label, TweenInfo.new(0.2, Enum.EasingStyle.Bounce), {TextSize = 28}):Play()
+            end
+
+            local function AtualizarCor(combo)
+                local cor = Color3.fromRGB(255, 255, 255)
+                if combo >= 3 and combo <= 4 then cor = Color3.fromRGB(255, 215, 0)
+                elseif combo >= 5 and combo <= 6 then cor = Color3.fromRGB(255, 100, 0)
+                elseif combo >= 7 then cor = Color3.fromRGB(255, 0, 0) end
+                
+                TweenService:Create(label, TweenInfo.new(0.15), {TextColor3 = cor}):Play()
+                TweenService:Create(timerLabel, TweenInfo.new(0.15), {TextColor3 = cor}):Play()
+            end
+
+            local hopCount = 0
+            local tempoInicioCombo = 0
+
+            WallhopTimerConn = RunService.RenderStepped:Connect(function()
+                if hopCount > 0 then
+                    local tempoDecorrido = os.clock() - tempoInicioCombo
+                    timerLabel.Text = string.format("%.1fs", tempoDecorrido)
+                end
+            end)
+
+            local function IniciarMonitoramento(char)
+                local humanoid = char:WaitForChild("Humanoid", 3)
+                local hrp = char:WaitForChild("HumanoidRootPart", 3)
+                if not humanoid or not hrp then return end
+
+                local rayParams = RaycastParams.new()
+                rayParams.FilterDescendantsInstances = {char}
+                rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+                WallhopStateConn = humanoid.StateChanged:Connect(function(velho, novo)
+                    if novo == Enum.HumanoidStateType.Jumping then
+                        if velho == Enum.HumanoidStateType.Climbing then return end
+
+                        local hit = Workspace:Blockcast(CFrame.new(hrp.Position), Vector3.new(1.2, 0.1, 1.2), Vector3.new(0, -4.5, 0), rayParams)
+                        
+                        if not hit then
+                            if hopCount == 0 then
+                                tempoInicioCombo = os.clock()
+                            end
+                            
+                            hopCount = hopCount + 1
+                            label.Text = "Wallhops: " .. hopCount
+                            AtualizarCor(hopCount)
+                            EfeitoPulo()
+                            MostrarUI()
+                        else
+                            hopCount = 0
+                            EsconderUI()
+                        end
+
+                    elseif novo == Enum.HumanoidStateType.Landed then
+                        task.delay(0.15, function()
+                            pcall(function()
+                                local estadoAtual = humanoid:GetState()
+                                if estadoAtual == Enum.HumanoidStateType.Running or estadoAtual == Enum.HumanoidStateType.RunningNoPhysics then
+                                    if hopCount > 0 then
+                                        hopCount = 0
+                                        EsconderUI()
+                                    end
+                                end
+                            end)
+                        end)
+                    end
+                end)
+            end
+
+            if LocalPlayer.Character then
+                IniciarMonitoramento(LocalPlayer.Character)
+            end
+
+            WallhopCharConn = LocalPlayer.CharacterAdded:Connect(function(char)
+                hopCount = 0
+                EsconderUI()
+                IniciarMonitoramento(char)
+            end)
+        else
+            if WallhopStateConn then WallhopStateConn:Disconnect(); WallhopStateConn = nil end
+            if WallhopCharConn then WallhopCharConn:Disconnect(); WallhopCharConn = nil end
+            if WallhopTimerConn then WallhopTimerConn:Disconnect(); WallhopTimerConn = nil end
+            if CoreGui:FindFirstChild("WallhopCounterUI") then
+                CoreGui.WallhopCounterUI:Destroy()
+            end
+        end
     end)
 
     -- =========================================================================
@@ -607,10 +1144,280 @@ return function(env)
     -- =========================================================================
     Library:CreateSection(Page, "Beast Indicators")
     
+    -- 1. GetUp Timer
     Library:CreateToggle(Page, "GetUp Timer", false, function(state)
-        -- Código removido. Toggle vazia pronta para novos scripts.
+        if state then
+            getupActive = true
+            local CONFIG_GETUP = {
+                Font = Enum.Font.Garamond,
+                NameColor = Color3.fromRGB(255, 255, 255),
+                StrokeColor = Color3.fromRGB(0, 0, 0),
+                StrokeThickness = 2.5,
+                Duration = 28
+            }
+            local UI_UPDATE_INTERVAL = 0.033 
+
+            local function colorGetUp(t)
+                local red = Color3.fromRGB(255, 0, 0) 
+                local yellow = Color3.fromRGB(255, 220, 40)
+                local green = Color3.fromRGB(60, 255, 60)
+                if t > 0.5 then
+                    return yellow:Lerp(green, (t - 0.5) * 2)
+                else
+                    return red:Lerp(yellow, t * 2)
+                end
+            end
+
+            local function applyStroke(parent)
+                local stroke = Instance.new("UIStroke")
+                stroke.Color = CONFIG_GETUP.StrokeColor
+                stroke.Thickness = CONFIG_GETUP.StrokeThickness
+                stroke.Transparency = 0
+                stroke.LineJoinMode = Enum.LineJoinMode.Round
+                stroke.Parent = parent
+                return stroke
+            end
+
+            local function getUIContainer()
+                local success, container = pcall(function() return CoreGui end)
+                return (success and container) or LocalPlayer:WaitForChild("PlayerGui")
+            end
+
+            local function cleanupPlayer(p, con, frame, char)
+                if char then
+                    local head = char:FindFirstChild("Head")
+                    local bb = head and head:FindFirstChild("RC")
+                    if bb then bb:Destroy() end
+                end
+                if frame then frame:Destroy() end
+                activeGetUp[p] = nil
+                if con then
+                    con:Disconnect()
+                    activeConnections[p] = nil
+                end
+            end
+
+            local uiParent = getUIContainer()
+            if uiParent:FindFirstChild("RagdollCounterGui") then 
+                uiParent.RagdollCounterGui:Destroy() 
+            end
+
+            getupGui = Instance.new("ScreenGui")
+            getupGui.Name = "RagdollCounterGui"
+            getupGui.ResetOnSpawn = false
+            getupGui.Parent = uiParent
+
+            getupList = Instance.new("Frame", getupGui)
+            getupList.Size = UDim2.new(0, 160, 0, 400)
+            getupList.Position = UDim2.new(1, -60, 0.32, 0) 
+            getupList.AnchorPoint = Vector2.new(1, 0) 
+            getupList.BackgroundTransparency = 1
+
+            local layout = Instance.new("UIListLayout", getupList)
+            layout.VerticalAlignment = Enum.VerticalAlignment.Top
+            layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+            layout.Padding = UDim.new(0, 8)
+
+            local function billboard(p, head)
+                if p == LocalPlayer or not head then return nil end 
+                local old = head:FindFirstChild("RC")
+                if old then old:Destroy() end
+                
+                local bb = Instance.new("BillboardGui", head)
+                bb.Name = "RC"
+                bb.Size = UDim2.new(5, 0, 3, 0) 
+                bb.StudsOffset = Vector3.new(0, 3, 0) 
+                bb.AlwaysOnTop = true
+                
+                local container = Instance.new("Frame", bb)
+                container.Size = UDim2.fromScale(1, 1)
+                container.BackgroundTransparency = 1
+                
+                local nameLbl = Instance.new("TextLabel", container)
+                nameLbl.Size = UDim2.new(1, 0, 0.45, 0)
+                nameLbl.Position = UDim2.new(0, 0, 0, 0)
+                nameLbl.BackgroundTransparency = 1
+                nameLbl.TextScaled = true
+                nameLbl.Font = CONFIG_GETUP.Font
+                nameLbl.TextColor3 = CONFIG_GETUP.NameColor
+                nameLbl.TextStrokeTransparency = 1 
+                nameLbl.Text = p.Name
+                applyStroke(nameLbl) 
+                
+                local timeLbl = Instance.new("TextLabel", container)
+                timeLbl.Size = UDim2.new(1, 0, 0.55, 0)
+                timeLbl.Position = UDim2.new(0, 0, 0.45, 0) 
+                timeLbl.BackgroundTransparency = 1
+                timeLbl.TextScaled = true
+                timeLbl.Font = CONFIG_GETUP.Font
+                timeLbl.TextStrokeTransparency = 1
+                applyStroke(timeLbl)
+                
+                return timeLbl
+            end
+
+            local function start(p, char, hum, hrp)
+                if p == LocalPlayer then return end 
+                
+                if activeConnections[p] then
+                    activeConnections[p]:Disconnect()
+                    activeConnections[p] = nil
+                end
+                local oldFrame = getupList:FindFirstChild(p.Name)
+                if oldFrame then oldFrame:Destroy() end
+                
+                activeGetUp[p] = os.clock()
+                local lastHealth = hum.Health
+                
+                local head = char:FindFirstChild("Head")
+                local headTimer = billboard(p, head)
+                
+                local playerFrame = Instance.new("Frame", getupList)
+                playerFrame.Name = p.Name 
+                playerFrame.Size = UDim2.new(1, 0, 0, 45) 
+                playerFrame.BackgroundTransparency = 1
+                
+                local listName = Instance.new("TextLabel", playerFrame)
+                listName.Size = UDim2.new(1, 0, 0.45, 0)
+                listName.BackgroundTransparency = 1
+                listName.Font = CONFIG_GETUP.Font
+                listName.TextSize = 20
+                listName.TextXAlignment = Enum.TextXAlignment.Right 
+                listName.TextColor3 = CONFIG_GETUP.NameColor
+                listName.TextStrokeTransparency = 1
+                listName.Text = p.Name
+                applyStroke(listName)
+                
+                local listTimer = Instance.new("TextLabel", playerFrame)
+                listTimer.Size = UDim2.new(1, 0, 0.55, 0)
+                listTimer.Position = UDim2.new(0, 0, 0.45, 0)
+                listTimer.BackgroundTransparency = 1
+                listTimer.Font = CONFIG_GETUP.Font
+                listTimer.TextSize = 24
+                listTimer.TextXAlignment = Enum.TextXAlignment.Right 
+                listTimer.TextStrokeTransparency = 1
+                applyStroke(listTimer)
+                
+                local lastUpdate = 0
+                local con
+                
+                con = RunService.Heartbeat:Connect(function()
+                    if not p.Parent or not char.Parent or not hum.Parent or not hrp.Parent then
+                        cleanupPlayer(p, con, playerFrame, char)
+                        return
+                    end
+                    
+                    local isRagdoll = hum.PlatformStand or hum:GetState() == Enum.HumanoidStateType.Physics
+                    local isCaptured = hrp.Anchored
+                    local isDead = hum.Health <= 0
+                    
+                    local currentHealth = hum.Health
+                    if currentHealth < lastHealth then
+                        activeGetUp[p] = os.clock()
+                    end
+                    lastHealth = currentHealth
+                    
+                    local now = os.clock()
+                    local elapsed = now - (activeGetUp[p] or now)
+                    local forceExpired = elapsed >= (CONFIG_GETUP.Duration + 1.0)
+                    
+                    if not getupActive or not isRagdoll or isCaptured or isDead or forceExpired then
+                        cleanupPlayer(p, con, playerFrame, char)
+                        return
+                    end
+                    
+                    if now - lastUpdate >= UI_UPDATE_INTERVAL then
+                        lastUpdate = now
+                        
+                        local r = math.max(CONFIG_GETUP.Duration - elapsed, 0)
+                        local c = colorGetUp(r / CONFIG_GETUP.Duration)
+                        local timeString = string.format("%.2f", r)
+                        
+                        if headTimer and headTimer.Parent then
+                            headTimer.Text = timeString
+                            headTimer.TextColor3 = c
+                        end
+                        listTimer.Text = timeString
+                        listTimer.TextColor3 = c
+                        
+                        if r <= 0 then
+                            listTimer.Text = "0.00"
+                            if headTimer and headTimer.Parent then 
+                                headTimer.Text = "0.00" 
+                            end
+                        end
+                    end
+                end)
+                
+                activeConnections[p] = con
+            end
+
+            local hb = task.spawn(function()
+                while getupActive and task.wait(0.15) do 
+                    for _, p in ipairs(Players:GetPlayers()) do
+                        if p ~= LocalPlayer and not activeGetUp[p] then
+                            local char = p.Character
+                            local hum = char and char:FindFirstChildOfClass("Humanoid")
+                            
+                            if hum then
+                                local isRagdoll = hum.PlatformStand or hum:GetState() == Enum.HumanoidStateType.Physics
+                                if isRagdoll then
+                                    local hrp = char:FindFirstChild("HumanoidRootPart")
+                                    local isCaptured = hrp and hrp.Anchored
+                                    
+                                    if not isCaptured then
+                                        task.spawn(start, p, char, hum, hrp)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+            table.insert(getupConns, hb)
+
+            local pr = Players.PlayerRemoving:Connect(function(p)
+                activeGetUp[p] = nil
+                if activeConnections[p] then
+                    activeConnections[p]:Disconnect()
+                    activeConnections[p] = nil
+                end
+                local oldFrame = getupList:FindFirstChild(p.Name)
+                if oldFrame then oldFrame:Destroy() end
+            end)
+            table.insert(getupConns, pr)
+        else
+            getupActive = false
+            for _, c in ipairs(getupConns) do
+                if typeof(c) == "thread" then 
+                    task.cancel(c) 
+                else 
+                    c:Disconnect() 
+                end
+            end
+            table.clear(getupConns)
+            
+            for p, con in pairs(activeConnections) do
+                if con then con:Disconnect() end
+            end
+            activeConnections = {}
+            activeGetUp = {}
+            
+            if getupGui then 
+                getupGui:Destroy() 
+                getupGui = nil 
+            end
+            
+            for _, p in ipairs(Players:GetPlayers()) do
+                local char = p.Character
+                local head = char and char:FindFirstChild("Head")
+                local bb = head and head:FindFirstChild("RC")
+                if bb then bb:Destroy() end
+            end
+        end
     end)
     
+    -- 2. Beast Power Timer
     Library:CreateToggle(Page, "Beast Power Timer", false, function(state)
         if state then
             local function getUIContainer()
@@ -726,6 +1533,7 @@ return function(env)
         end
     end)
     
+    -- 3. Beast Power Timer V2
     Library:CreateToggle(Page, "Beast Power Timer V2", false, function(state)
         local function CreateLabelBP(player)
             local character = player.Character
@@ -779,15 +1587,13 @@ return function(env)
                                 else
                                     label.Text = ""
                                 end
-                            else
-                                label.Text = ""
                             end
                         end
                     end
                 end
             end)
         else
-            if BeastPowerLoop2 then task.cancel(BeastPowerLoop2) BeastPowerLoop2 = nil end
+            if BeastPowerLoop2 then task.cancel(BeastPowerLoop2); BeastPowerLoop2 = nil end
             for _, player in ipairs(Players:GetPlayers()) do
                 if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                     local bb = player.Character.HumanoidRootPart:FindFirstChild("BeastPowerBillboard")
@@ -797,7 +1603,152 @@ return function(env)
         end
     end)
     
+    -- 4. Beast Spawn Timer
     Library:CreateToggle(Page, "Beast Spawn Timer", false, function(state)
-        -- Código removido. Toggle vazia pronta para novos scripts.
+        if state then
+            BeastSpawnActive = true
+            
+            if CoreGui:FindFirstChild("ElegantBeastTimer") then
+                CoreGui.ElegantBeastTimer:Destroy()
+            end
+
+            local sg = Instance.new("ScreenGui")
+            sg.Name = "ElegantBeastTimer"
+            sg.DisplayOrder = 999
+            sg.Parent = CoreGui
+
+            local label = Instance.new("TextLabel")
+            label.Name = "TimerLabel"
+            label.Size = UDim2.new(0, 400, 0, 50)
+            label.Position = UDim2.new(0.5, 0, 0.8, 0)
+            label.AnchorPoint = Vector2.new(0.5, 0.5)
+            label.BackgroundTransparency = 1
+            label.Font = Enum.Font.GothamBlack
+            label.TextSize = 26
+            label.TextColor3 = Color3.fromRGB(255, 255, 255)
+            label.TextTransparency = 1
+            label.Text = ""
+            label.Parent = sg
+
+            local stroke = Instance.new("UIStroke")
+            stroke.Color = Color3.fromRGB(0, 0, 0)
+            stroke.Thickness = 2
+            stroke.Transparency = 1
+            stroke.Parent = label
+
+            local infoSeno = TweenInfo.new(0.8, Enum.EasingStyle.Sine)
+            local infoLinear = TweenInfo.new(0.5, Enum.EasingStyle.Linear)
+
+            local function FadeIn()
+                TweenService:Create(label, infoSeno, {TextTransparency = 0}):Play()
+                TweenService:Create(stroke, infoSeno, {Transparency = 0.3}):Play()
+            end
+
+            local function FadeOut()
+                TweenService:Create(label, infoSeno, {TextTransparency = 1}):Play()
+                TweenService:Create(stroke, infoSeno, {Transparency = 1}):Play()
+            end
+
+            local function TweenColor(color)
+                TweenService:Create(label, infoLinear, {TextColor3 = color}):Play()
+            end
+
+            local function TemMapaCarregado()
+                for _, obj in ipairs(Workspace:GetChildren()) do
+                    if obj:IsA("Model") or obj:IsA("Folder") then
+                        if obj:FindFirstChild("ComputerTable") or obj:FindFirstChild("FreezePod") then
+                            return true
+                        end
+                    end
+                end
+                return false
+            end
+
+            local isMapLoaded = false 
+
+            local function IniciarContagem()
+                local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+                if not stats then return end
+                
+                local isBeast = stats:FindFirstChild("IsBeast")
+                if isBeast and isBeast.Value then return end
+
+                local vida = stats:FindFirstChild("Health")
+                if not vida or vida.Value <= 0 then return end
+
+                FadeIn()
+                label.TextColor3 = Color3.fromRGB(255, 255, 255)
+                
+                local tempoInicio = os.clock()
+                local isRed = false
+                local conexao
+
+                conexao = RunService.RenderStepped:Connect(function()
+                    local vivo = vida and vida.Value > 0
+                    
+                    if not vivo or not isMapLoaded or not BeastSpawnActive then
+                        conexao:Disconnect()
+                        FadeOut()
+                        return
+                    end
+
+                    if IsGameActive.Value == true then
+                        conexao:Disconnect()
+                        label.Text = "The Beast has been released!"
+                        TweenColor(Color3.fromRGB(255, 255, 255))
+                        task.delay(3, FadeOut)
+                        return
+                    end
+
+                    local tempoRestante = 15 - (os.clock() - tempoInicio)
+
+                    if tempoRestante <= 0 then
+                        label.Text = "Beast Spawns In: 0.0"
+                    else
+                        label.Text = string.format("Beast Spawns In: %.1f", tempoRestante)
+                        
+                        if tempoRestante <= 5 and not isRed then
+                            isRed = true
+                            TweenColor(Color3.fromRGB(255, 85, 85))
+                        end
+                    end
+                end)
+                BeastSpawnRenderConn = conexao
+            end
+
+            BeastSpawnLoopThread = task.spawn(function()
+                local estadoAnterior = "LOBBY"
+                
+                while BeastSpawnActive do
+                    isMapLoaded = TemMapaCarregado() 
+                    
+                    local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+                    local hp = stats and stats:FindFirstChild("Health")
+                    
+                    local naPartida = (hp and hp.Value > 0) and isMapLoaded
+                    local jogoAtivo = IsGameActive.Value
+
+                    if not naPartida then
+                        estadoAnterior = "LOBBY"
+                    elseif naPartida and not jogoAtivo then
+                        if estadoAnterior ~= "CAGE" then
+                            estadoAnterior = "CAGE"
+                            IniciarContagem()
+                        end
+                    elseif naPartida and jogoAtivo then
+                        estadoAnterior = "PLAYING"
+                    end
+                    
+                    task.wait(0.2)
+                end
+            end)
+        else
+            BeastSpawnActive = false
+            if BeastSpawnRenderConn then BeastSpawnRenderConn:Disconnect(); BeastSpawnRenderConn = nil end
+            if BeastSpawnLoopThread then task.cancel(BeastSpawnLoopThread); BeastSpawnLoopThread = nil end
+            if CoreGui:FindFirstChild("ElegantBeastTimer") then
+                CoreGui.ElegantBeastTimer:Destroy()
+            end
+        end
     end)
 end
