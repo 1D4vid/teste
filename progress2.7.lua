@@ -42,7 +42,7 @@ return function(env)
     local actionValCache = {}
 
     -- =========================================================================
-    -- SECTION: ACTION TIMERS
+    -- SECTION: ACTION TIMERS (Coluna Esquerda)
     -- =========================================================================
     Library:CreateSection(Page, "Action Timers")
     
@@ -594,14 +594,22 @@ return function(env)
         end
     end)
     
+    Library:CreateToggle(Page, "WalkSpeed Detector", false, function(state)
+        -- Código removido. Toggle vazia pronta para novos scripts.
+    end)
+
+    Library:CreateToggle(Page, "Wallhop Counter", false, function(state)
+        -- Código removido. Toggle vazia pronta para novos scripts.
+    end)
+
+    -- =========================================================================
+    -- SECTION: BEAST INDICATORS (Coluna Direita)
+    -- =========================================================================
+    Library:CreateSection(Page, "Beast Indicators")
+    
     Library:CreateToggle(Page, "GetUp Timer", false, function(state)
         -- Código removido. Toggle vazia pronta para novos scripts.
     end)
-    
-    -- =========================================================================
-    -- SECTION: BEAST INDICATORS
-    -- =========================================================================
-    Library:CreateSection(Page, "Beast Indicators")
     
     Library:CreateToggle(Page, "Beast Power Timer", false, function(state)
         if state then
@@ -791,13 +799,5 @@ return function(env)
     
     Library:CreateToggle(Page, "Beast Spawn Timer", false, function(state)
         -- Código removido. Toggle vazia pronta para novos scripts.
-    end)
-    
-    Library:CreateToggle(Page, "WalkSpeed Detector", false, function(state)
-        -- Código removido. Toggle vazia pronta para novos scripts.
-    end)
-
-    Library:CreateToggle(Page, "Wallhop Counter", false, function(state)
-        -- Nova toggle adicionada e pronta para receber sua lógica futuramente.
     end)
 end
