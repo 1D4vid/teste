@@ -27,12 +27,14 @@ return function(env)
     -- Vars Computer Progress
     local CompProgLoop = nil
     local CompProgConns = {}
+    local compHighlightEnabled = false
 
     -- Vars Door Progress
     local DoorProgLoop = nil
     local DoorProgHeartbeat = nil
     local doorAddedConn = nil
     local trackedNormalDoors = {}
+    local doorHighlightEnabled = false
 
     -- Vars ExitDoor Progress
     local ExitDoorConn = nil
@@ -40,6 +42,7 @@ return function(env)
     local ExitDoorRemoving = nil
     local trackedExitDoors = {}
     local actionValCache = {}
+    local exitHighlightEnabled = false
 
     -- Vars WalkSpeed Detector
     local speedRenderConn = nil
@@ -66,8 +69,11 @@ return function(env)
     local BeastSpawnLoopThread = nil
     local BeastSpawnRenderConn = nil
     
-    -- Correção: Limite de tempo de busca para evitar travar o script em outros jogos
-    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive", 5)
+    -- Correção Crítica: IsGameActive carregado de forma assíncrona para não travar a UI em outros jogos
+    local IsGameActive = nil
+    task.spawn(function()
+        IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive", 2)
+    end)
 
     -- =========================================================================
     -- SECTION: ACTION TIMERS (Coluna Esquerda)
@@ -148,6 +154,7 @@ return function(env)
                 highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                 highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
                 highlight.OutlineTransparency = 0
+                highlight.Enabled = compHighlightEnabled
                 highlight.Parent = tableModel
 
                 local screen = tableModel:FindFirstChild("Screen")
@@ -184,6 +191,8 @@ return function(env)
                             isGreen = true
                         end
                     end
+
+                    highlight.Enabled = compHighlightEnabled
 
                     if isGreen then
                         savedProgress = 1
@@ -277,7 +286,7 @@ return function(env)
         end
     end)
     
-    -- 2. Door Progress (Corrigido o bug do início da partida)
+    -- 2. Door Progress
     Library:CreateToggle(Page, "Door Progress", false, function(state)
         if state then
             local DT_CONFIG = { 
@@ -351,7 +360,7 @@ return function(env)
                 hl.FillTransparency = 0.55
                 hl.OutlineTransparency = 0 
                 hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                hl.Enabled = true
+                hl.Enabled = doorHighlightEnabled
                 hl.Parent = model
                 return hl
             end
@@ -436,7 +445,6 @@ return function(env)
                                 end
                             end
                             
-                            -- Escuta para portas carregadas de forma atrasada/dinâmica via Streaming
                             doorAddedConn = map.DescendantAdded:Connect(function(obj)
                                 if obj:IsA("Model") and DT_CONFIG.DOOR_NAMES[obj.Name] and not DT_CONFIG.BLACKLIST[obj.Name] then 
                                     task.defer(setupNormalDoor, obj)
@@ -575,6 +583,10 @@ return function(env)
                             data.Highlight.FillColor = DT_COLORS.HL_CLOSE
                         end
                     end
+                    
+                    if data.Highlight then
+                        data.Highlight.Enabled = doorHighlightEnabled
+                    end
                 end
             end)
         else
@@ -667,6 +679,7 @@ return function(env)
                 highlight.FillTransparency = 0.55
                 highlight.OutlineTransparency = 0
                 highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                highlight.Enabled = exitHighlightEnabled
                 highlight.Parent = folder
 
                 local bgui = Instance.new("BillboardGui")
@@ -759,10 +772,10 @@ return function(env)
                             local playerFallen = false
                             local stats = plr:FindFirstChild("TempPlayerStatsModule")
                             if stats then
-                                local ragdoll = stats:FindFirstChild("Ragdoll")
-                                if ragdoll and ragdoll:IsA("BoolValue") and ragdoll.Value == true then
-                                    playerFallen = true
-                                end
+                                    local ragdoll = stats:FindFirstChild("Ragdoll")
+                                    if ragdoll and ragdoll:IsA("BoolValue") and ragdoll.Value == true then
+                                        playerFallen = true
+                                    end
                             end
                             
                             if not playerFallen then
@@ -872,6 +885,10 @@ return function(env)
                                 data.TextElement.Text = "EXIT"
                             end
                             data.TextElement.TextColor3 = Color3.fromRGB(255, 255, 255)
+                        end
+                        
+                        if data.Highlight then
+                            data.Highlight.Enabled = exitHighlightEnabled
                         end
                     end
                 end
@@ -1780,11 +1797,40 @@ return function(env)
     -- SECTION: HIGHLIGHT SETTINGS (Coluna Esquerda - Abaixo de Action Timers)
     -- =========================================================================
     Library:CreateSection(Page, "HighLight Settings")
-    -- Seção atualmente vazia, pronta para receber novas configurações.
+    
+    -- 1. Computer Highlight
+    Library:CreateToggle(Page, "Computer Highlight", false, function(state)
+        compHighlightEnabled = state
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then
+                obj.Enabled = state
+            end
+        end
+    end)
+
+    -- 2. Door Highlight
+    Library:CreateToggle(Page, "Door Highlight", false, function(state)
+        doorHighlightEnabled = state
+        for _, data in pairs(trackedNormalDoors) do
+            if data.Highlight then
+                data.Highlight.Enabled = state
+            end
+        end
+    end)
+
+    -- 3. ExitDoor Highlight
+    Library:CreateToggle(Page, "ExitDoor Highlight", false, function(state)
+        exitHighlightEnabled = state
+        for _, data in pairs(trackedExitDoors) do
+            if data.Highlight then
+                data.Highlight.Enabled = state
+            end
+        end
+    end)
 
     -- =========================================================================
     -- SECTION: PROGRESS SETTINGS (Coluna Direita - Abaixo de Beast Indicators)
     -- =========================================================================
     Library:CreateSection(Page, "Progress Settings")
-    -- Seção atualmente vazia, pronta para receber novas configurações.
+    -- Seção vazia para uso futuro.
 end
