@@ -31,6 +31,7 @@ return function(env)
     -- Vars Door Progress
     local DoorProgLoop = nil
     local DoorProgHeartbeat = nil
+    local doorAddedConn = nil
     local trackedNormalDoors = {}
 
     -- Vars ExitDoor Progress
@@ -64,7 +65,9 @@ return function(env)
     local BeastSpawnActive = false
     local BeastSpawnLoopThread = nil
     local BeastSpawnRenderConn = nil
-    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
+    
+    -- Correção: Limite de tempo de busca para evitar travar o script em outros jogos
+    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive", 5)
 
     -- =========================================================================
     -- SECTION: ACTION TIMERS (Coluna Esquerda)
@@ -274,9 +277,24 @@ return function(env)
         end
     end)
     
-    -- 2. Door Progress
+    -- 2. Door Progress (Corrigido o bug do início da partida)
     Library:CreateToggle(Page, "Door Progress", false, function(state)
         if state then
+            local DT_CONFIG = { 
+                VISIBILITY_DISTANCE = 75, 
+                DOOR_NAMES = {["SingleDoor"]=true,["DoubleDoor"]=true,["SlidingDoor"]=true}, 
+                BLACKLIST = {["ExitDoor"]=true,["Decorative"]=true,["FakeDoor"]=true,["ElevatorDoor"]=true, ["Closet"]=false} 
+            }
+
+            local DT_COLORS = { 
+                BAR_BG = Color3.fromRGB(35, 30, 30), 
+                MUSTARD = Color3.fromRGB(205, 135, 25), 
+                WHITE = Color3.fromRGB(230, 230, 230),
+                HL_CLOSE = Color3.fromRGB(255, 0, 0),
+                HL_OPENING = Color3.fromRGB(255, 200, 0),
+                HL_OPEN = Color3.fromRGB(0, 255, 0)
+            }
+
             local function createDoorHUD(parent)
                 if parent:FindFirstChild("NormalDoorGUI") then parent.NormalDoorGUI:Destroy() end
                 local billboard = Instance.new("BillboardGui")
@@ -391,6 +409,15 @@ return function(env)
                 }
             end
 
+            local function cleanupNormalDoors()
+                if doorAddedConn then doorAddedConn:Disconnect(); doorAddedConn = nil end
+                for doorModel, data in pairs(trackedNormalDoors) do
+                    if data.Billboard then data.Billboard:Destroy() end
+                    if data.Highlight then data.Highlight:Destroy() end
+                end
+                table.clear(trackedNormalDoors)
+            end
+
             local lastMap = nil
             DoorProgLoop = task.spawn(function()
                 while state do
@@ -399,32 +426,28 @@ return function(env)
                     
                     if mapName ~= "" and lastMap ~= mapName then
                         lastMap = mapName
-                        local map = Workspace:FindFirstChild(mapName)
-                        
-                        for doorModel, data in pairs(trackedNormalDoors) do
-                            if data.Billboard then data.Billboard:Destroy() end
-                            if data.Highlight then data.Highlight:Destroy() end
-                        end
-                        table.clear(trackedNormalDoors)
+                        cleanupNormalDoors()
 
+                        local map = Workspace:FindFirstChild(mapName)
                         if map then
-                            local descendants = map:GetDescendants()
-                            for i = 1, #descendants do
-                                local obj = descendants[i]
+                            for _, obj in ipairs(map:GetDescendants()) do
                                 if obj:IsA("Model") and DT_CONFIG.DOOR_NAMES[obj.Name] and not DT_CONFIG.BLACKLIST[obj.Name] then 
                                     setupNormalDoor(obj) 
                                 end
                             end
+                            
+                            -- Escuta para portas carregadas de forma atrasada/dinâmica via Streaming
+                            doorAddedConn = map.DescendantAdded:Connect(function(obj)
+                                if obj:IsA("Model") and DT_CONFIG.DOOR_NAMES[obj.Name] and not DT_CONFIG.BLACKLIST[obj.Name] then 
+                                    task.defer(setupNormalDoor, obj)
+                                end
+                            end)
                         end
                     elseif mapName == "" and lastMap ~= "" then
                         lastMap = ""
-                        for doorModel, data in pairs(trackedNormalDoors) do
-                            if data.Billboard then data.Billboard:Destroy() end
-                            if data.Highlight then data.Highlight:Destroy() end
-                        end
-                        table.clear(trackedNormalDoors)
+                        cleanupNormalDoors()
                     end
-                    task.wait(2)
+                    task.wait(1.5)
                 end
             end)
 
@@ -557,6 +580,7 @@ return function(env)
         else
             if DoorProgLoop then task.cancel(DoorProgLoop); DoorProgLoop = nil end
             if DoorProgHeartbeat then DoorProgHeartbeat:Disconnect(); DoorProgHeartbeat = nil end
+            if doorAddedConn then doorAddedConn:Disconnect(); doorAddedConn = nil end
             for doorModel, data in pairs(trackedNormalDoors) do
                 if data.Billboard then data.Billboard:Destroy() end
                 if data.Highlight then data.Highlight:Destroy() end
@@ -1692,7 +1716,7 @@ return function(env)
                         return
                     end
 
-                    if IsGameActive.Value == true then
+                    if IsGameActive and IsGameActive.Value == true then
                         conexao:Disconnect()
                         label.Text = "The Beast has been released!"
                         TweenColor(Color3.fromRGB(255, 255, 255))
@@ -1726,7 +1750,7 @@ return function(env)
                     local hp = stats and stats:FindFirstChild("Health")
                     
                     local naPartida = (hp and hp.Value > 0) and isMapLoaded
-                    local jogoAtivo = IsGameActive.Value
+                    local jogoAtivo = IsGameActive and IsGameActive.Value or false
 
                     if not naPartida then
                         estadoAnterior = "LOBBY"
@@ -1751,4 +1775,16 @@ return function(env)
             end
         end
     end)
+
+    -- =========================================================================
+    -- SECTION: HIGHLIGHT SETTINGS (Coluna Esquerda - Abaixo de Action Timers)
+    -- =========================================================================
+    Library:CreateSection(Page, "HighLight Settings")
+    -- Seção atualmente vazia, pronta para receber novas configurações.
+
+    -- =========================================================================
+    -- SECTION: PROGRESS SETTINGS (Coluna Direita - Abaixo de Beast Indicators)
+    -- =========================================================================
+    Library:CreateSection(Page, "Progress Settings")
+    -- Seção atualmente vazia, pronta para receber novas configurações.
 end
