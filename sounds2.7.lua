@@ -10,16 +10,15 @@ return function(env)
     local UserConfigs = env.UserConfigs
     local GetParentTarget = env.GetParentTarget
     local UserInputService = game:GetService("UserInputService")
-    local RunService = game:GetService("RunService")
 
     -- Variaveis de Lógica e Backup do Antigo Script
     local LegitSettings = {MuteSteps = false, MuteJumps = false, MuteHack = false}
     local CurrentSoundIDs = {Running = 0, Jumping = 0, Landing = 0}
     local OriginalSoundBackups = setmetatable({}, {__mode = "k"})
 
-    -- Carregando estados e valores salvos
+    -- Carregando estados e valores salvos (Toggle inicia como Desativada por padrão)
     local VolumesEnabled = UserConfigs["EnableSoundSettings"]
-    if VolumesEnabled == nil then VolumesEnabled = true end
+    if VolumesEnabled == nil then VolumesEnabled = false end
 
     local FootstepsVolMultiplier = UserConfigs["FootstepsVol"] or 1
     local JumpVolMultiplier = UserConfigs["JumpVol"] or 1
@@ -80,46 +79,67 @@ return function(env)
     for _, player in ipairs(Players:GetPlayers()) do setupPlayerSoundEvents(player) end
     Players.PlayerAdded:Connect(setupPlayerSoundEvents)
 
-    -- Sincronização robusta de volumes independentes via Heartbeat (Evita conflitos com scripts locais do Roblox)
-    RunService.Heartbeat:Connect(function()
-        local char = LocalPlayer.Character
-        if not char then return end
-        local root = char:FindFirstChild("HumanoidRootPart")
-        if not root then return end
+    -- Mapeamento e monitoramento global de sons igual ao script original
+    local ActiveSounds = setmetatable({}, {__mode = "k"})
+    local originalVolumeBackup = {}
 
-        -- Sincronização de Passos (Running)
-        local running = root:FindFirstChild("Running")
-        if running and running:IsA("Sound") then
-            if LegitSettings.MuteSteps then
-                running.Volume = 0
-            elseif VolumesEnabled then
-                running.Volume = 0.65 * FootstepsVolMultiplier
-            else
-                running.Volume = 0.65
+    local function getSoundCategory(sound)
+        local name = sound.Name:lower()
+        if name:find("running") or name:find("walk") or name:find("step") then
+            return "Footsteps"
+        elseif name:find("jumping") or name:find("jump") then
+            return "Jump"
+        elseif name:find("landing") or name:find("fall") or name:find("land") then
+            return "Fall"
+        end
+        return nil
+    end
+
+    local function registerSound(obj)
+        if obj:IsA("Sound") then
+            ActiveSounds[obj] = true
+            if not originalVolumeBackup[obj] then
+                originalVolumeBackup[obj] = obj.Volume
             end
         end
+    end
+    
+    for _, obj in pairs(Workspace:GetDescendants()) do registerSound(obj) end
+    Workspace.DescendantAdded:Connect(registerSound)
 
-        -- Sincronização de Pulos (Jumping)
-        local jumping = root:FindFirstChild("Jumping")
-        if jumping and jumping:IsA("Sound") then
-            if LegitSettings.MuteJumps then
-                jumping.Volume = 0
-            elseif VolumesEnabled then
-                jumping.Volume = 0.5 * JumpVolMultiplier
-            else
-                jumping.Volume = 0.5
-            end
-        end
+    -- Ciclo de atualização de volumes baseado na lógica original do script
+    task.spawn(function()
+        while task.wait(0.3) do
+            for sound in pairs(ActiveSounds) do
+                if sound and sound.Parent then
+                    local category = getSoundCategory(sound)
+                    if category then
+                        local origVol = originalVolumeBackup[sound] or 0.5
+                        local multiplier = 1
 
-        -- Sincronização de Quedas/Pousos (Landing)
-        local landing = root:FindFirstChild("Landing")
-        if landing and landing:IsA("Sound") then
-            if LegitSettings.MuteJumps then
-                landing.Volume = 0
-            elseif VolumesEnabled then
-                landing.Volume = 0.5 * FallVolMultiplier
-            else
-                landing.Volume = 0.5
+                        if VolumesEnabled then
+                            if category == "Footsteps" then
+                                multiplier = FootstepsVolMultiplier
+                            elseif category == "Jump" then
+                                multiplier = JumpVolMultiplier
+                            elseif category == "Fall" then
+                                multiplier = FallVolMultiplier
+                            end
+                        end
+
+                        -- Silenciador legit
+                        if category == "Footsteps" and LegitSettings.MuteSteps then
+                            multiplier = 0
+                        elseif (category == "Jump" or category == "Fall") and LegitSettings.MuteJumps then
+                            multiplier = 0
+                        end
+
+                        local targetVol = origVol * multiplier
+                        if math.abs(sound.Volume - targetVol) > 0.01 then
+                            pcall(function() sound.Volume = targetVol end)
+                        end
+                    end
+                end
             end
         end
     end)
@@ -176,7 +196,7 @@ return function(env)
     local noHitSoundAddedConn = nil
 
     -- ==========================================
-    -- Criação da Interface (Visual Corrigido)
+    -- Interface Visual (Bloco Unificado)
     -- ==========================================
     Library:CreateSection(Page, "Mute Sounds")
     Library:CreateToggle(Page, "Remove Your Steps", false, function(state) 
