@@ -10,6 +10,7 @@ return function(env)
     local UserConfigs = env.UserConfigs
     local GetParentTarget = env.GetParentTarget
     local UserInputService = game:GetService("UserInputService")
+    local RunService = game:GetService("RunService")
 
     -- Variaveis de Lógica e Backup do Antigo Script
     local LegitSettings = {MuteSteps = false, MuteJumps = false, MuteHack = false}
@@ -79,82 +80,49 @@ return function(env)
     for _, player in ipairs(Players:GetPlayers()) do setupPlayerSoundEvents(player) end
     Players.PlayerAdded:Connect(setupPlayerSoundEvents)
 
-    -- Função auxiliar para calcular o volume final
-    local function GetTargetVolume(soundName)
-        local baseVol = 0.5
-        if soundName == "Running" then
-            baseVol = 0.65
-            if LegitSettings.MuteSteps then return 0 end
-            if not VolumesEnabled then return baseVol end
-            return baseVol * FootstepsVolMultiplier
-        elseif soundName == "Jumping" then
-            if LegitSettings.MuteJumps then return 0 end
-            if not VolumesEnabled then return baseVol end
-            return baseVol * JumpVolMultiplier
-        elseif soundName == "Landing" then
-            if LegitSettings.MuteJumps then return 0 end
-            if not VolumesEnabled then return baseVol end
-            return baseVol * FallVolMultiplier
-        end
-        return baseVol
-    end
-
-    -- Atualiza dinamicamente os volumes do personagem local
-    local function UpdateCharacterSoundVolumes()
+    -- Sincronização robusta de volumes independentes via Heartbeat (Evita conflitos com scripts locais do Roblox)
+    RunService.Heartbeat:Connect(function()
         local char = LocalPlayer.Character
         if not char then return end
         local root = char:FindFirstChild("HumanoidRootPart")
         if not root then return end
-        
-        local s1 = root:FindFirstChild("Running")
-        if s1 and s1:IsA("Sound") then s1.Volume = GetTargetVolume("Running") end
-        
-        local s2 = root:FindFirstChild("Jumping")
-        if s2 and s2:IsA("Sound") then s2.Volume = GetTargetVolume("Jumping") end
-        
-        local s3 = root:FindFirstChild("Landing")
-        if s3 and s3:IsA("Sound") then s3.Volume = GetTargetVolume("Landing") end
-    end
 
-    local function ProcessCharacter(char)
-        local root = char:WaitForChild("HumanoidRootPart", 10)
-        if not root then return end
-        
-        local function ApplySoundSettings(soundObj, typeName)
-            if not soundObj then return end
-            
-            local function enforceVolume()
-                local vol = 0
-                if char == LocalPlayer.Character then
-                    vol = GetTargetVolume(typeName)
-                else
-                    vol = (typeName == "Running" and 0.65 or 0.5)
-                end
-                
-                if math.abs(soundObj.Volume - vol) > 0.01 then
-                    soundObj.Volume = vol
-                end
+        -- Sincronização de Passos (Running)
+        local running = root:FindFirstChild("Running")
+        if running and running:IsA("Sound") then
+            if LegitSettings.MuteSteps then
+                running.Volume = 0
+            elseif VolumesEnabled then
+                running.Volume = 0.65 * FootstepsVolMultiplier
+            else
+                running.Volume = 0.65
             end
-            
-            enforceVolume()
-            soundObj:GetPropertyChangedSignal("Volume"):Connect(enforceVolume)
         end
-        
-        task.spawn(function()
-            local s1 = root:WaitForChild("Running", 5)
-            if s1 then ApplySoundSettings(s1, "Running") end
-            local s2 = root:WaitForChild("Jumping", 5)
-            if s2 then ApplySoundSettings(s2, "Jumping") end
-            local s3 = root:WaitForChild("Landing", 5)
-            if s3 then ApplySoundSettings(s3, "Landing") end
-        end)
-    end
-    
-    Players.PlayerAdded:Connect(function(p) p.CharacterAdded:Connect(ProcessCharacter) end)
-    for _, p in pairs(Players:GetPlayers()) do 
-        if p.Character then ProcessCharacter(p.Character) end
-        p.CharacterAdded:Connect(ProcessCharacter) 
-    end
+
+        -- Sincronização de Pulos (Jumping)
+        local jumping = root:FindFirstChild("Jumping")
+        if jumping and jumping:IsA("Sound") then
+            if LegitSettings.MuteJumps then
+                jumping.Volume = 0
+            elseif VolumesEnabled then
+                jumping.Volume = 0.5 * JumpVolMultiplier
+            else
+                jumping.Volume = 0.5
+            end
+        end
+
+        -- Sincronização de Quedas/Pousos (Landing)
+        local landing = root:FindFirstChild("Landing")
+        if landing and landing:IsA("Sound") then
+            if LegitSettings.MuteJumps then
+                landing.Volume = 0
+            elseif VolumesEnabled then
+                landing.Volume = 0.5 * FallVolMultiplier
+            else
+                landing.Volume = 0.5
+            end
+        end
+    end)
 
     local hackSignals = {}
     local hackConnection = nil
@@ -208,16 +176,14 @@ return function(env)
     local noHitSoundAddedConn = nil
 
     -- ==========================================
-    -- Criação da Interface (Elementos Modificados)
+    -- Criação da Interface (Visual Corrigido)
     -- ==========================================
     Library:CreateSection(Page, "Mute Sounds")
     Library:CreateToggle(Page, "Remove Your Steps", false, function(state) 
         LegitSettings.MuteSteps = state
-        UpdateCharacterSoundVolumes()
     end)
     Library:CreateToggle(Page, "Remove Your Jumps", false, function(state) 
         LegitSettings.MuteJumps = state
-        UpdateCharacterSoundVolumes()
     end)
     Library:CreateToggle(Page, "Remove Pc Hack Sounds", false, function(state) 
         if state then 
@@ -265,7 +231,7 @@ return function(env)
         end
     end)
     
-    -- Seção de Volumes (Grupo Unificado)
+    -- Bloco Unificado de Volumes
     Library:CreateSection(Page, "Volume Settings")
     
     local VolumeBlock = Instance.new("Frame")
@@ -290,7 +256,7 @@ return function(env)
     padding.PaddingLeft = UDim.new(0, 12)
     padding.PaddingRight = UDim.new(0, 12)
 
-    -- Helpers de UI Customizada para o Bloco
+    -- Toggle Customizada (Fiel ao tema original)
     local function CreateCompactToggle(parent, text, defaultVal, callback)
         local frame = Instance.new("Frame")
         frame.Size = UDim2.new(1, 0, 0, 24)
@@ -315,6 +281,10 @@ return function(env)
         bg.Parent = frame
         Instance.new("UICorner", bg).CornerRadius = UDim.new(1, 0)
         
+        local bgGrad = Instance.new("UIGradient")
+        bgGrad.Rotation = 90
+        bgGrad.Parent = bg
+        
         local cir = Instance.new("Frame")
         cir.Size = UDim2.new(0, 12, 0, 12)
         cir.Position = UDim2.new(0, 1, 0.5, -6)
@@ -327,9 +297,17 @@ return function(env)
         local function updateVisuals()
             if state then
                 TweenService:Create(bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Accent}):Play()
+                bgGrad.Color = ColorSequence.new{
+                    ColorSequenceKeypoint.new(0, Theme.Accent),
+                    ColorSequenceKeypoint.new(1, Theme.AccentDark)
+                }
                 TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(1, -13, 0.5, -6), BackgroundColor3 = Color3.new(0,0,0)}):Play()
             else
                 TweenService:Create(bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.SwitchOff}):Play()
+                bgGrad.Color = ColorSequence.new{
+                    ColorSequenceKeypoint.new(0, Theme.SwitchOff),
+                    ColorSequenceKeypoint.new(1, Theme.SwitchOff)
+                }
                 TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(0, 1, 0.5, -6), BackgroundColor3 = Color3.fromRGB(150, 150, 150)}):Play()
             end
         end
@@ -344,6 +322,7 @@ return function(env)
         return {Set = function(val) state = val; updateVisuals(); callback(val) end}
     end
 
+    -- Slider Customizado (Fiel ao tema original com gradientes)
     local function CreateCompactSlider(parent, text, min, max, defaultVal, callback)
         local frame = Instance.new("Frame")
         frame.Size = UDim2.new(1, 0, 0, 34)
@@ -385,6 +364,13 @@ return function(env)
         fill.BorderSizePixel = 0
         fill.Parent = bar
         Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+        
+        local fillGrad = Instance.new("UIGradient")
+        fillGrad.Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, Theme.Accent),
+            ColorSequenceKeypoint.new(1, Theme.AccentDark)
+        }
+        fillGrad.Parent = fill
         
         local trigger = Instance.new("TextButton")
         trigger.Size = UDim2.new(1, 0, 1, 0)
@@ -463,33 +449,29 @@ return function(env)
         return btn
     end
 
-    -- Toggle Master do Bloco
+    -- Ativador Master do Bloco (Volume Modifier)
     local MasterToggle = CreateCompactToggle(VolumeBlock, "Enable Volume Modifier", VolumesEnabled, function(state)
         VolumesEnabled = state
         UserConfigs["EnableSoundSettings"] = state
-        UpdateCharacterSoundVolumes()
     end)
 
-    -- Sliders Compactos
+    -- Sliders Individuais com Escala Correta
     local FootstepsSlider = CreateCompactSlider(VolumeBlock, "FootSteps Volume", 0, 10, FootstepsVolMultiplier, function(val)
         FootstepsVolMultiplier = val
         UserConfigs["FootstepsVol"] = val
-        UpdateCharacterSoundVolumes()
     end)
     
     local JumpSlider = CreateCompactSlider(VolumeBlock, "Jump Volume", 0, 10, JumpVolMultiplier, function(val)
         JumpVolMultiplier = val
         UserConfigs["JumpVol"] = val
-        UpdateCharacterSoundVolumes()
     end)
     
     local FallSlider = CreateCompactSlider(VolumeBlock, "Fall Volume", 0, 10, FallVolMultiplier, function(val)
         FallVolMultiplier = val
         UserConfigs["FallVol"] = val
-        UpdateCharacterSoundVolumes()
     end)
 
-    -- Botão Reset Volumes
+    -- Botão de Reset
     CreateCompactButton(VolumeBlock, "Reset Volumes", function()
         FootstepsSlider.Set(1)
         JumpSlider.Set(1)
