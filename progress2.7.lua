@@ -88,8 +88,7 @@ return function(env)
     Library:CreateToggle(Page, "Computer Progress", false, function(state)
         if state then
             local function createProgressBar(parent)
-                if currentComputerStyle == "Default" then
-                    -- Design Ciano premium
+                if currentComputerStyle == "Default" or currentComputerStyle == "Style 1" then
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "ProgressBar"
                     billboard.Adornee = parent
@@ -122,7 +121,13 @@ return function(env)
                     track.Name = "Track"
                     track.Size = UDim2.new(0, 70, 0, 6)
                     track.Position = UDim2.new(0.5, -35, 0, 16)
-                    track.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+                    
+                    if currentComputerStyle == "Default" then
+                        track.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+                    else
+                        track.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+                    end
+                    
                     track.BorderSizePixel = 0
                     track.Parent = background
 
@@ -139,7 +144,13 @@ return function(env)
                     local bar = Instance.new("Frame")
                     bar.Name = "Bar"
                     bar.Size = UDim2.new(0, 0, 1, 0)
-                    bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+                    
+                    if currentComputerStyle == "Default" then
+                        bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+                    else
+                        bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                    end
+                    
                     bar.BorderSizePixel = 0
                     bar.Parent = track
 
@@ -630,7 +641,7 @@ return function(env)
 
                         local map = Workspace:FindFirstChild(mapName)
                         if map then
-                            for _, obj in ipairs(map:GetDescendants()) do
+                            for _, obj in ipairs(map:GetChildren()) do
                                 if obj:IsA("Model") and DT_CONFIG.DOOR_NAMES[obj.Name] and not DT_CONFIG.BLACKLIST[obj.Name] then 
                                     setupNormalDoor(obj) 
                                 end
@@ -1765,46 +1776,66 @@ return function(env)
             isDraining = false
 
             BeastPowerConnection1 = task.spawn(function()
-                while screenGui.Parent do
+                while state and task.wait(1) do
                     local foundValue = nil
-                    local plist = Players:GetPlayers()
-                    for i = 1, #plist do
-                        local char = plist[i].Character
+                    for _, player in ipairs(Players:GetPlayers()) do
+                        local char = player.Character
                         if char then
                             local beastPowers = char:FindFirstChild("BeastPowers")
                             if beastPowers then
                                 foundValue = beastPowers:FindFirstChildOfClass("NumberValue", true)
                                 if foundValue then
-                                    break
+                                    break 
                                 end
                             end
                         end
                     end
+                    trackedPowerValue = foundValue 
+                end
+            end)
 
-                    if foundValue then
-                        if not BeastPowerConnection2 or not BeastPowerConnection2.Connected then
-                            updateUI(foundValue.Value)
-                            BeastPowerConnection2 = foundValue:GetPropertyChangedSignal("Value"):Connect(function()
-                                updateUI(foundValue.Value)
-                            end)
-                        end
+            BeastPowerConnection2 = RunService.RenderStepped:Connect(function()
+                if trackedPowerValue and trackedPowerValue.Parent then
+                    uiFrameBP.Visible = true
+                    
+                    local percent = math.clamp(trackedPowerValue.Value, 0, 1)
+                    local percentInt = math.floor(percent * 100)
+                    
+                    if percentInt >= 100 then
+                        uiLabelBP.Text = "BeastPower is Full"
                     else
-                        if BeastPowerConnection2 then
-                            BeastPowerConnection2:Disconnect()
-                            BeastPowerConnection2 = nil
-                        end
-                        updateUI(nil)
+                        uiLabelBP.Text = "BeastPower Back In: " .. percentInt .. "%"
                     end
-                    task.wait(1)
+                    
+                    if percent < lastPercent then
+                        isDraining = true 
+                    elseif percent > lastPercent then
+                        isDraining = false 
+                    end
+                    
+                    lastPercent = percent 
+                    
+                    if isDraining then
+                        uiLabelBP.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    else
+                        if percent >= 0.99 then
+                            uiLabelBP.TextColor3 = Color3.fromRGB(50, 255, 50) 
+                        elseif percent >= 0.80 then
+                            uiLabelBP.TextColor3 = Color3.fromRGB(255, 50, 50) 
+                        else
+                            uiLabelBP.TextColor3 = Color3.fromRGB(255, 255, 255) 
+                        end
+                    end
+                else
+                    if uiFrameBP then uiFrameBP.Visible = false end
+                    lastPercent = 0 
+                    isDraining = false
                 end
             end)
         else
             if BeastPowerConnection1 then task.cancel(BeastPowerConnection1); BeastPowerConnection1 = nil end
             if BeastPowerConnection2 then BeastPowerConnection2:Disconnect(); BeastPowerConnection2 = nil end
-            local success, container = pcall(function() return CoreGui end)
-            local parent = (success and container) or LocalPlayer:WaitForChild("PlayerGui")
-            local oldHud = parent:FindFirstChild("BeastTextHUD")
-            if oldHud then oldHud:Destroy() end
+            if uiFrameBP and uiFrameBP.Parent then uiFrameBP.Parent:Destroy() end
         end
     end)
     
