@@ -28,7 +28,7 @@ return function(env)
     local CompProgLoop = nil
     local CompProgConns = {}
     local compHighlightEnabled = false
-    local currentComputerStyle = "Style 1"
+    local currentComputerStyle = "Default"
 
     -- Vars Door Progress
     local DoorProgLoop = nil
@@ -36,8 +36,9 @@ return function(env)
     local doorAddedConn = nil
     local trackedNormalDoors = {}
     local doorHighlightEnabled = false
-    local currentDoorStyle = "Style 1"
+    local currentDoorStyle = "Default"
     local doorMaxDistance = 150
+    local lastMap = nil
 
     -- Vars ExitDoor Progress
     local ExitDoorConn = nil
@@ -87,8 +88,7 @@ return function(env)
     Library:CreateToggle(Page, "Computer Progress", false, function(state)
         if state then
             local function createProgressBar(parent)
-                if currentComputerStyle == "Style 1" then
-                    -- Design Ciano premium
+                if currentComputerStyle == "Default" or currentComputerStyle == "Style 1" then
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "ProgressBar"
                     billboard.Adornee = parent
@@ -121,7 +121,13 @@ return function(env)
                     track.Name = "Track"
                     track.Size = UDim2.new(0, 70, 0, 6)
                     track.Position = UDim2.new(0.5, -35, 0, 16)
-                    track.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+                    
+                    if currentComputerStyle == "Default" then
+                        track.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+                    else
+                        track.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+                    end
+                    
                     track.BorderSizePixel = 0
                     track.Parent = background
 
@@ -138,7 +144,13 @@ return function(env)
                     local bar = Instance.new("Frame")
                     bar.Name = "Bar"
                     bar.Size = UDim2.new(0, 0, 1, 0)
-                    bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+                    
+                    if currentComputerStyle == "Default" then
+                        bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+                    else
+                        bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                    end
+                    
                     bar.BorderSizePixel = 0
                     bar.Parent = track
 
@@ -148,7 +160,6 @@ return function(env)
 
                     return billboard, bar, text
                 else
-                    -- Design clássico SciFi (Style 2)
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "ProgressBar"
                     billboard.Adornee = parent
@@ -287,7 +298,7 @@ return function(env)
                         tween:Play()
                     end
 
-                    if currentComputerStyle == "Style 1" then
+                    if currentComputerStyle == "Default" then
                         if savedProgress >= 1 then
                             bar.BackgroundColor3 = Color3.fromRGB(0, 255, 140)
                             text.TextColor3 = Color3.fromRGB(0, 255, 140)
@@ -358,8 +369,7 @@ return function(env)
             }
 
             local function createDoorHUD(parent)
-                if currentDoorStyle == "Style 1" then
-                    -- Design clássico com percentual
+                if currentDoorStyle == "Default" or currentDoorStyle == "Style 1" then
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NormalDoorGUI"
                     billboard.Adornee = parent
@@ -388,7 +398,7 @@ return function(env)
                     bgBar.Size = UDim2.new(1, 0, 0.35, 0) 
                     bgBar.Position = UDim2.new(0, 0, 0.65, 0)
                     bgBar.BackgroundColor3 = DT_COLORS.BAR_BG
-                    bgBar.BackgroundTransparency = 0.3
+                    bgBar.BackgroundTransparency = (currentDoorStyle == "Default") and 0.3 or 0.0
                     bgBar.BorderSizePixel = 0
                     bgBar.ZIndex = 5
                     bgBar.Parent = billboard
@@ -404,7 +414,6 @@ return function(env)
                     
                     return billboard, fill, text, bgBar
                 else
-                    -- Design de Status centralizado (Style 2)
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NormalDoorGUI"
                     billboard.Adornee = parent
@@ -527,7 +536,6 @@ return function(env)
                 table.clear(trackedNormalDoors)
             end
 
-            local lastMap = nil
             DoorProgLoop = task.spawn(function()
                 while state do
                     local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
@@ -654,7 +662,7 @@ return function(env)
                     
                     local interactionVal = currentDoorInteractions[doorModel] or 0
 
-                    if currentDoorStyle == "Style 1" then
+                    if currentDoorStyle == "Default" or currentDoorStyle == "Style 1" then
                         if isPhysicallyOpen then
                             if data.LastState ~= "Open" then
                                 data.LastState = "Open"
@@ -1960,8 +1968,8 @@ return function(env)
     -- =========================================================================
     Library:CreateSection(Page, "Progress Settings")
     
-    -- 1. ProgressBar Computer Design (Dropdown)
-    Library:CreateDropdown(Page, "ProgressBar Computer Design", {"Style 1", "Style 2"}, "Style 1", function(val)
+    -- 1. PC Progress Design (Dropdown)
+    Library:CreateDropdown(Page, "PC Progress Design", {"Default", "Style 1", "Style 2"}, "Default", function(val)
         currentComputerStyle = val
         -- Limpa computadores para redesenhar com o estilo selecionado
         for _, obj in ipairs(Workspace:GetDescendants()) do
@@ -1971,9 +1979,11 @@ return function(env)
         table.clear(CompProgConns)
     end)
 
-    -- 2. ProgressBar Door Design (Dropdown)
-    Library:CreateDropdown(Page, "ProgressBar Door Design", {"Style 1", "Style 2"}, "Style 1", function(val)
+    -- 2. Door Progress Design (Dropdown)
+    Library:CreateDropdown(Page, "Door Progress Design", {"Default", "Style 1", "Style 2"}, "Default", function(val)
         currentDoorStyle = val
+        lastMap = nil -- Reseta o rastreador de mapa para forçar varredura instantânea
+        
         -- Limpa portas para redesenhar com o estilo selecionado
         if doorAddedConn then doorAddedConn:Disconnect(); doorAddedConn = nil end
         for doorModel, data in pairs(trackedNormalDoors) do
