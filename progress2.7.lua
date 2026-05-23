@@ -88,8 +88,7 @@ return function(env)
     Library:CreateToggle(Page, "Computer Progress", false, function(state)
         if state then
             local function createProgressBar(parent)
-                if currentComputerStyle == "Default" then
-                    -- Design Ciano premium
+                if currentComputerStyle == "Default" or currentComputerStyle == "Style 1" then
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "ProgressBar"
                     billboard.Adornee = parent
@@ -122,7 +121,13 @@ return function(env)
                     track.Name = "Track"
                     track.Size = UDim2.new(0, 70, 0, 6)
                     track.Position = UDim2.new(0.5, -35, 0, 16)
-                    track.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+                    
+                    if currentComputerStyle == "Default" then
+                        track.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+                    else
+                        track.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+                    end
+                    
                     track.BorderSizePixel = 0
                     track.Parent = background
 
@@ -139,7 +144,13 @@ return function(env)
                     local bar = Instance.new("Frame")
                     bar.Name = "Bar"
                     bar.Size = UDim2.new(0, 0, 1, 0)
-                    bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+                    
+                    if currentComputerStyle == "Default" then
+                        bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+                    else
+                        bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                    end
+                    
                     bar.BorderSizePixel = 0
                     bar.Parent = track
 
@@ -148,47 +159,7 @@ return function(env)
                     barCorner.Parent = bar
 
                     return billboard, bar, text
-                elseif currentComputerStyle == "Style 1" then
-                    -- Design: design computer 2.txt
-                    local billboard = Instance.new("BillboardGui")
-                    billboard.Name = "ProgressBar"
-                    billboard.Adornee = parent
-                    billboard.Size = UDim2.new(0, 110, 0, 30)
-                    billboard.StudsOffset = Vector3.new(0, 4.5, 0)
-                    billboard.AlwaysOnTop = true
-                    billboard.Parent = parent
-
-                    local text = Instance.new("TextLabel")
-                    text.Name = "ProgressText"
-                    text.Size = UDim2.new(1, 0, 0, 20)
-                    text.BackgroundTransparency = 1
-                    text.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    text.TextStrokeTransparency = 0
-                    text.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-                    text.Font = Enum.Font.GothamBold
-                    text.TextSize = 16
-                    text.Text = "0%"
-                    text.Parent = billboard
-
-                    local bgBar = Instance.new("Frame")
-                    bgBar.Name = "BackgroundBar"
-                    bgBar.Size = UDim2.new(1, 0, 0, 6)
-                    bgBar.Position = UDim2.new(0, 0, 1, -6)
-                    bgBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-                    bgBar.BorderSizePixel = 1
-                    bgBar.BorderColor3 = Color3.fromRGB(0, 0, 0)
-                    bgBar.Parent = billboard
-
-                    local bar = Instance.new("Frame")
-                    bar.Name = "Bar"
-                    bar.Size = UDim2.new(0, 0, 1, 0)
-                    bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                    bar.BorderSizePixel = 0
-                    bar.Parent = bgBar
-
-                    return billboard, bar, text
                 else
-                    -- Design: design computer 3.txt (Style 2)
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "ProgressBar"
                     billboard.Adornee = parent
@@ -404,12 +375,11 @@ return function(env)
                 WHITE = Color3.fromRGB(230, 230, 230),
                 HL_CLOSE = Color3.fromRGB(255, 0, 0),
                 HL_OPENING = Color3.fromRGB(255, 200, 0),
-                HL_OPEN = Color3.fromRGB(0, 255, 0)
+                HL_OPEN = Color3.fromRGB(0, 255, 100)
             }
 
             local function createDoorHUD(parent)
-                if currentDoorStyle == "Default" then
-                    -- Default Elegant design
+                if currentDoorStyle == "Default" or currentDoorStyle == "Style 1" then
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NormalDoorGUI"
                     billboard.Adornee = parent
@@ -438,7 +408,7 @@ return function(env)
                     bgBar.Size = UDim2.new(1, 0, 0.35, 0) 
                     bgBar.Position = UDim2.new(0, 0, 0.65, 0)
                     bgBar.BackgroundColor3 = DT_COLORS.BAR_BG
-                    bgBar.BackgroundTransparency = 0.3
+                    bgBar.BackgroundTransparency = (currentDoorStyle == "Default") and 0.3 or 0.0
                     bgBar.BorderSizePixel = 0
                     bgBar.ZIndex = 5
                     bgBar.Parent = billboard
@@ -453,50 +423,7 @@ return function(env)
                     fill.Parent = bgBar
                     
                     return billboard, fill, text, bgBar
-                elseif currentDoorStyle == "Style 1" then
-                    -- Design: design door progress 2.txt
-                    local billboard = Instance.new("BillboardGui")
-                    billboard.Name = "NormalDoorGUI"
-                    billboard.Adornee = parent
-                    billboard.Size = UDim2.fromOffset(90, 22)
-                    billboard.StudsOffsetWorldSpace = Vector3.new(0, 0, 0.1)
-                    billboard.AlwaysOnTop = true
-                    billboard.MaxDistance = doorMaxDistance
-                    billboard.Parent = parent
-
-                    local text = Instance.new("TextLabel")
-                    text.Name = "PercentText"
-                    text.Size = UDim2.new(1, 0, 0.45, 0)
-                    text.BackgroundTransparency = 1
-                    text.Text = "0.0%"
-                    text.TextColor3 = Color3.fromRGB(255, 210, 140)
-                    text.TextStrokeTransparency = 0.6
-                    text.Font = Enum.Font.GothamMedium
-                    text.TextScaled = true
-                    text.ZIndex = 6
-                    text.Parent = billboard
-
-                    local bgBar = Instance.new("Frame")
-                    bgBar.Name = "BgBar"
-                    bgBar.Size = UDim2.new(1, 0, 0.35, 0)
-                    bgBar.Position = UDim2.new(0, 0, 0.6, 0)
-                    bgBar.BackgroundColor3 = Color3.fromRGB(25, 15, 5)
-                    bgBar.BackgroundTransparency = 0.5
-                    bgBar.BorderSizePixel = 0
-                    bgBar.ZIndex = 5
-                    bgBar.Parent = billboard
-
-                    local fill = Instance.new("Frame")
-                    fill.Name = "Fill"
-                    fill.Size = UDim2.new(0, 0, 1, 0)
-                    fill.BackgroundColor3 = Color3.fromRGB(170, 100, 40)
-                    fill.BorderSizePixel = 0
-                    fill.ZIndex = 6
-                    fill.Parent = bgBar
-
-                    return billboard, fill, text, bgBar
                 else
-                    -- Design: design door progress.txt (Style 2)
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NormalDoorGUI"
                     billboard.Adornee = parent
@@ -512,7 +439,7 @@ return function(env)
                     text.Position = UDim2.new(0, 0, 0.3, 0)
                     text.BackgroundTransparency = 1
                     text.Text = "CLOSE"
-                    text.TextColor3 = Color3.fromRGB(255, 0, 0)
+                    text.TextColor3 = DT_COLORS.HL_CLOSE
                     text.TextStrokeTransparency = 0.8
                     text.TextStrokeColor3 = Color3.new(0,0,0)
                     text.Font = Enum.Font.GothamBold
@@ -711,12 +638,34 @@ return function(env)
                     end
                 end
                 
+                local cam = Workspace.CurrentCamera
+                local camPos = cam and cam.CFrame.Position or Vector3.new(0, 0, 0)
+
                 for doorModel, data in pairs(trackedNormalDoors) do
                     if not doorModel.Parent or not data.Anchor or not data.Anchor.Parent then
                         if data.Billboard then data.Billboard:Destroy() end
                         if data.Highlight then data.Highlight:Destroy() end
                         trackedNormalDoors[doorModel] = nil
                         continue
+                    end
+
+                    -- Otimização Matemática de Distância sem alocação de Vector3
+                    local anchorPos = data.Anchor.Position
+                    local dx = anchorPos.X - camPos.X
+                    local dy = anchorPos.Y - camPos.Y
+                    local dz = anchorPos.Z - camPos.Z
+                    local distSq = dx*dx + dy*dy + dz*dz
+                    local dist = math.sqrt(distSq)
+
+                    if dist > doorMaxDistance then
+                        if data.Billboard.Enabled then
+                            data.Billboard.Enabled = false
+                            data.Highlight.Enabled = false
+                        end
+                        continue
+                    else
+                        data.Billboard.Enabled = true
+                        data.Highlight.Enabled = doorHighlightEnabled
                     end
 
                     local currentCF = data.Anchor.CFrame
@@ -756,7 +705,7 @@ return function(env)
                                 data.Bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
                                 data.Text.TextColor3 = Color3.fromRGB(255, 255, 255)
                                 data.Text.Text = "100.0%"
-                                data.Highlight.FillColor = Color3.fromRGB(0, 255, 100)
+                                data.Highlight.FillColor = DT_COLORS.HL_OPEN
                             end
                         elseif interactionVal > 0.001 then 
                             if data.LastState ~= "Opening" or math.abs(data.LastProgress - interactionVal) > 0.005 then
@@ -766,7 +715,7 @@ return function(env)
                                 data.Bar.BackgroundColor3 = barColor
                                 data.Text.TextColor3 = baseColor
                                 data.Text.Text = string.format("%.1f%%", interactionVal * 100)
-                                data.Highlight.FillColor = Color3.fromRGB(255, 200, 0)
+                                data.Highlight.FillColor = DT_COLORS.HL_OPENING
                             end
                         else
                             if data.LastState ~= "Closed" then
@@ -775,37 +724,31 @@ return function(env)
                                 data.Bar.BackgroundColor3 = barColor
                                 data.Text.TextColor3 = baseColor
                                 data.Text.Text = "0.0%"
-                                data.Highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                                data.Highlight.FillColor = DT_COLORS.HL_CLOSE
                             end
                         end
                     else
-                        local COLORS_STYLE2 = {
-                            CLOSE = Color3.fromRGB(255, 0, 0),
-                            OPENING = Color3.fromRGB(255, 255, 0),
-                            OPEN = Color3.fromRGB(0, 255, 100)
-                        }
-
                         if isPhysicallyOpen then
                             if data.LastState ~= "Open" then
                                 data.LastState = "Open"
                                 data.Text.Text = "OPEN"
-                                data.Text.TextColor3 = COLORS_STYLE2.OPEN
-                                data.Highlight.FillColor = COLORS_STYLE2.OPEN
+                                data.Text.TextColor3 = DT_COLORS.HL_OPEN
+                                data.Highlight.FillColor = DT_COLORS.HL_OPEN
                                 data.BgBar.Visible = false
                             end
                         elseif interactionVal > 0.05 then 
                             data.LastState = "Opening"
                             data.Text.Text = "OPENING"
-                            data.Text.TextColor3 = COLORS_STYLE2.OPENING
-                            data.Highlight.FillColor = COLORS_STYLE2.OPENING
+                            data.Text.TextColor3 = DT_COLORS.HL_OPENING
+                            data.Highlight.FillColor = DT_COLORS.HL_OPENING
                             data.BgBar.Visible = true
                             data.Bar.Size = UDim2.new(math.clamp(interactionVal, 0, 1), 0, 1, 0)
                         else
                             if data.LastState ~= "Closed" then
                                 data.LastState = "Closed"
                                 data.Text.Text = "CLOSE"
-                                data.Text.TextColor3 = COLORS_STYLE2.CLOSE
-                                data.Highlight.FillColor = COLORS_STYLE2.CLOSE
+                                data.Text.TextColor3 = DT_COLORS.HL_CLOSE
+                                data.Highlight.FillColor = DT_COLORS.HL_CLOSE
                                 data.BgBar.Visible = false
                             end
                         end
@@ -820,6 +763,7 @@ return function(env)
             if DoorProgLoop then task.cancel(DoorProgLoop); DoorProgLoop = nil end
             if DoorProgHeartbeat then DoorProgHeartbeat:Disconnect(); DoorProgHeartbeat = nil end
             if doorAddedConn then doorAddedConn:Disconnect(); doorAddedConn = nil end
+            lastMap = nil -- Correção: Reseta a variável de controle do mapa para permitir remontagem imediata ao ligar
             for doorModel, data in pairs(trackedNormalDoors) do
                 if data.Billboard then data.Billboard:Destroy() end
                 if data.Highlight then data.Highlight:Destroy() end
