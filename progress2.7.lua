@@ -88,7 +88,8 @@ return function(env)
     Library:CreateToggle(Page, "Computer Progress", false, function(state)
         if state then
             local function createProgressBar(parent)
-                if currentComputerStyle == "Default" or currentComputerStyle == "Style 1" then
+                if currentComputerStyle == "Default" then
+                    -- Design Ciano premium
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "ProgressBar"
                     billboard.Adornee = parent
@@ -121,13 +122,7 @@ return function(env)
                     track.Name = "Track"
                     track.Size = UDim2.new(0, 70, 0, 6)
                     track.Position = UDim2.new(0.5, -35, 0, 16)
-                    
-                    if currentComputerStyle == "Default" then
-                        track.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-                    else
-                        track.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-                    end
-                    
+                    track.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
                     track.BorderSizePixel = 0
                     track.Parent = background
 
@@ -144,13 +139,7 @@ return function(env)
                     local bar = Instance.new("Frame")
                     bar.Name = "Bar"
                     bar.Size = UDim2.new(0, 0, 1, 0)
-                    
-                    if currentComputerStyle == "Default" then
-                        bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
-                    else
-                        bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                    end
-                    
+                    bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
                     bar.BorderSizePixel = 0
                     bar.Parent = track
 
@@ -1776,7 +1765,7 @@ return function(env)
             isDraining = false
 
             BeastPowerConnection1 = task.spawn(function()
-                while state and task.wait(1) do
+                while screenGui.Parent do
                     local foundValue = nil
                     local plist = Players:GetPlayers()
                     for i = 1, #plist do
@@ -1812,7 +1801,10 @@ return function(env)
         else
             if BeastPowerConnection1 then task.cancel(BeastPowerConnection1); BeastPowerConnection1 = nil end
             if BeastPowerConnection2 then BeastPowerConnection2:Disconnect(); BeastPowerConnection2 = nil end
-            if uiFrameBP and uiFrameBP.Parent then uiFrameBP.Parent:Destroy() end
+            local success, container = pcall(function() return CoreGui end)
+            local parent = (success and container) or LocalPlayer:WaitForChild("PlayerGui")
+            local oldHud = parent:FindFirstChild("BeastTextHUD")
+            if oldHud then oldHud:Destroy() end
         end
     end)
     
