@@ -15,6 +15,11 @@ return function(env)
     local CurrentSoundIDs = {Running = 0, Jumping = 0, Landing = 0}
     local OriginalSoundBackups = setmetatable({}, {__mode = "k"})
 
+    -- Carregando ou definindo valores padrão para os novos volumes (escala de 0 a 10)
+    local FootstepsVolMultiplier = UserConfigs["FootstepsVol"] or 1
+    local JumpVolMultiplier = UserConfigs["JumpVol"] or 1
+    local FallVolMultiplier = UserConfigs["FallVol"] or 1
+
     local function formatID(id)
         if type(id) == "number" and id > 0 then return "rbxassetid://" .. id
         elseif type(id) == "string" and id ~= "" and id ~= "0" then
@@ -70,34 +75,74 @@ return function(env)
     for _, player in ipairs(Players:GetPlayers()) do setupPlayerSoundEvents(player) end
     Players.PlayerAdded:Connect(setupPlayerSoundEvents)
 
+    -- Função auxiliar para calcular o volume final com base nos multiplicadores
+    local function GetTargetVolume(soundName)
+        local baseVol = 0.5
+        if soundName == "Running" then
+            baseVol = 0.65
+            if LegitSettings.MuteSteps then return 0 end
+            return baseVol * FootstepsVolMultiplier
+        elseif soundName == "Jumping" then
+            if LegitSettings.MuteJumps then return 0 end
+            return baseVol * JumpVolMultiplier
+        elseif soundName == "Landing" then
+            if LegitSettings.MuteJumps then return 0 end
+            return baseVol * FallVolMultiplier
+        end
+        return baseVol
+    end
+
+    -- Atualiza dinamicamente os volumes do personagem local
+    local function UpdateCharacterSoundVolumes()
+        local char = LocalPlayer.Character
+        if not char then return end
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+        
+        local s1 = root:FindFirstChild("Running")
+        if s1 and s1:IsA("Sound") then s1.Volume = GetTargetVolume("Running") end
+        
+        local s2 = root:FindFirstChild("Jumping")
+        if s2 and s2:IsA("Sound") then s2.Volume = GetTargetVolume("Jumping") end
+        
+        local s3 = root:FindFirstChild("Landing")
+        if s3 and s3:IsA("Sound") then s3.Volume = GetTargetVolume("Landing") end
+    end
+
     local function ProcessCharacter(char)
         local root = char:WaitForChild("HumanoidRootPart", 10)
         if not root then return end
-        local function MuteLogic(soundObj, typeName)
+        
+        local function ApplySoundSettings(soundObj, typeName)
             if not soundObj then return end
-            local targetVol = 0.5
-            if typeName == "Running" then targetVol = 0.65 end
-            if char == LocalPlayer.Character then
-                if typeName == "Running" and LegitSettings.MuteSteps then targetVol = 0 end
-                if (typeName == "Jumping" or typeName == "Landing") and LegitSettings.MuteJumps then targetVol = 0 end
-            end
-            soundObj.Volume = targetVol
-            soundObj:GetPropertyChangedSignal("Volume"):Connect(function()
+            
+            local function enforceVolume()
+                local vol = 0
                 if char == LocalPlayer.Character then
-                    if typeName == "Running" and LegitSettings.MuteSteps then soundObj.Volume = 0 
-                    elseif (typeName == "Jumping" or typeName == "Landing") and LegitSettings.MuteJumps then soundObj.Volume = 0 end
+                    vol = GetTargetVolume(typeName)
+                else
+                    vol = (typeName == "Running" and 0.65 or 0.5)
                 end
-            end)
+                
+                if math.abs(soundObj.Volume - vol) > 0.01 then
+                    soundObj.Volume = vol
+                end
+            end
+            
+            enforceVolume()
+            soundObj:GetPropertyChangedSignal("Volume"):Connect(enforceVolume)
         end
+        
         task.spawn(function()
             local s1 = root:WaitForChild("Running", 5)
-            if s1 then MuteLogic(s1, "Running") end
+            if s1 then ApplySoundSettings(s1, "Running") end
             local s2 = root:WaitForChild("Jumping", 5)
-            if s2 then MuteLogic(s2, "Jumping") end
+            if s2 then ApplySoundSettings(s2, "Jumping") end
             local s3 = root:WaitForChild("Landing", 5)
-            if s3 then MuteLogic(s3, "Landing") end
+            if s3 then ApplySoundSettings(s3, "Landing") end
         end)
     end
+    
     Players.PlayerAdded:Connect(function(p) p.CharacterAdded:Connect(ProcessCharacter) end)
     for _, p in pairs(Players:GetPlayers()) do 
         if p.Character then ProcessCharacter(p.Character) end
@@ -106,7 +151,6 @@ return function(env)
 
     local hackSignals = {}
     local hackConnection = nil
-    local originalVolumeBackup = {}
     
     local HACK_KEYWORDS = {"keyboard", "typing", "type", "hack", "key"}
     local function isHackSound(sound) 
@@ -162,11 +206,11 @@ return function(env)
     Library:CreateSection(Page, "Mute Sounds")
     Library:CreateToggle(Page, "Remove Your Steps", false, function(state) 
         LegitSettings.MuteSteps = state
-        if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
+        UpdateCharacterSoundVolumes()
     end)
     Library:CreateToggle(Page, "Remove Your Jumps", false, function(state) 
         LegitSettings.MuteJumps = state
-        if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
+        UpdateCharacterSoundVolumes()
     end)
     Library:CreateToggle(Page, "Remove Pc Hack Sounds", false, function(state) 
         if state then 
@@ -214,51 +258,35 @@ return function(env)
         end
     end)
     
+    -- Seção de Volumes
     Library:CreateSection(Page, "General")
     
-    local VolumeBoostVal = 1
-    local ActiveSounds = setmetatable({}, {__mode = "k"})
-    
-    local function registerSound(obj)
-        if obj:IsA("Sound") then
-            ActiveSounds[obj] = true
-            if not originalVolumeBackup[obj] then
-                originalVolumeBackup[obj] = obj.Volume
-            end
-        end
-    end
-    
-    for _, obj in pairs(Workspace:GetDescendants()) do registerSound(obj) end
-    Workspace.DescendantAdded:Connect(registerSound)
-
-    task.spawn(function()
-        while task.wait(0.5) do
-            for sound in pairs(ActiveSounds) do
-                if sound and sound.Parent then
-                    local origVol = originalVolumeBackup[sound] or 0.5
-                    local targetVol = origVol * VolumeBoostVal
-                    
-                    if sound.Volume ~= 0 and math.abs(sound.Volume - targetVol) > 0.01 then
-                        pcall(function() sound.Volume = targetVol end)
-                    end
-                end
-            end
-        end
-    end)
-
-    Library:CreateSlider(Page, "Volume Boost", 0, 10, 1, function(val) 
-        VolumeBoostVal = val
-        for sound in pairs(ActiveSounds) do 
-            if sound and sound.Parent then 
-                local origVol = originalVolumeBackup[sound] or 0.5
-                local targetVol = origVol * val
-                if math.abs(sound.Volume - targetVol) > 0.01 then
-                    pcall(function() sound.Volume = targetVol end)
-                end
-            end 
-        end 
+    local FootstepsSlider = Library:CreateSlider(Page, "FootSteps Volume", 0, 10, FootstepsVolMultiplier, function(val)
+        FootstepsVolMultiplier = val
+        UserConfigs["FootstepsVol"] = val
+        UpdateCharacterSoundVolumes()
     end)
     
+    local JumpSlider = Library:CreateSlider(Page, "Jump Volume", 0, 10, JumpVolMultiplier, function(val)
+        JumpVolMultiplier = val
+        UserConfigs["JumpVol"] = val
+        UpdateCharacterSoundVolumes()
+    end)
+    
+    local FallSlider = Library:CreateSlider(Page, "Fall Volume", 0, 10, FallVolMultiplier, function(val)
+        FallVolMultiplier = val
+        UserConfigs["FallVol"] = val
+        UpdateCharacterSoundVolumes()
+    end)
+
+    -- Botão para redefinir volumes aos padrões
+    Library:CreateButton(Page, "Reset Volumes", function()
+        FootstepsSlider.Set(1)
+        JumpSlider.Set(1)
+        FallSlider.Set(1)
+    end)
+    
+    -- Seção Custom Sound Packs
     Library:CreateSection(Page, "Custom Sound Packs")
     local targetParentSounds = GetParentTarget(Page)
     
@@ -378,24 +406,8 @@ return function(env)
         end
     end
 
-    local ResetBtnFrame = Instance.new("TextButton")
-    ResetBtnFrame.Size = UDim2.new(1, -2, 0, 30)
-    ResetBtnFrame.Position = UDim2.new(0, 1, 0, 0)
-    ResetBtnFrame.BackgroundColor3 = Color3.new(0, 0, 0)
-    ResetBtnFrame.BackgroundTransparency = 0.45
-    ResetBtnFrame.Text = "Default Sounds (Reset All)"
-    ResetBtnFrame.TextColor3 = Theme.CloseRed
-    ResetBtnFrame.Font = Enum.Font.GothamBold
-    ResetBtnFrame.TextSize = 11
-    ResetBtnFrame.Parent = targetParentSounds
-    Instance.new("UICorner", ResetBtnFrame).CornerRadius = UDim.new(0, 6)
-    local rbsStr = Instance.new("UIStroke", ResetBtnFrame)
-    rbsStr.Color = Color3.fromRGB(40,40,40)
-
-    ResetBtnFrame.MouseEnter:Connect(function() TweenService:Create(rbsStr, TweenInfo.new(0.3), {Color = Theme.CloseRed}):Play() end)
-    ResetBtnFrame.MouseLeave:Connect(function() TweenService:Create(rbsStr, TweenInfo.new(0.3), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
-    
-    ResetBtnFrame.MouseButton1Click:Connect(function()
+    -- Criando o botão Reset Sounds dentro da UI
+    Library:CreateButton(Page, "Reset Sounds", function()
         CurrentSoundIDs.Running = "0"
         CurrentSoundIDs.Jumping = "0"
         CurrentSoundIDs.Landing = "0"
