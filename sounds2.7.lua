@@ -16,7 +16,7 @@ return function(env)
     local CurrentSoundIDs = {Running = 0, Jumping = 0, Landing = 0}
     local OriginalSoundBackups = setmetatable({}, {__mode = "k"})
 
-    -- Carregando estados e valores salvos
+    -- Carregando estados e valores salvos do Bloco de Volumes (Inicia desligado por padrão)
     local VolumesEnabled = UserConfigs["EnableSoundSettings"]
     if VolumesEnabled == nil then VolumesEnabled = false end
 
@@ -79,82 +79,40 @@ return function(env)
     for _, player in ipairs(Players:GetPlayers()) do setupPlayerSoundEvents(player) end
     Players.PlayerAdded:Connect(setupPlayerSoundEvents)
 
-    -- Tabelas fracas para mapeamento rápido de categorias e preservação de memória
-    local ActiveSounds = setmetatable({}, {__mode = "k"})
-    local SoundCategories = setmetatable({}, {__mode = "k"})
-    local originalVolumeBackup = setmetatable({}, {__mode = "k"})
-
-    local function getSoundCategory(sound)
-        local name = sound.Name:lower()
-        if name:find("running") or name:find("walk") or name:find("step") then
-            return "Footsteps"
-        elseif name:find("jumping") or name:find("jump") then
-            return "Jump"
-        elseif name:find("landing") or name:find("fall") or name:find("land") then
-            return "Fall"
-        end
-        return nil
-    end
-
-    -- Processa a categorização uma única vez por objeto de áudio
-    local function registerSound(obj)
-        if obj:IsA("Sound") then
-            ActiveSounds[obj] = true
-            if not originalVolumeBackup[obj] then
-                originalVolumeBackup[obj] = obj.Volume
+    -- Lógica original de Mute local restaurada integralmente
+    local function ProcessCharacter(char)
+        local root = char:WaitForChild("HumanoidRootPart", 10)
+        if not root then return end
+        local function MuteLogic(soundObj, typeName)
+            if not soundObj then return end
+            local targetVol = 0.5
+            if typeName == "Running" then targetVol = 0.65 end
+            if char == LocalPlayer.Character then
+                if typeName == "Running" and LegitSettings.MuteSteps then targetVol = 0 end
+                if (typeName == "Jumping" or typeName == "Landing") and LegitSettings.MuteJumps then targetVol = 0 end
             end
-            if not SoundCategories[obj] then
-                SoundCategories[obj] = getSoundCategory(obj)
-            end
-        end
-    end
-    
-    for _, obj in ipairs(Workspace:GetDescendants()) do registerSound(obj) end
-    Workspace.DescendantAdded:Connect(registerSound)
-
-    -- Laço de sincronização de alto desempenho
-    task.spawn(function()
-        while task.wait(0.3) do
-            -- Cache local de referências de tabelas para otimizar o processamento interno
-            local enabled = VolumesEnabled
-            local stepMult = FootstepsVolMultiplier
-            local jumpMult = JumpVolMultiplier
-            local fallMult = FallVolMultiplier
-            local muteSteps = LegitSettings.MuteSteps
-            local muteJumps = LegitSettings.MuteJumps
-
-            for sound in pairs(ActiveSounds) do
-                local category = SoundCategories[sound]
-                if category then
-                    local origVol = originalVolumeBackup[sound] or 0.5
-                    local multiplier = 1
-
-                    if enabled then
-                        if category == "Footsteps" then
-                            multiplier = stepMult
-                        elseif category == "Jump" then
-                            multiplier = jumpMult
-                        elseif category == "Fall" then
-                            multiplier = fallMult
-                        end
-                    end
-
-                    -- Silenciador legit
-                    if category == "Footsteps" and muteSteps then
-                        multiplier = 0
-                    elseif (category == "Jump" or category == "Fall") and muteJumps then
-                        multiplier = 0
-                    end
-
-                    local targetVol = origVol * multiplier
-                    -- Alterar propriedade apenas se houver diferença real (Evita stutters na Engine)
-                    if sound.Volume ~= targetVol then
-                        pcall(function() sound.Volume = targetVol end)
-                    end
+            soundObj.Volume = targetVol
+            soundObj:GetPropertyChangedSignal("Volume"):Connect(function()
+                if char == LocalPlayer.Character then
+                    if typeName == "Running" and LegitSettings.MuteSteps then soundObj.Volume = 0 
+                    elseif (typeName == "Jumping" or typeName == "Landing") and LegitSettings.MuteJumps then soundObj.Volume = 0 end
                 end
-            end
+            end)
         end
-    end)
+        task.spawn(function()
+            local s1 = root:WaitForChild("Running", 5)
+            if s1 then MuteLogic(s1, "Running") end
+            local s2 = root:WaitForChild("Jumping", 5)
+            if s2 then MuteLogic(s2, "Jumping") end
+            local s3 = root:WaitForChild("Landing", 5)
+            if s3 then MuteLogic(s3, "Landing") end
+        end)
+    end
+    Players.PlayerAdded:Connect(function(p) p.CharacterAdded:Connect(ProcessCharacter) end)
+    for _, p in pairs(Players:GetPlayers()) do 
+        if p.Character then ProcessCharacter(p.Character) end
+        p.CharacterAdded:Connect(ProcessCharacter) 
+    end
 
     local hackSignals = {}
     local hackConnection = nil
@@ -207,15 +165,94 @@ return function(env)
     
     local noHitSoundAddedConn = nil
 
+    -- Tabelas fracas e caches rápidos de alta performance para os Sliders de Volume
+    local ActiveSounds = setmetatable({}, {__mode = "k"})
+    local SoundCategories = setmetatable({}, {__mode = "k"})
+    local originalVolumeBackup = setmetatable({}, {__mode = "k"})
+
+    local function getSoundCategory(sound)
+        local name = sound.Name:lower()
+        if name:find("running") or name:find("walk") or name:find("step") then
+            return "Footsteps"
+        elseif name:find("jumping") or name:find("jump") then
+            return "Jump"
+        elseif name:find("landing") or name:find("fall") or name:find("land") then
+            return "Fall"
+        end
+        return nil
+    end
+
+    local function registerSound(obj)
+        if obj:IsA("Sound") then
+            ActiveSounds[obj] = true
+            if not originalVolumeBackup[obj] then
+                originalVolumeBackup[obj] = obj.Volume
+            end
+            if not SoundCategories[obj] then
+                SoundCategories[obj] = getSoundCategory(obj)
+            end
+        end
+    end
+    
+    for _, obj in ipairs(Workspace:GetDescendants()) do registerSound(obj) end
+    Workspace.DescendantAdded:Connect(registerSound)
+
+    -- Laço de sincronização global otimizado (Prevenção de stuttering)
+    task.spawn(function()
+        while task.wait(0.3) do
+            local enabled = VolumesEnabled
+            local stepMult = FootstepsVolMultiplier
+            local jumpMult = JumpVolMultiplier
+            local fallMult = FallVolMultiplier
+            local muteSteps = LegitSettings.MuteSteps
+            local muteJumps = LegitSettings.MuteJumps
+            local localChar = LocalPlayer.Character
+
+            for sound in pairs(ActiveSounds) do
+                local category = SoundCategories[sound]
+                if category then
+                    local origVol = originalVolumeBackup[sound] or 0.5
+                    local multiplier = 1
+
+                    if enabled then
+                        if category == "Footsteps" then
+                            multiplier = stepMult
+                        elseif category == "Jump" then
+                            multiplier = jumpMult
+                        elseif category == "Fall" then
+                            multiplier = fallMult
+                        end
+                    end
+
+                    -- Verifica se o som pertence ao LocalPlayer para aplicar o silenciador legítimo
+                    if localChar and sound:IsDescendantOf(localChar) then
+                        if category == "Footsteps" and muteSteps then
+                            multiplier = 0
+                        elseif (category == "Jump" or category == "Fall") and muteJumps then
+                            multiplier = 0
+                        end
+                    end
+
+                    local targetVol = origVol * multiplier
+                    if sound.Volume ~= targetVol then
+                        pcall(function() sound.Volume = targetVol end)
+                    end
+                end
+            end
+        end
+    end)
+
     -- ==========================================
-    -- Interface Visual (Bloco Unificado)
+    -- Interface Visual (Toggles Originais Mantidas)
     -- ==========================================
     Library:CreateSection(Page, "Mute Sounds")
     Library:CreateToggle(Page, "Remove Your Steps", false, function(state) 
         LegitSettings.MuteSteps = state
+        if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
     end)
     Library:CreateToggle(Page, "Remove Your Jumps", false, function(state) 
         LegitSettings.MuteJumps = state
+        if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
     end)
     Library:CreateToggle(Page, "Remove Pc Hack Sounds", false, function(state) 
         if state then 
@@ -263,7 +300,7 @@ return function(env)
         end
     end)
     
-    -- Bloco Unificado de Volumes
+    -- Bloco de Volumes Customizado
     Library:CreateSection(Page, "Volume Settings")
     
     local VolumeBlock = Instance.new("Frame")
@@ -288,7 +325,7 @@ return function(env)
     padding.PaddingLeft = UDim.new(0, 12)
     padding.PaddingRight = UDim.new(0, 12)
 
-    -- Toggle Customizada (Fiel ao tema original)
+    -- Toggle Compacto para o Bloco de Volumes (Fiel ao design original)
     local function CreateCompactToggle(parent, text, defaultVal, callback)
         local frame = Instance.new("Frame")
         frame.Size = UDim2.new(1, 0, 0, 24)
@@ -354,7 +391,7 @@ return function(env)
         return {Set = function(val) state = val; updateVisuals(); callback(val) end}
     end
 
-    -- Slider Customizado (Fiel ao tema original com gradientes)
+    -- Slider Compacto (Fiel ao tema do hub com gradientes)
     local function CreateCompactSlider(parent, text, min, max, defaultVal, callback)
         local frame = Instance.new("Frame")
         frame.Size = UDim2.new(1, 0, 0, 34)
