@@ -16,7 +16,7 @@ return function(env)
     local CurrentSoundIDs = {Running = 0, Jumping = 0, Landing = 0}
     local OriginalSoundBackups = setmetatable({}, {__mode = "k"})
 
-    -- Carregando estados e valores salvos (Toggle inicia como Desativada por padrão)
+    -- Carregando estados e valores salvos
     local VolumesEnabled = UserConfigs["EnableSoundSettings"]
     if VolumesEnabled == nil then VolumesEnabled = false end
 
@@ -79,9 +79,10 @@ return function(env)
     for _, player in ipairs(Players:GetPlayers()) do setupPlayerSoundEvents(player) end
     Players.PlayerAdded:Connect(setupPlayerSoundEvents)
 
-    -- Mapeamento e monitoramento global de sons igual ao script original
+    -- Tabelas fracas para mapeamento rápido de categorias e preservação de memória
     local ActiveSounds = setmetatable({}, {__mode = "k"})
-    local originalVolumeBackup = {}
+    local SoundCategories = setmetatable({}, {__mode = "k"})
+    local originalVolumeBackup = setmetatable({}, {__mode = "k"})
 
     local function getSoundCategory(sound)
         local name = sound.Name:lower()
@@ -95,49 +96,60 @@ return function(env)
         return nil
     end
 
+    -- Processa a categorização uma única vez por objeto de áudio
     local function registerSound(obj)
         if obj:IsA("Sound") then
             ActiveSounds[obj] = true
             if not originalVolumeBackup[obj] then
                 originalVolumeBackup[obj] = obj.Volume
             end
+            if not SoundCategories[obj] then
+                SoundCategories[obj] = getSoundCategory(obj)
+            end
         end
     end
     
-    for _, obj in pairs(Workspace:GetDescendants()) do registerSound(obj) end
+    for _, obj in ipairs(Workspace:GetDescendants()) do registerSound(obj) end
     Workspace.DescendantAdded:Connect(registerSound)
 
-    -- Ciclo de atualização de volumes baseado na lógica original do script
+    -- Laço de sincronização de alto desempenho
     task.spawn(function()
         while task.wait(0.3) do
+            -- Cache local de referências de tabelas para otimizar o processamento interno
+            local enabled = VolumesEnabled
+            local stepMult = FootstepsVolMultiplier
+            local jumpMult = JumpVolMultiplier
+            local fallMult = FallVolMultiplier
+            local muteSteps = LegitSettings.MuteSteps
+            local muteJumps = LegitSettings.MuteJumps
+
             for sound in pairs(ActiveSounds) do
-                if sound and sound.Parent then
-                    local category = getSoundCategory(sound)
-                    if category then
-                        local origVol = originalVolumeBackup[sound] or 0.5
-                        local multiplier = 1
+                local category = SoundCategories[sound]
+                if category then
+                    local origVol = originalVolumeBackup[sound] or 0.5
+                    local multiplier = 1
 
-                        if VolumesEnabled then
-                            if category == "Footsteps" then
-                                multiplier = FootstepsVolMultiplier
-                            elseif category == "Jump" then
-                                multiplier = JumpVolMultiplier
-                            elseif category == "Fall" then
-                                multiplier = FallVolMultiplier
-                            end
+                    if enabled then
+                        if category == "Footsteps" then
+                            multiplier = stepMult
+                        elseif category == "Jump" then
+                            multiplier = jumpMult
+                        elseif category == "Fall" then
+                            multiplier = fallMult
                         end
+                    end
 
-                        -- Silenciador legit
-                        if category == "Footsteps" and LegitSettings.MuteSteps then
-                            multiplier = 0
-                        elseif (category == "Jump" or category == "Fall") and LegitSettings.MuteJumps then
-                            multiplier = 0
-                        end
+                    -- Silenciador legit
+                    if category == "Footsteps" and muteSteps then
+                        multiplier = 0
+                    elseif (category == "Jump" or category == "Fall") and muteJumps then
+                        multiplier = 0
+                    end
 
-                        local targetVol = origVol * multiplier
-                        if math.abs(sound.Volume - targetVol) > 0.01 then
-                            pcall(function() sound.Volume = targetVol end)
-                        end
+                    local targetVol = origVol * multiplier
+                    -- Alterar propriedade apenas se houver diferença real (Evita stutters na Engine)
+                    if sound.Volume ~= targetVol then
+                        pcall(function() sound.Volume = targetVol end)
                     end
                 end
             end
