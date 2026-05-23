@@ -88,8 +88,7 @@ return function(env)
     Library:CreateToggle(Page, "Computer Progress", false, function(state)
         if state then
             local function createProgressBar(parent)
-                if currentComputerStyle == "Default" then
-                    -- Design Ciano premium
+                if currentComputerStyle == "Default" or currentComputerStyle == "Style 1" then
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "ProgressBar"
                     billboard.Adornee = parent
@@ -122,7 +121,13 @@ return function(env)
                     track.Name = "Track"
                     track.Size = UDim2.new(0, 70, 0, 6)
                     track.Position = UDim2.new(0.5, -35, 0, 16)
-                    track.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+                    
+                    if currentComputerStyle == "Default" then
+                        track.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+                    else
+                        track.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+                    end
+                    
                     track.BorderSizePixel = 0
                     track.Parent = background
 
@@ -139,7 +144,13 @@ return function(env)
                     local bar = Instance.new("Frame")
                     bar.Name = "Bar"
                     bar.Size = UDim2.new(0, 0, 1, 0)
-                    bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+                    
+                    if currentComputerStyle == "Default" then
+                        bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+                    else
+                        bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                    end
+                    
                     bar.BorderSizePixel = 0
                     bar.Parent = track
 
@@ -767,7 +778,10 @@ return function(env)
                     
                     local interactionVal = currentDoorInteractions[doorModel] or 0
 
-                    if currentDoorStyle == "Default" then
+                    if currentDoorStyle == "Default" or currentDoorStyle == "Style 1" then
+                        local baseColor = (currentDoorStyle == "Default") and Color3.fromRGB(205, 135, 25) or Color3.fromRGB(255, 210, 140)
+                        local barColor = (currentDoorStyle == "Default") and Color3.fromRGB(205, 135, 25) or Color3.fromRGB(170, 100, 40)
+
                         if isPhysicallyOpen then
                             if data.LastState ~= "Open" then
                                 data.LastState = "Open"
@@ -782,8 +796,8 @@ return function(env)
                                 data.LastState = "Opening"
                                 data.LastProgress = interactionVal
                                 data.Bar.Size = UDim2.new(math.clamp(interactionVal, 0, 1), 0, 1, 0)
-                                data.Bar.BackgroundColor3 = Color3.fromRGB(205, 135, 25)
-                                data.Text.TextColor3 = Color3.fromRGB(205, 135, 25)
+                                data.Bar.BackgroundColor3 = barColor
+                                data.Text.TextColor3 = baseColor
                                 data.Text.Text = string.format("%.1f%%", interactionVal * 100)
                                 data.Highlight.FillColor = Color3.fromRGB(255, 200, 0)
                             end
@@ -791,44 +805,12 @@ return function(env)
                             if data.LastState ~= "Closed" then
                                 data.LastState = "Closed"
                                 data.Bar.Size = UDim2.new(0, 0, 1, 0)
-                                data.Bar.BackgroundColor3 = Color3.fromRGB(205, 135, 25)
-                                data.Text.TextColor3 = Color3.fromRGB(205, 135, 25)
+                                data.Bar.BackgroundColor3 = barColor
+                                data.Text.TextColor3 = baseColor
                                 data.Text.Text = "0.0%"
                                 data.Highlight.FillColor = Color3.fromRGB(255, 0, 0)
                             end
                         end
-
-                    elseif currentDoorStyle == "Style 1" then
-                        if isPhysicallyOpen then
-                            if data.LastState ~= "Open" then
-                                data.LastState = "Open"
-                                data.Bar.Size = UDim2.new(1, 0, 1, 0)
-                                data.Bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                                data.Text.TextColor3 = Color3.fromRGB(255, 255, 255)
-                                data.Text.Text = "100.0%"
-                                data.Highlight.FillColor = DT_COLORS.HL_OPEN
-                            end
-                        elseif interactionVal > 0.001 then 
-                            if data.LastState ~= "Opening" or math.abs(data.LastProgress - interactionVal) > 0.005 then
-                                data.LastState = "Opening"
-                                data.LastProgress = interactionVal
-                                data.Bar.Size = UDim2.new(math.clamp(interactionVal, 0, 1), 0, 1, 0)
-                                data.Bar.BackgroundColor3 = Color3.fromRGB(170, 100, 40)
-                                data.Text.TextColor3 = Color3.fromRGB(255, 210, 140)
-                                data.Text.Text = string.format("%.1f%%", interactionVal * 100)
-                                data.Highlight.FillColor = Color3.fromRGB(255, 200, 0)
-                            end
-                        else
-                            if data.LastState ~= "Closed" then
-                                data.LastState = "Closed"
-                                data.Bar.Size = UDim2.new(0, 0, 1, 0)
-                                data.Bar.BackgroundColor3 = Color3.fromRGB(170, 100, 40)
-                                data.Text.TextColor3 = Color3.fromRGB(255, 210, 140)
-                                data.Text.Text = "0.0%"
-                                data.Highlight.FillColor = Color3.fromRGB(255, 0, 0)
-                            end
-                        end
-
                     else
                         local COLORS_STYLE2 = {
                             CLOSE = Color3.fromRGB(255, 0, 0),
@@ -1680,7 +1662,6 @@ return function(env)
                             local hum = char and char:FindFirstChildOfClass("Humanoid")
                             
                             if hum then
-                                American = true
                                 local isRagdoll = hum.PlatformStand or hum:GetState() == Enum.HumanoidStateType.Physics
                                 if isRagdoll then
                                     local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -1797,54 +1778,35 @@ return function(env)
             BeastPowerConnection1 = task.spawn(function()
                 while state and task.wait(1) do
                     local foundValue = nil
-                    for _, player in ipairs(Players:GetPlayers()) do
-                        local char = player.Character
+                    local plist = Players:GetPlayers()
+                    for i = 1, #plist do
+                        local char = plist[i].Character
                         if char then
                             local beastPowers = char:FindFirstChild("BeastPowers")
                             if beastPowers then
                                 foundValue = beastPowers:FindFirstChildOfClass("NumberValue", true)
                                 if foundValue then
-                                    break 
+                                    break
                                 end
                             end
                         end
                     end
-                    trackedPowerValue = foundValue 
-                end
-            end)
 
-            BeastPowerConnection2 = RunService.RenderStepped:Connect(function()
-                if trackedPowerValue and trackedPowerValue.Parent then
-                    uiFrameBP.Visible = true
-                    
-                    local percent = math.clamp(trackedPowerValue.Value, 0, 1)
-                    local percentInt = math.floor(percent * 100)
-                    
-                    uiLabelBP.Text = "BeastPower Back In: " .. percentInt .. "%"
-                    
-                    if percent < lastPercent then
-                        isDraining = true 
-                    elseif percent > lastPercent then
-                        isDraining = false 
-                    end
-                    
-                    lastPercent = percent 
-                    
-                    if isDraining then
-                        uiLabelBP.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    else
-                        if percent >= 0.99 then
-                            uiLabelBP.TextColor3 = Color3.fromRGB(50, 255, 50) 
-                        elseif percent >= 0.80 then
-                            uiLabelBP.TextColor3 = Color3.fromRGB(255, 50, 50) 
-                        else
-                            uiLabelBP.TextColor3 = Color3.fromRGB(255, 255, 255) 
+                    if foundValue then
+                        if not BeastPowerConnection2 or not BeastPowerConnection2.Connected then
+                            updateUI(foundValue.Value)
+                            BeastPowerConnection2 = foundValue:GetPropertyChangedSignal("Value"):Connect(function()
+                                updateUI(foundValue.Value)
+                            end)
                         end
+                    else
+                        if BeastPowerConnection2 then
+                            BeastPowerConnection2:Disconnect()
+                            BeastPowerConnection2 = nil
+                        end
+                        updateUI(nil)
                     end
-                else
-                    if uiFrameBP then uiFrameBP.Visible = false end
-                    lastPercent = 0 
-                    isDraining = false
+                    task.wait(1)
                 end
             end)
         else
