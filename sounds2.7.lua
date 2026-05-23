@@ -9,13 +9,17 @@ return function(env)
     local Theme = env.Theme
     local UserConfigs = env.UserConfigs
     local GetParentTarget = env.GetParentTarget
+    local UserInputService = game:GetService("UserInputService")
 
     -- Variaveis de Lógica e Backup do Antigo Script
     local LegitSettings = {MuteSteps = false, MuteJumps = false, MuteHack = false}
     local CurrentSoundIDs = {Running = 0, Jumping = 0, Landing = 0}
     local OriginalSoundBackups = setmetatable({}, {__mode = "k"})
 
-    -- Carregando ou definindo valores padrão para os novos volumes (escala de 0 a 10)
+    -- Carregando estados e valores salvos
+    local VolumesEnabled = UserConfigs["EnableSoundSettings"]
+    if VolumesEnabled == nil then VolumesEnabled = true end
+
     local FootstepsVolMultiplier = UserConfigs["FootstepsVol"] or 1
     local JumpVolMultiplier = UserConfigs["JumpVol"] or 1
     local FallVolMultiplier = UserConfigs["FallVol"] or 1
@@ -75,18 +79,21 @@ return function(env)
     for _, player in ipairs(Players:GetPlayers()) do setupPlayerSoundEvents(player) end
     Players.PlayerAdded:Connect(setupPlayerSoundEvents)
 
-    -- Função auxiliar para calcular o volume final com base nos multiplicadores
+    -- Função auxiliar para calcular o volume final
     local function GetTargetVolume(soundName)
         local baseVol = 0.5
         if soundName == "Running" then
             baseVol = 0.65
             if LegitSettings.MuteSteps then return 0 end
+            if not VolumesEnabled then return baseVol end
             return baseVol * FootstepsVolMultiplier
         elseif soundName == "Jumping" then
             if LegitSettings.MuteJumps then return 0 end
+            if not VolumesEnabled then return baseVol end
             return baseVol * JumpVolMultiplier
         elseif soundName == "Landing" then
             if LegitSettings.MuteJumps then return 0 end
+            if not VolumesEnabled then return baseVol end
             return baseVol * FallVolMultiplier
         end
         return baseVol
@@ -201,7 +208,7 @@ return function(env)
     local noHitSoundAddedConn = nil
 
     -- ==========================================
-    -- Criação da Interface
+    -- Criação da Interface (Elementos Modificados)
     -- ==========================================
     Library:CreateSection(Page, "Mute Sounds")
     Library:CreateToggle(Page, "Remove Your Steps", false, function(state) 
@@ -258,29 +265,232 @@ return function(env)
         end
     end)
     
-    -- Seção de Volumes
-    Library:CreateSection(Page, "General")
+    -- Seção de Volumes (Grupo Unificado)
+    Library:CreateSection(Page, "Volume Settings")
     
-    local FootstepsSlider = Library:CreateSlider(Page, "FootSteps Volume", 0, 10, FootstepsVolMultiplier, function(val)
+    local VolumeBlock = Instance.new("Frame")
+    VolumeBlock.Size = UDim2.new(1, -2, 0, 205)
+    VolumeBlock.BackgroundColor3 = Color3.new(0, 0, 0)
+    VolumeBlock.BackgroundTransparency = 0.45
+    VolumeBlock.BorderSizePixel = 0
+    VolumeBlock.Parent = Page
+    Instance.new("UICorner", VolumeBlock).CornerRadius = UDim.new(0, 6)
+    
+    local vStroke = Instance.new("UIStroke", VolumeBlock)
+    vStroke.Color = Color3.fromRGB(40, 40, 40)
+    vStroke.Thickness = 1
+    
+    local listLayout = Instance.new("UIListLayout", VolumeBlock)
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    listLayout.Padding = UDim.new(0, 8)
+    
+    local padding = Instance.new("UIPadding", VolumeBlock)
+    padding.PaddingTop = UDim.new(0, 10)
+    padding.PaddingBottom = UDim.new(0, 10)
+    padding.PaddingLeft = UDim.new(0, 12)
+    padding.PaddingRight = UDim.new(0, 12)
+
+    -- Helpers de UI Customizada para o Bloco
+    local function CreateCompactToggle(parent, text, defaultVal, callback)
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(1, 0, 0, 24)
+        frame.BackgroundTransparency = 1
+        frame.Parent = parent
+        
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, -40, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = text
+        label.Font = Theme.Font
+        label.TextColor3 = Theme.Text
+        label.TextSize = 11
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = frame
+        
+        local bg = Instance.new("TextButton")
+        bg.Size = UDim2.new(0, 30, 0, 14)
+        bg.Position = UDim2.new(1, -30, 0.5, -7)
+        bg.BackgroundColor3 = Theme.SwitchOff
+        bg.Text = ""
+        bg.Parent = frame
+        Instance.new("UICorner", bg).CornerRadius = UDim.new(1, 0)
+        
+        local cir = Instance.new("Frame")
+        cir.Size = UDim2.new(0, 12, 0, 12)
+        cir.Position = UDim2.new(0, 1, 0.5, -6)
+        cir.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+        cir.Parent = bg
+        Instance.new("UICorner", cir).CornerRadius = UDim.new(1, 0)
+        
+        local state = defaultVal
+        
+        local function updateVisuals()
+            if state then
+                TweenService:Create(bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Accent}):Play()
+                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(1, -13, 0.5, -6), BackgroundColor3 = Color3.new(0,0,0)}):Play()
+            else
+                TweenService:Create(bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.SwitchOff}):Play()
+                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(0, 1, 0.5, -6), BackgroundColor3 = Color3.fromRGB(150, 150, 150)}):Play()
+            end
+        end
+        
+        bg.MouseButton1Click:Connect(function()
+            state = not state
+            updateVisuals()
+            callback(state)
+        end)
+        
+        updateVisuals()
+        return {Set = function(val) state = val; updateVisuals(); callback(val) end}
+    end
+
+    local function CreateCompactSlider(parent, text, min, max, defaultVal, callback)
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(1, 0, 0, 34)
+        frame.BackgroundTransparency = 1
+        frame.Parent = parent
+        
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, -50, 0, 14)
+        label.BackgroundTransparency = 1
+        label.Text = text
+        label.Font = Theme.Font
+        label.TextColor3 = Theme.TextDark
+        label.TextSize = 11
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = frame
+        
+        local valLabel = Instance.new("TextLabel")
+        valLabel.Size = UDim2.new(0, 40, 0, 14)
+        valLabel.Position = UDim2.new(1, -40, 0, 0)
+        valLabel.BackgroundTransparency = 1
+        valLabel.Text = tostring(defaultVal)
+        valLabel.Font = Theme.Font
+        valLabel.TextColor3 = Theme.Text
+        valLabel.TextSize = 11
+        valLabel.TextXAlignment = Enum.TextXAlignment.Right
+        valLabel.Parent = frame
+        
+        local bar = Instance.new("Frame")
+        bar.Size = UDim2.new(1, 0, 0, 5)
+        bar.Position = UDim2.new(0, 0, 0, 20)
+        bar.BackgroundColor3 = Theme.SwitchOff
+        bar.BorderSizePixel = 0
+        bar.Parent = frame
+        Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+        
+        local fill = Instance.new("Frame")
+        fill.Size = UDim2.new((defaultVal - min) / (max - min), 0, 1, 0)
+        fill.BackgroundColor3 = Theme.Accent
+        fill.BorderSizePixel = 0
+        fill.Parent = bar
+        Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+        
+        local trigger = Instance.new("TextButton")
+        trigger.Size = UDim2.new(1, 0, 1, 0)
+        trigger.BackgroundTransparency = 1
+        trigger.Text = ""
+        trigger.Parent = bar
+        
+        local currentVal = defaultVal
+        local dragging = false
+        
+        local function update(input)
+            local ratio = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+            fill.Size = UDim2.new(ratio, 0, 1, 0)
+            local val = math.floor(min + ((max - min) * ratio))
+            valLabel.Text = tostring(val)
+            currentVal = val
+            callback(val)
+        end
+        
+        trigger.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                update(input)
+            end
+        end)
+        
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+            end
+        end)
+        
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                update(input)
+            end
+        end)
+        
+        local function setVal(v)
+            currentVal = math.clamp(v, min, max)
+            local ratio = (currentVal - min) / (max - min)
+            fill.Size = UDim2.new(ratio, 0, 1, 0)
+            valLabel.Text = tostring(currentVal)
+            callback(currentVal)
+        end
+        
+        return {Set = setVal}
+    end
+
+    local function CreateCompactButton(parent, text, callback)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, 0, 0, 24)
+        btn.BackgroundColor3 = Color3.new(0, 0, 0)
+        btn.BackgroundTransparency = 0.45
+        btn.Text = text
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 11
+        btn.TextColor3 = Theme.TextDark
+        btn.Parent = parent
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+        
+        local stroke = Instance.new("UIStroke", btn)
+        stroke.Color = Color3.fromRGB(40, 40, 40)
+        stroke.Thickness = 1
+        
+        btn.MouseEnter:Connect(function()
+            TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
+            TweenService:Create(btn, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
+        end)
+        btn.MouseLeave:Connect(function()
+            TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
+            TweenService:Create(btn, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
+        end)
+        
+        btn.MouseButton1Click:Connect(callback)
+        return btn
+    end
+
+    -- Toggle Master do Bloco
+    local MasterToggle = CreateCompactToggle(VolumeBlock, "Enable Volume Modifier", VolumesEnabled, function(state)
+        VolumesEnabled = state
+        UserConfigs["EnableSoundSettings"] = state
+        UpdateCharacterSoundVolumes()
+    end)
+
+    -- Sliders Compactos
+    local FootstepsSlider = CreateCompactSlider(VolumeBlock, "FootSteps Volume", 0, 10, FootstepsVolMultiplier, function(val)
         FootstepsVolMultiplier = val
         UserConfigs["FootstepsVol"] = val
         UpdateCharacterSoundVolumes()
     end)
     
-    local JumpSlider = Library:CreateSlider(Page, "Jump Volume", 0, 10, JumpVolMultiplier, function(val)
+    local JumpSlider = CreateCompactSlider(VolumeBlock, "Jump Volume", 0, 10, JumpVolMultiplier, function(val)
         JumpVolMultiplier = val
         UserConfigs["JumpVol"] = val
         UpdateCharacterSoundVolumes()
     end)
     
-    local FallSlider = Library:CreateSlider(Page, "Fall Volume", 0, 10, FallVolMultiplier, function(val)
+    local FallSlider = CreateCompactSlider(VolumeBlock, "Fall Volume", 0, 10, FallVolMultiplier, function(val)
         FallVolMultiplier = val
         UserConfigs["FallVol"] = val
         UpdateCharacterSoundVolumes()
     end)
 
-    -- Botão para redefinir volumes aos padrões
-    Library:CreateButton(Page, "Reset Volumes", function()
+    -- Botão Reset Volumes
+    CreateCompactButton(VolumeBlock, "Reset Volumes", function()
         FootstepsSlider.Set(1)
         JumpSlider.Set(1)
         FallSlider.Set(1)
@@ -406,7 +616,7 @@ return function(env)
         end
     end
 
-    -- Criando o botão Reset Sounds dentro da UI
+    -- Criando o botão Reset Sounds integrado ao layout
     Library:CreateButton(Page, "Reset Sounds", function()
         CurrentSoundIDs.Running = "0"
         CurrentSoundIDs.Jumping = "0"
