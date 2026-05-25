@@ -55,6 +55,15 @@ return function(env)
     local activePlayers = {}
     local speedCharConns = {}
 
+    -- Vars WalkSpeed Lateral (Módulo Local)
+    local speedActive = false
+    local speedListConns = {}
+    local speedListPlayerConns = {}
+    local speedListLabels = {}
+    local speedListPlayers = {}
+    local speedListGui = nil
+    local currentRoundActive = false
+
     -- Vars Wallhop Counter
     local WallhopStateConn = nil
     local WallhopCharConn = nil
@@ -67,6 +76,14 @@ return function(env)
     local getupGui = nil
     local getupList = nil
     local activeGetUp = {}
+
+    -- Vars Life Timer (Módulo Local)
+    local lifeActive = false
+    local lifeConns = {}
+    local lifePlayerConns = {}
+    local lifeLabels = {}
+    local lifeStats = {}
+    local lifeGui = nil
 
     -- Vars Beast Spawn Timer
     local BeastSpawnActive = false
@@ -641,7 +658,7 @@ return function(env)
 
                         local map = Workspace:FindFirstChild(mapName)
                         if map then
-                            for _, obj in ipairs(map:GetChildren()) do
+                            for _, obj in ipairs(map:GetDescendants()) do
                                 if obj:IsA("Model") and DT_CONFIG.DOOR_NAMES[obj.Name] and not DT_CONFIG.BLACKLIST[obj.Name] then 
                                     setupNormalDoor(obj) 
                                 end
@@ -1250,11 +1267,8 @@ return function(env)
                             data.label.Text = "0.0"
                         else
                             local vel = root.AssemblyLinearVelocity
-                            local vx = vel.X
-                            local vz = vel.Z
-                            
-                            local speed = math.sqrt(vx * vx + vz * vz)
-                            data.label.Text = string.format("%.1f", speed)
+                            local speed = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
+                            data.label.Text = string.format("%s: %.1f", player.Name, speed)
                         end
                     else
                         activePlayers[player] = nil
@@ -1662,6 +1676,7 @@ return function(env)
                             local hum = char and char:FindFirstChildOfClass("Humanoid")
                             
                             if hum then
+                                American = true
                                 local isRagdoll = hum.PlatformStand or hum:GetState() == Enum.HumanoidStateType.Physics
                                 if isRagdoll then
                                     local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -2057,6 +2072,228 @@ return function(env)
             end
         end
     end)
+    
+    -- 5. Life Timer (Adicionado com base no seu arquivo)
+    Library:CreateToggle(Page, "Life Timer", false, function(state)
+        if state then
+            lifeActive = true
+            local function getColor_Life(seconds)
+                if seconds >= 40 then
+                    return Color3.fromRGB(80, 255, 120)
+                elseif seconds >= 20 then
+                    return Color3.fromRGB(255, 200, 60)
+                else
+                    return Color3.fromRGB(255, 80, 80)
+                end
+            end
+
+            local function isRoundActive_Life()
+                for _, stats in pairs(lifeStats) do
+                    if stats.health and stats.isBeast then
+                        return true
+                    end
+                end
+                return false
+            end
+
+            local function isBeast_Life(player)
+                local stats = lifeStats[player]
+                return stats and stats.isBeast and stats.isBeast.Value
+            end
+
+            local function createLabelIfMissing_Life(player)
+                if not lifeActive then return end
+                if not lifeLabels[player] then
+                    local label = Instance.new("TextLabel")
+                    label.Name = player.Name
+                    label.Size = UDim2.new(1, 0, 0, 24)
+                    label.BackgroundTransparency = 1
+                    label.Font = Enum.Font.GothamBold
+                    label.TextSize = 16
+                    label.TextXAlignment = Enum.TextXAlignment.Left
+                    label.TextStrokeTransparency = 0.65
+                    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                    label.Parent = lifeGui.ListFrame
+                    lifeLabels[player] = label
+                end
+            end
+
+            local function updatePlayerRow_Life(player, roundActive)
+                if not lifeActive then return end
+
+                if roundActive then
+                    if isBeast_Life(player) then
+                        if lifeLabels[player] then
+                            lifeLabels[player]:Destroy()
+                            lifeLabels[player] = nil
+                        end
+                        return
+                    end
+
+                    local stats = lifeStats[player]
+                    local health = stats and stats.health
+                    
+                    if not health then
+                        if lifeLabels[player] then
+                            lifeLabels[player]:Destroy()
+                            lifeLabels[player] = nil
+                        end
+                        return
+                    end
+
+                    createLabelIfMissing_Life(player)
+                    local label = lifeLabels[player]
+                    
+                    if label then
+                        if health.Value > 0 then
+                            local secondsLeft = math.floor((health.Value * 0.5) + 0.5)
+                            label.Text = player.Name .. ": " .. tostring(secondsLeft) .. "s"
+                            label.TextColor3 = getColor_Life(secondsLeft)
+                            label.LayoutOrder = 100 - math.floor(health.Value)
+                        else
+                            label.Text = player.Name .. ": 0s"
+                            label.TextColor3 = getColor_Life(0)
+                            label.LayoutOrder = 100
+                        end
+                    end
+                else
+                    createLabelIfMissing_Life(player)
+                    local label = lifeLabels[player]
+                    if label then
+                        label.Text = player.Name .. ": 0s"
+                        label.TextColor3 = getColor_Life(0)
+                        label.LayoutOrder = 100
+                    end
+                end
+            end
+
+            local function monitorPlayer_Life(player)
+                if not lifeActive then return end
+                if lifePlayerConns[player] then
+                    for _, c in ipairs(lifePlayerConns[player]) do c:Disconnect() end
+                end
+                lifePlayerConns[player] = {}
+
+                local function onStatsLoaded(statsInstance)
+                    local health = statsInstance:WaitForChild("Health", 5)
+                    local isBeastVal = statsInstance:WaitForChild("IsBeast", 5)
+
+                    if health and isBeastVal then
+                        lifeStats[player] = {
+                            health = health,
+                            isBeast = isBeastVal
+                        }
+
+                        local hConn = health:GetPropertyChangedSignal("Value"):Connect(function()
+                            updatePlayerRow_Life(player, isRoundActive_Life())
+                        end)
+                        table.insert(lifePlayerConns[player], hConn)
+
+                        local bConn = isBeastVal:GetPropertyChangedSignal("Value"):Connect(function()
+                            updatePlayerRow_Life(player, isRoundActive_Life())
+                        end)
+                        table.insert(lifePlayerConns[player], bConn)
+                    end
+
+                    updatePlayerRow_Life(player, isRoundActive_Life())
+                end
+
+                local stats = player:FindFirstChild("TempPlayerStatsModule", true)
+                if stats then
+                    onStatsLoaded(stats)
+                end
+
+                local childConn = player.ChildAdded:Connect(function(child)
+                    if child.Name == "TempPlayerStatsModule" or child:FindFirstChild("TempPlayerStatsModule", true) then
+                        local freshStats = player:FindFirstChild("TempPlayerStatsModule", true)
+                        if freshStats then
+                            onStatsLoaded(freshStats)
+                        end
+                    end
+                end)
+                table.insert(lifePlayerConns[player], childConn)
+
+                local charConn = player.CharacterAdded:Connect(function()
+                    task.wait(0.3)
+                    updatePlayerRow_Life(player, isRoundActive_Life())
+                end)
+                table.insert(lifePlayerConns[player], charConn)
+            end
+
+            local targetGuiParent = LocalPlayer:WaitForChild("PlayerGui")
+            if targetGuiParent:FindFirstChild("LifeListGui") then targetGuiParent.LifeListGui:Destroy() end
+
+            lifeGui = Instance.new("ScreenGui")
+            lifeGui.Name = "LifeListGui"
+            lifeGui.ResetOnSpawn = false
+
+            local listFrame = Instance.new("Frame")
+            listFrame.Name = "ListFrame"
+            listFrame.BackgroundTransparency = 1
+            listFrame.Position = UDim2.new(0, 25, 0.35, 0)
+            listFrame.Size = UDim2.new(0, 280, 0.4, 0)
+            listFrame.Parent = lifeGui
+
+            local uiListLayout = Instance.new("UIListLayout")
+            uiListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+            uiListLayout.Padding = UDim.new(0, 5)
+            uiListLayout.Parent = listFrame
+
+            lifeGui.Parent = targetGuiParent
+
+            for _, player in ipairs(Players:GetPlayers()) do
+                monitorPlayer_Life(player)
+            end
+
+            local addedConn = Players.PlayerAdded:Connect(function(player)
+                monitorPlayer_Life(player)
+                updatePlayerRow_Life(player, isRoundActive_Life())
+            end)
+            table.insert(lifeConns, addedConn)
+
+            local removingConn = Players.PlayerRemoving:Connect(function(player)
+                if lifePlayerConns[player] then
+                    for _, c in ipairs(lifePlayerConns[player]) do c:Disconnect() end
+                    lifePlayerConns[player] = nil
+                end
+                if lifeLabels[player] then
+                    lifeLabels[player]:Destroy()
+                    lifeLabels[player] = nil
+                end
+                lifeStats[player] = nil
+            end)
+            table.insert(lifeConns, removingConn)
+
+            local loopThread = task.spawn(function()
+                while lifeActive do
+                    local roundActive = isRoundActive_Life()
+                    for _, player in ipairs(Players:GetPlayers()) do
+                        updatePlayerRow_Life(player, roundActive)
+                    end
+                    task.wait(2)
+                end
+            end)
+            table.insert(lifeConns, loopThread)
+        else
+            lifeActive = false
+            for _, c in ipairs(lifeConns) do
+                if typeof(c) == "thread" then task.cancel(c) else c:Disconnect() end
+            end
+            table.clear(lifeConns)
+            for player, conns in pairs(lifePlayerConns) do
+                for _, c in ipairs(conns) do c:Disconnect() end
+            end
+            table.clear(lifePlayerConns)
+            for _, lbl in pairs(lifeLabels) do if lbl then lbl:Destroy() end end
+            table.clear(lifeLabels)
+            table.clear(lifeStats)
+            local targetGuiParent = LocalPlayer:FindFirstChild("PlayerGui")
+            if targetGuiParent and targetGuiParent:FindFirstChild("LifeListGui") then
+                targetGuiParent.LifeListGui:Destroy()
+            end
+            lifeGui = nil
+        end
+    end)
 
     -- =========================================================================
     -- SECTION: HIGHLIGHT SETTINGS (Coluna Esquerda - Abaixo de Action Timers)
@@ -2131,6 +2368,200 @@ return function(env)
             if data.Billboard then
                 data.Billboard.MaxDistance = val
             end
+        end
+    end)
+
+    -- 4. WalkSpeed Lateral (Adicionado com base no seu arquivo)
+    Library:CreateToggle(Page, "WalkSpeed Lateral", false, function(state)
+        if state then
+            speedActive = true
+            local function isRoundActive_SpeedList()
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p:FindFirstChild("TempPlayerStatsModule", true) then
+                        return true
+                    end
+                end
+                return false
+            end
+
+            local function createLabelIfMissing_SpeedList(player)
+                if not speedActive then return nil end
+                if not speedListLabels[player] then
+                    local label = Instance.new("TextLabel")
+                    label.Name = player.Name
+                    label.Size = UDim2.new(1, 0, 0, 24)
+                    label.BackgroundTransparency = 1
+                    label.Font = Enum.Font.GothamBold
+                    label.TextSize = 16
+                    label.TextXAlignment = Enum.TextXAlignment.Left
+                    label.TextStrokeTransparency = 0.65
+                    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    label.Parent = speedListGui.ListFrame
+                    speedListLabels[player] = label
+                end
+                return speedListLabels[player]
+            end
+
+            local function updatePlayerVisibility_SpeedList(player, roundActive)
+                local label = createLabelIfMissing_SpeedList(player)
+                if not label then return end
+
+                if roundActive then
+                    local hasStats = player:FindFirstChild("TempPlayerStatsModule", true)
+                    if not hasStats then
+                        label.Visible = false
+                    else
+                        label.Visible = true
+                    end
+                else
+                    label.Visible = true
+                end
+            end
+
+            local function setupCharacter_SpeedList(player, character)
+                if not speedActive then return end
+                local humanoid = character:WaitForChild("Humanoid", 5)
+                local root = character:WaitForChild("HumanoidRootPart", 5)
+
+                if humanoid and root then
+                    speedListPlayers[player] = {
+                        root = root,
+                        humanoid = humanoid
+                    }
+                    updatePlayerVisibility_SpeedList(player, currentRoundActive)
+                end
+            end
+
+            local function monitorPlayer_SpeedList(player)
+                if not speedActive then return end
+                if speedListPlayerConns[player] then
+                    for _, c in ipairs(speedListPlayerConns[player]) do c:Disconnect() end
+                end
+                speedListPlayerConns[player] = {}
+
+                local charConn = player.CharacterAdded:Connect(function(character)
+                    setupCharacter_SpeedList(player, character)
+                end)
+                table.insert(speedListPlayerConns[player], charConn)
+
+                local charRemovingConn = player.CharacterRemoving:Connect(function()
+                    if speedListPlayers[player] then
+                        speedListPlayers[player].root = nil
+                        speedListPlayers[player].humanoid = nil
+                    end
+                end)
+                table.insert(speedListPlayerConns[player], charRemovingConn)
+
+                local childConn = player.ChildAdded:Connect(function(child)
+                    if child.Name == "TempPlayerStatsModule" or child:FindFirstChild("TempPlayerStatsModule", true) then
+                        task.wait(0.2)
+                        updatePlayerVisibility_SpeedList(player, currentRoundActive)
+                    end
+                end)
+                table.insert(speedListPlayerConns[player], childConn)
+
+                if player.Character then
+                    setupCharacter_SpeedList(player, player.Character)
+                end
+            end
+
+            local targetGuiParent = LocalPlayer:WaitForChild("PlayerGui")
+            if targetGuiParent:FindFirstChild("SpeedListGui") then targetGuiParent.SpeedListGui:Destroy() end
+
+            speedListGui = Instance.new("ScreenGui")
+            speedListGui.Name = "SpeedListGui"
+            speedListGui.ResetOnSpawn = false
+
+            local listFrame = Instance.new("Frame")
+            listFrame.Name = "ListFrame"
+            listFrame.BackgroundTransparency = 1
+            listFrame.Position = UDim2.new(0, 25, 0.65, 0)
+            listFrame.Size = UDim2.new(0, 280, 0.3, 0)
+            listFrame.Parent = speedListGui
+
+            local uiListLayout = Instance.new("UIListLayout")
+            uiListLayout.SortOrder = Enum.SortOrder.Name
+            uiListLayout.Padding = UDim.new(0, 5)
+            uiListLayout.Parent = listFrame
+
+            speedListGui.Parent = targetGuiParent
+
+            for _, player in ipairs(Players:GetPlayers()) do
+                monitorPlayer_SpeedList(player)
+            end
+
+            local addedConn = Players.PlayerAdded:Connect(function(player)
+                monitorPlayer_SpeedList(player)
+            end)
+            table.insert(speedListConns, addedConn)
+
+            local removingConn = Players.PlayerRemoving:Connect(function(player)
+                if speedListPlayerConns[player] then
+                    for _, c in ipairs(speedListPlayerConns[player]) do c:Disconnect() end
+                    speedListPlayerConns[player] = nil
+                end
+                if speedListLabels[player] then
+                    speedListLabels[player]:Destroy()
+                    speedListLabels[player] = nil
+                end
+                speedListPlayers[player] = nil
+            end)
+            table.insert(speedListConns, removingConn)
+
+            local renderConnection = RunService.RenderStepped:Connect(function()
+                if not speedActive then return end
+
+                for player, data in pairs(speedListPlayers) do
+                    local label = speedListLabels[player]
+                    if label and label.Visible then
+                        local root = data.root
+                        local humanoid = data.humanoid
+
+                        if root and root.Parent and humanoid and humanoid.Health > 0 then
+                            if humanoid.MoveDirection.Magnitude == 0 then
+                                label.Text = player.Name .. ": 0.0"
+                            else
+                                local vel = root.AssemblyLinearVelocity
+                                local speed = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
+                                label.Text = string.format("%s: %.1f", player.Name, speed)
+                            end
+                        else
+                            label.Text = player.Name .. ": 0.0"
+                        end
+                    end
+                end
+            end)
+            table.insert(speedListConns, renderConnection)
+
+            local loopThread = task.spawn(function()
+                while speedActive do
+                    currentRoundActive = isRoundActive_SpeedList()
+                    for _, player in ipairs(Players:GetPlayers()) do
+                        updatePlayerVisibility_SpeedList(player, currentRoundActive)
+                    end
+                    task.wait(2)
+                end
+            end)
+            table.insert(speedListConns, loopThread)
+        else
+            speedActive = false
+            for _, c in ipairs(speedListConns) do
+                if typeof(c) == "thread" then task.cancel(c) else c:Disconnect() end
+            end
+            table.clear(speedListConns)
+            for player, conns in pairs(speedListPlayerConns) do
+                for _, c in ipairs(conns) do c:Disconnect() end
+            end
+            table.clear(speedListPlayerConns)
+            for _, lbl in pairs(speedListLabels) do if lbl then lbl:Destroy() end end
+            table.clear(speedListLabels)
+            table.clear(speedListPlayers)
+            local targetGuiParent = LocalPlayer:FindFirstChild("PlayerGui")
+            if targetGuiParent and targetGuiParent:FindFirstChild("SpeedListGui") then
+                targetGuiParent.SpeedListGui:Destroy()
+            end
+            speedListGui = nil
         end
     end)
 end
