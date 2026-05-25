@@ -62,6 +62,7 @@ return function(env)
     local speedListGui = nil
     local currentRoundActive = false
     local currentWalkSpeedStyle = "Default"
+    local toggleWalkSpeedDetector = nil
 
     -- Vars Wallhop Counter
     local WallhopStateConn = nil
@@ -249,7 +250,7 @@ return function(env)
                         else
                             local vel = root.AssemblyLinearVelocity
                             local speed = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
-                            data.label.Text = string.format("%s: %.1f", player.Name, speed)
+                            data.label.Text = string.format("%.1f", speed)
                         end
                     else
                         activePlayers[player] = nil
@@ -290,10 +291,8 @@ return function(env)
             end
 
             local function setupCharacter_SpeedList(player, character)
-                if not speedActive then return end
                 local humanoid = character:WaitForChild("Humanoid", 5)
                 local root = character:WaitForChild("HumanoidRootPart", 5)
-
                 if humanoid and root then
                     speedListPlayers[player] = {
                         root = root,
@@ -345,8 +344,6 @@ return function(env)
             end
 
             speedRenderConn = RunService.RenderStepped:Connect(function()
-                if not speedActive then return end
-
                 for player, data in pairs(speedListPlayers) do
                     local label = speedListLabels[player]
                     if label and label.Visible then
@@ -540,6 +537,7 @@ return function(env)
                 highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                 highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
                 highlight.OutlineTransparency = 0
+                highlight.Enabled = (compHighlightEnabled or compOutlineEnabled)
                 highlight.Parent = tableModel
 
                 local screen = tableModel:FindFirstChild("Screen")
@@ -816,6 +814,7 @@ return function(env)
                 hl.FillTransparency = 0.55
                 hl.OutlineTransparency = 0 
                 hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                hl.Enabled = (doorHighlightEnabled or doorOutlineEnabled)
                 hl.Parent = model
                 return hl
             end
@@ -2420,7 +2419,7 @@ return function(env)
             table.clear(lifeLabels)
             table.clear(lifeStats)
             local targetGuiParent = LocalPlayer:FindFirstChild("PlayerGui")
-            if targetGuiParent and targetGuiParent:FindFirstChild("LifeListGui") then
+            if targetGuiParent Glen and targetGuiParent:FindFirstChild("LifeListGui") then
                 targetGuiParent.LifeListGui:Destroy()
             end
             lifeGui = nil
@@ -2432,8 +2431,8 @@ return function(env)
     -- =========================================================================
     Library:CreateSection(Page, "HighLight Settings")
     
-    -- 1. Computer Highlight
-    Library:CreateToggle(Page, "Computer Highlight", false, function(state)
+    -- 1. Computer Progress
+    Library:CreateToggle(Page, "Computer Progress ", false, function(state)
         compHighlightEnabled = state
         for _, obj in ipairs(Workspace:GetDescendants()) do
             if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then
@@ -2447,8 +2446,8 @@ return function(env)
         compOutlineEnabled = state
     end)
 
-    -- 3. Door Highlight
-    Library:CreateToggle(Page, "Door Highlight", false, function(state)
+    -- 3. Door Progress
+    Library:CreateToggle(Page, "Door Progress ", false, function(state)
         doorHighlightEnabled = state
         for _, data in pairs(trackedNormalDoors) do
             if data.Highlight then
@@ -2467,8 +2466,8 @@ return function(env)
         end
     end)
 
-    -- 5. ExitDoor Highlight
-    Library:CreateToggle(Page, "ExitDoor Highlight", false, function(state)
+    -- 5. ExitDoor Progress
+    Library:CreateToggle(Page, "ExitDoor Progress ", false, function(state)
         exitHighlightEnabled = state
         for _, data in pairs(trackedExitDoors) do
             if data.Highlight then
