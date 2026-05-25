@@ -14,9 +14,7 @@ return function(env)
     -- =========================================================================
     -- VARIÁVEIS DE CONTROLE GLOBAL (Módulo)
     -- =========================================================================
-    local UserInputService = game:GetService("UserInputService")
-    local isMobileDevice = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
-
+    
     -- Vars Beast Power
     local BeastPowerConnection1 = nil
     local BeastPowerConnection2 = nil
@@ -65,7 +63,6 @@ return function(env)
     local currentRoundActive = false
     local currentWalkSpeedStyle = "Default"
     local toggleWalkSpeedDetector = nil
-    local toggleWalkSpeedLateral = nil
 
     -- Vars Wallhop Counter
     local WallhopStateConn = nil
@@ -99,6 +96,9 @@ return function(env)
     task.spawn(function()
         IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive", 2)
     end)
+
+    -- Verificação de plataforma mobile para reajuste de layout responsivo das listas na tela
+    local isMobileDevice = game:GetService("UserInputService").TouchEnabled and not game:GetService("UserInputService").MouseEnabled
 
     -- Funções Auxiliares de Atualização de Contorno (Highlights)
     local function updateComputerHighlight(highlight, screenColor)
@@ -247,7 +247,7 @@ return function(env)
                     local root = data.root
                     local humanoid = data.humanoid
                     
-                    if root and root.Parent && humanoid and humanoid.Health > 0 then
+                    if root and root.Parent and humanoid and humanoid.Health > 0 then
                         if humanoid.MoveDirection.Magnitude == 0 then
                             data.label.Text = "0.0"
                         else
@@ -270,7 +270,7 @@ return function(env)
                     label.Size = UDim2.new(1, 0, 0, 24)
                     label.BackgroundTransparency = 1
                     label.Font = Enum.Font.GothamBold
-                    label.TextSize = 16
+                    label.TextSize = isMobileDevice and 12 or 16
                     label.TextXAlignment = Enum.TextXAlignment.Left
                     label.TextStrokeTransparency = 0.65
                     label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
@@ -296,6 +296,7 @@ return function(env)
             local function setupCharacter_SpeedList(player, character)
                 local humanoid = character:WaitForChild("Humanoid", 5)
                 local root = character:WaitForChild("HumanoidRootPart", 5)
+
                 if humanoid and root then
                     speedListPlayers[player] = {
                         root = root,
@@ -325,11 +326,9 @@ return function(env)
             listFrame.Name = "ListFrame"
             listFrame.BackgroundTransparency = 1
             
-            -- Posicionamento Adaptativo Mobile vs PC
-            local speedPosY = isMobileDevice and 0.62 or 0.65
-            local speedSizeY = isMobileDevice and 0.25 or 0.30
-            listFrame.Position = UDim2.new(0, 25, speedPosY, 0)
-            listFrame.Size = UDim2.new(0, 280, speedSizeY, 0)
+            -- Posicionamento adaptado para mobile (ao lado do Life list para não embolar)
+            listFrame.Position = isMobileDevice and UDim2.new(0, 160, 0.3, 0) or UDim2.new(0, 25, 0.65, 0)
+            listFrame.Size = isMobileDevice and UDim2.new(0, 140, 0.5, 0) or UDim2.new(0, 280, 0.3, 0)
             listFrame.Parent = speedListGui
 
             local uiListLayout = Instance.new("UIListLayout")
@@ -678,11 +677,11 @@ return function(env)
 
             local function createDoorHUD(parent)
                 if currentDoorStyle == "Default" then
-                    -- Default design
+                    -- Default design (Copiada a dimensão e escala de Style 1)
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NormalDoorGUI"
                     billboard.Adornee = parent
-                    billboard.Size = UDim2.new(0, 90, 0, 22) -- Unificado para 22 de altura
+                    billboard.Size = UDim2.fromOffset(90, 22) -- Copiado de Style 1
                     billboard.StudsOffset = Vector3.new(0, 1, 0)
                     billboard.AlwaysOnTop = true
                     billboard.MaxDistance = doorMaxDistance
@@ -690,7 +689,7 @@ return function(env)
                     
                     local text = Instance.new("TextLabel")
                     text.Name = "PercentText"
-                    text.Size = UDim2.new(1, 0, 0.45, 0) -- Ajuste de proporção
+                    text.Size = UDim2.new(1, 0, 0.45, 0) -- Ajuste de altura do texto para o tamanho 22px
                     text.Position = UDim2.new(0, 0, 0, 0)
                     text.BackgroundTransparency = 1
                     text.Text = "0.0%"
@@ -704,8 +703,8 @@ return function(env)
 
                     local bgBar = Instance.new("Frame")
                     bgBar.Name = "BgBar"
-                    bgBar.Size = UDim2.new(1, 0, 0.35, 0) -- Ajuste de proporção
-                    bgBar.Position = UDim2.new(0, 0, 0.6, 0) -- Ajuste de proporção
+                    bgBar.Size = UDim2.new(1, 0, 0.35, 0) -- Copiado de Style 1
+                    bgBar.Position = UDim2.new(0, 0, 0.6, 0) -- Copiado de Style 1
                     bgBar.BackgroundColor3 = DT_COLORS.BAR_BG
                     bgBar.BackgroundTransparency = 0.3
                     bgBar.BorderSizePixel = 0
@@ -1084,7 +1083,6 @@ return function(env)
                                 data.LastState = "Open"
                                 data.Text.Text = "OPEN"
                                 data.Text.TextColor3 = COLORS_STYLE2.OPEN
-                                data.Highlight.FillColor = COLORS_STYLE2.OPEN
                                 data.BgBar.Visible = false
                             end
                         elseif interactionVal > 0.05 then 
@@ -2246,17 +2244,10 @@ return function(env)
                     label.Size = UDim2.new(1, 0, 0, 24)
                     label.BackgroundTransparency = 1
                     label.Font = Enum.Font.GothamBold
-                    label.TextSize = 16
+                    label.TextSize = isMobileDevice and 12 or 16
                     label.TextXAlignment = Enum.TextXAlignment.Left
                     label.TextStrokeTransparency = 0.65
                     label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-                    
-                    -- Posicionamento Adaptativo Mobile vs PC para evitar sobreposição
-                    local lifePosY = isMobileDevice and 0.26 or 0.30
-                    local lifeSizeY = isMobileDevice and 0.32 or 0.32
-                    lifeGui.ListFrame.Position = UDim2.new(0, 25, lifePosY, 0)
-                    lifeGui.ListFrame.Size = UDim2.new(0, 280, lifeSizeY, 0)
-                    
                     label.Parent = lifeGui.ListFrame
                     lifeLabels[player] = label
                 end
@@ -2375,11 +2366,9 @@ return function(env)
             listFrame.Name = "ListFrame"
             listFrame.BackgroundTransparency = 1
             
-            -- Posicionamento Adaptativo Mobile vs PC
-            local lifePosY = isMobileDevice and 0.26 or 0.30
-            local lifeSizeY = isMobileDevice and 0.32 or 0.32
-            listFrame.Position = UDim2.new(0, 25, lifePosY, 0)
-            listFrame.Size = UDim2.new(0, 280, lifeSizeY, 0)
+            -- Posicionamento responsivo para mobile
+            listFrame.Position = isMobileDevice and UDim2.new(0, 15, 0.3, 0) or UDim2.new(0, 25, 0.35, 0)
+            listFrame.Size = isMobileDevice and UDim2.new(0, 140, 0.5, 0) or UDim2.new(0, 280, 0.4, 0)
             listFrame.Parent = lifeGui
 
             local uiListLayout = Instance.new("UIListLayout")
@@ -2442,106 +2431,3 @@ return function(env)
             lifeGui = nil
         end
     end)
-
-    -- =========================================================================
-    -- SECTION: HIGHLIGHT SETTINGS (Coluna Esquerda - Abaixo de Action Timers)
-    -- =========================================================================
-    Library:CreateSection(Page, "HighLight Settings")
-    
-    -- 1. Computer Highlight
-    Library:CreateToggle(Page, "Computer Highlight", false, function(state)
-        compHighlightEnabled = state
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then
-                obj.Enabled = state
-            end
-        end
-    end)
-
-    -- 2. Computer Outline
-    Library:CreateToggle(Page, "Computer Outline", false, function(state)
-        compOutlineEnabled = state
-    end)
-
-    -- 3. Door Highlight
-    Library:CreateToggle(Page, "Door Highlight", false, function(state)
-        doorHighlightEnabled = state
-        for _, data in pairs(trackedNormalDoors) do
-            if data.Highlight then
-                data.Highlight.Enabled = state
-            end
-        end
-    end)
-
-    -- 4. Door Outline
-    Library:CreateToggle(Page, "Door Outline", false, function(state)
-        doorOutlineEnabled = state
-        for _, data in pairs(trackedNormalDoors) do
-            if data.Highlight then
-                data.Highlight.Enabled = state
-            end
-        end
-    end)
-
-    -- 5. ExitDoor Highlight
-    Library:CreateToggle(Page, "ExitDoor Highlight", false, function(state)
-        exitHighlightEnabled = state
-        for _, data in pairs(trackedExitDoors) do
-            if data.Highlight then
-                data.Highlight.Enabled = state
-            end
-        end
-    end)
-
-    -- =========================================================================
-    -- SECTION: PROGRESS SETTINGS (Coluna Direita - Abaixo de Beast Indicators)
-    -- =========================================================================
-    Library:CreateSection(Page, "Progress Settings")
-    
-    -- 1. PC Progress Design (Dropdown)
-    Library:CreateDropdown(Page, "PC Progress Design", {"Default", "Style 1", "Style 2"}, "Default", function(val)
-        currentComputerStyle = val
-        -- Limpa computadores para redesenhar com o estilo selecionado
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj.Name == "ProgressBar" and obj:IsA("BillboardGui") then obj:Destroy() end
-            if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then obj:Destroy() end
-        end
-        table.clear(CompProgConns)
-    end)
-
-    -- 2. Door Progress Design (Dropdown)
-    Library:CreateDropdown(Page, "Door Progress Design", {"Default", "Style 1", "Style 2"}, "Default", function(val)
-        currentDoorStyle = val
-        lastMap = nil -- Reseta o rastreador de mapa para forçar varredura instantânea
-        
-        -- Limpa portas para redesenhar com o estilo selecionado
-        if doorAddedConn then doorAddedConn:Disconnect(); doorAddedConn = nil end
-        for doorModel, data in pairs(trackedNormalDoors) do
-            if data.Billboard then data.Billboard:Destroy() end
-            if data.Highlight then data.Highlight:Destroy() end
-        end
-        table.clear(trackedNormalDoors)
-    end)
-
-    -- 3. WalkSpeed Design (Dropdown)
-    Library:CreateDropdown(Page, "WalkSpeed Design", {"Default", "Style 1"}, "Default", function(val)
-        currentWalkSpeedStyle = val
-        rebuildWalkSpeedVisuals()
-    end)
-
-    -- 4. Hide GetUp from Head (Toggle)
-    Library:CreateToggle(Page, "Hide GetUp from Head", false, function(state)
-        hideGetUpHead = state
-    end)
-
-    -- 5. Door Progress Distance (Como Último da Seção)
-    Library:CreateSlider(Page, "Door progress distance", 30, 300, 150, function(val)
-        doorMaxDistance = val
-        -- Atualiza dinamicamente as portas ativas no mapa
-        for _, data in pairs(trackedNormalDoors) do
-            if data.Billboard then
-                data.Billboard.MaxDistance = val
-            end
-        end
-    end)
-end
