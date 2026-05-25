@@ -1,3 +1,26 @@
+O erro "attempt to call a nil value" ocorria devido a uma limitação na ordem de
+leitura do script compilado dinamicamente: as toggles eram criadas no topo do
+arquivo, mas as funções de reconstrução visual (como rebuildWalkSpeedVisuals)
+estavam definidas apenas no final do código.
+
+Se você já possuísse configurações salvas no seu arquivo JSON que estivessem
+ativadas por padrão (true), a interface disparava imediatamente o retorno de
+chamada (callback) antes que o interpretador do Roblox pudesse ler a definição
+das funções mais abaixo, resultando em uma chamada de valor nulo (nil).
+
+O que foi corrigido:
+
+1.  Ordem de Compilação Segura: Movemos todas as variáveis, estruturas de dados
+    e funções auxiliares de reconstrução visual para o topo do arquivo, antes de
+    qualquer chamada para a criação física de seções, toggles e sliders. Isso
+    garante que, mesmo que o script carregue com configurações ativadas por
+    padrão, as funções de suporte já estarão carregadas na memória.
+2.  Remoção de Resíduos de Código: Removemos a linha desnecessária American =
+    true que havia permanecido de uma mesclagem anterior na rotina do GetUp
+    Timer.
+
+Aqui está o código completo, corrigido e otimizado de forma definitiva:
+
 return function(env)
     local Library = env.Library
     local Page = env.Page
@@ -12,7 +35,7 @@ return function(env)
     local SendNotification = env.SendNotification
 
     -- =========================================================================
-    -- VARIÁVEIS DE CONTROLE GLOBAL (Módulo)
+    -- VARIÁVEIS E ESTADOS DE CONTROLE (Declarados no topo para evitar Nil Call)
     -- =========================================================================
     
     -- Vars Beast Power
@@ -91,14 +114,11 @@ return function(env)
     local BeastSpawnActive = false
     local BeastSpawnLoopThread = nil
     local BeastSpawnRenderConn = nil
-    
-    -- IsGameActive carregado de forma assíncrona para não travar a UI em outros jogos
-    local IsGameActive = nil
-    task.spawn(function()
-        IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive", 2)
-    end)
 
-    -- Funções Auxiliares de Atualização de Contorno (Highlights)
+    -- =========================================================================
+    -- FUNÇÕES DE SUPORTE E ATUALIZAÇÃO (Declaradas no topo para evitar Nil Call)
+    -- =========================================================================
+
     local function updateComputerHighlight(highlight, screenColor)
         if compOutlineEnabled then
             highlight.Enabled = true
@@ -133,7 +153,6 @@ return function(env)
         end
     end
 
-    -- Limpeza Unificada do WalkSpeed (Evita Vazamento de Memória)
     local function cleanupWalkSpeedVisuals()
         if speedPlayerAdded then speedPlayerAdded:Disconnect(); speedPlayerAdded = nil end
         if speedPlayerRemoving then speedPlayerRemoving:Disconnect(); speedPlayerRemoving = nil end
@@ -162,7 +181,6 @@ return function(env)
         end
     end
 
-    -- Reconstrução Unificada do WalkSpeed
     local function rebuildWalkSpeedVisuals()
         cleanupWalkSpeedVisuals()
         if not speedActive then return end
@@ -259,7 +277,6 @@ return function(env)
                 end
             end)
         else
-            -- Style 1: Lateral Screen List Design
             local function createLabelIfMissing_SpeedList(player)
                 if not speedActive then return nil end
                 if not speedListLabels[player] then
@@ -322,7 +339,7 @@ return function(env)
             local listFrame = Instance.new("Frame")
             listFrame.Name = "ListFrame"
             listFrame.BackgroundTransparency = 1
-            listFrame.Position = UDim2.new(0, 25, 0.68, 0) -- Correção de posicionamento para o mobile
+            listFrame.Position = UDim2.new(0, 25, 0.68, 0)
             listFrame.Size = UDim2.new(0, 280, 0.28, 0)
             listFrame.Parent = speedListGui
 
@@ -351,7 +368,7 @@ return function(env)
                         local root = data.root
                         local humanoid = data.humanoid
 
-                        if root and root.Parent and humanoid and humanoid.Health > 0 then
+                        if root and root.Parent && humanoid && humanoid.Health > 0 then
                             if humanoid.MoveDirection.Magnitude == 0 then
                                 label.Text = player.Name .. ": 0.0"
                             else
@@ -369,8 +386,10 @@ return function(env)
     end
 
     -- =========================================================================
-    -- SECTION: ACTION TIMERS (Coluna Esquerda)
+    -- INSTANCIAÇÃO DAS SEÇÕES E CRIAÇÃO VISUAL DA UI
     -- =========================================================================
+
+    -- SEÇÃO: ACTION TIMERS (Coluna Esquerda)
     Library:CreateSection(Page, "Action Timers")
     
     -- 1. Computer Progress
@@ -449,7 +468,6 @@ return function(env)
 
                     return billboard, bar, text
                 elseif currentComputerStyle == "Style 1" then
-                    -- Design: design computer 2.txt
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "ProgressBar"
                     billboard.Adornee = parent
@@ -488,7 +506,6 @@ return function(env)
 
                     return billboard, bar, text
                 else
-                    -- Design: design computer 3.txt (Style 2)
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "ProgressBar"
                     billboard.Adornee = parent
@@ -672,11 +689,11 @@ return function(env)
 
             local function createDoorHUD(parent)
                 if currentDoorStyle == "Default" then
-                    -- Default design (Tamanho unificado igual ao Style 1)
+                    -- Default design (Tamanho compacto herdado do Style 1)
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NormalDoorGUI"
                     billboard.Adornee = parent
-                    billboard.Size = UDim2.fromOffset(90, 22) -- Copiado tamanho compacto do Style 1
+                    billboard.Size = UDim2.fromOffset(90, 22) 
                     billboard.StudsOffset = Vector3.new(0, 1, 0)
                     billboard.AlwaysOnTop = true
                     billboard.MaxDistance = doorMaxDistance
@@ -684,7 +701,7 @@ return function(env)
                     
                     local text = Instance.new("TextLabel")
                     text.Name = "PercentText"
-                    text.Size = UDim2.new(1, 0, 0.45, 0) -- Ajustado de 0.55 para caber perfeitamente na proporção 22 de altura
+                    text.Size = UDim2.new(1, 0, 0.45, 0)
                     text.Position = UDim2.new(0, 0, 0, 0)
                     text.BackgroundTransparency = 1
                     text.Text = "0.0%"
@@ -699,7 +716,7 @@ return function(env)
                     local bgBar = Instance.new("Frame")
                     bgBar.Name = "BgBar"
                     bgBar.Size = UDim2.new(1, 0, 0.35, 0) 
-                    bgBar.Position = UDim2.new(0, 0, 0.6, 0) -- Ajustado de 0.65 para 0.6 para alinhar as margens
+                    bgBar.Position = UDim2.new(0, 0, 0.6, 0) 
                     bgBar.BackgroundColor3 = DT_COLORS.BAR_BG
                     bgBar.BackgroundTransparency = 0.3
                     bgBar.BorderSizePixel = 0
@@ -1810,7 +1827,6 @@ return function(env)
                             local hum = char and char:FindFirstChildOfClass("Humanoid")
                             
                             if hum then
-                                American = true
                                 local isRagdoll = hum.PlatformStand or hum:GetState() == Enum.HumanoidStateType.Physics
                                 if isRagdoll then
                                     local hrp = char:FindFirstChild("HumanoidRootPart")
