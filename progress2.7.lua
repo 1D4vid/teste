@@ -50,23 +50,18 @@ return function(env)
     local actionValCache = {}
     local exitHighlightEnabled = false
 
-    -- Vars WalkSpeed Detector (Na Cabeça)
+    -- Vars WalkSpeed Detector (Sistema Unificado)
     local speedRenderConn = nil
     local speedPlayerAdded = nil
     local speedPlayerRemoving = nil
     local activePlayers = {}
     local speedCharConns = {}
-    local toggleWalkSpeedDetector = nil
-
-    -- Vars WalkSpeed Lateral (Módulo Local)
     local speedActive = false
-    local speedListConns = {}
-    local speedListPlayerConns = {}
     local speedListLabels = {}
     local speedListPlayers = {}
     local speedListGui = nil
     local currentRoundActive = false
-    local toggleWalkSpeedLateral = nil
+    local currentWalkSpeedStyle = "Default"
 
     -- Vars Wallhop Counter
     local WallhopStateConn = nil
@@ -133,6 +128,245 @@ return function(env)
             highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
         else
             highlight.Enabled = false
+        end
+    end
+
+    -- Limpeza Unificada do WalkSpeed (Evita Vazamento de Memória)
+    local function cleanupWalkSpeedVisuals()
+        if speedPlayerAdded then speedPlayerAdded:Disconnect(); speedPlayerAdded = nil end
+        if speedPlayerRemoving then speedPlayerRemoving:Disconnect(); speedPlayerRemoving = nil end
+        if speedRenderConn then speedRenderConn:Disconnect(); speedRenderConn = nil end
+        for player, conn in pairs(speedCharConns) do
+            if conn then conn:Disconnect() end
+        end
+        table.clear(speedCharConns)
+
+        for _, player in ipairs(Players:GetPlayers()) do
+            local char = player.Character
+            if char and char:FindFirstChild("SpeedTag") then
+                char.SpeedTag:Destroy()
+            end
+        end
+        table.clear(activePlayers)
+
+        for _, lbl in pairs(speedListLabels) do
+            if lbl then lbl:Destroy() end
+        end
+        table.clear(speedListLabels)
+        table.clear(speedListPlayers)
+        if speedListGui then
+            speedListGui:Destroy()
+            speedListGui = nil
+        end
+    end
+
+    -- Reconstrução Unificada do WalkSpeed
+    local function rebuildWalkSpeedVisuals()
+        cleanupWalkSpeedVisuals()
+        if not speedActive then return end
+
+        if currentWalkSpeedStyle == "Default" then
+            local function createSpeedTag(character, head)
+                local tag = character:FindFirstChild("SpeedTag")
+                local label
+                
+                if not tag then
+                    tag = Instance.new("BillboardGui")
+                    tag.Name = "SpeedTag"
+                    tag.Adornee = head
+                    tag.Size = UDim2.new(0, 60, 0, 20)
+                    tag.StudsOffset = Vector3.new(0, 2.5, 0)
+                    tag.AlwaysOnTop = true
+
+                    label = Instance.new("TextLabel")
+                    label.Name = "SpeedText"
+                    label.Size = UDim2.new(1, 0, 1, 0)
+                    label.BackgroundTransparency = 1
+                    label.TextSize = 18
+                    label.Font = Enum.Font.Code
+                    label.TextStrokeTransparency = 0
+                    label.TextStrokeColor3 = Color3.new(0, 0, 0)
+                    label.TextColor3 = Color3.new(1, 1, 1)
+                    label.Parent = tag
+                    
+                    tag.Parent = character
+                else
+                    label = tag:FindFirstChild("SpeedText")
+                end
+                
+                return label
+            end
+
+            local function setupCharacter(player, character)
+                local humanoid = character:WaitForChild("Humanoid", 5)
+                local root = character:WaitForChild("HumanoidRootPart", 5)
+                local head = character:WaitForChild("Head", 5)
+                
+                if not (humanoid and root and head) then return end
+                
+                local label = createSpeedTag(character, head)
+                if label then
+                    activePlayers[player] = {
+                        root = root,
+                        humanoid = humanoid,
+                        label = label
+                    }
+                end
+            end
+
+            local function onPlayerAdded(player)
+                local connection = player.CharacterAdded:Connect(function(character)
+                    setupCharacter(player, character)
+                end)
+                speedCharConns[player] = connection
+                
+                if player.Character then
+                    setupCharacter(player, player.Character)
+                end
+            end
+
+            speedPlayerAdded = Players.PlayerAdded:Connect(onPlayerAdded)
+            speedPlayerRemoving = Players.PlayerRemoving:Connect(function(player)
+                activePlayers[player] = nil
+                if speedCharConns[player] then
+                    speedCharConns[player]:Disconnect()
+                    speedCharConns[player] = nil
+                end
+            end)
+
+            for _, player in ipairs(Players:GetPlayers()) do
+                onPlayerAdded(player)
+            end
+
+            speedRenderConn = RunService.RenderStepped:Connect(function()
+                for player, data in pairs(activePlayers) do
+                    local root = data.root
+                    local humanoid = data.humanoid
+                    
+                    if root and root.Parent and humanoid and humanoid.Health > 0 then
+                        if humanoid.MoveDirection.Magnitude == 0 then
+                            data.label.Text = "0.0"
+                        else
+                            local vel = root.AssemblyLinearVelocity
+                            local speed = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
+                            data.label.Text = string.format("%s: %.1f", player.Name, speed)
+                        end
+                    else
+                        activePlayers[player] = nil
+                    end
+                end
+            end)
+        else
+            -- Style 1: Lateral Screen List Design
+            local function createLabelIfMissing_SpeedList(player)
+                if not speedActive then return nil end
+                if not speedListLabels[player] then
+                    local label = Instance.new("TextLabel")
+                    label.Name = player.Name
+                    label.Size = UDim2.new(1, 0, 0, 24)
+                    label.BackgroundTransparency = 1
+                    label.Font = Enum.Font.GothamBold
+                    label.TextSize = 16
+                    label.TextXAlignment = Enum.TextXAlignment.Left
+                    label.TextStrokeTransparency = 0.65
+                    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    label.Parent = speedListGui.ListFrame
+                    speedListLabels[player] = label
+                end
+                return speedListLabels[player]
+            end
+
+            local function updatePlayerVisibility_SpeedList(player, roundActive)
+                local label = createLabelIfMissing_SpeedList(player)
+                if not label then return end
+
+                if roundActive then
+                    local hasStats = player:FindFirstChild("TempPlayerStatsModule", true)
+                    label.Visible = not not hasStats
+                else
+                    label.Visible = true
+                end
+            end
+
+            local function setupCharacter_SpeedList(player, character)
+                if not speedActive then return end
+                local humanoid = character:WaitForChild("Humanoid", 5)
+                local root = character:WaitForChild("HumanoidRootPart", 5)
+
+                if humanoid and root then
+                    speedListPlayers[player] = {
+                        root = root,
+                        humanoid = humanoid
+                    }
+                    updatePlayerVisibility_SpeedList(player, currentRoundActive)
+                end
+            end
+
+            local function onPlayerAdded_SpeedList(player)
+                local connection = player.CharacterAdded:Connect(function(character)
+                    setupCharacter_SpeedList(player, character)
+                end)
+                speedCharConns[player] = connection
+                
+                if player.Character then
+                    setupCharacter_SpeedList(player, player.Character)
+                end
+            end
+
+            local targetGuiParent = LocalPlayer:WaitForChild("PlayerGui")
+            speedListGui = Instance.new("ScreenGui")
+            speedListGui.Name = "SpeedListGui"
+            speedListGui.ResetOnSpawn = false
+
+            local listFrame = Instance.new("Frame")
+            listFrame.Name = "ListFrame"
+            listFrame.BackgroundTransparency = 1
+            listFrame.Position = UDim2.new(0, 25, 0.65, 0)
+            listFrame.Size = UDim2.new(0, 280, 0.3, 0)
+            listFrame.Parent = speedListGui
+
+            local uiListLayout = Instance.new("UIListLayout")
+            uiListLayout.SortOrder = Enum.SortOrder.Name
+            uiListLayout.Padding = UDim.new(0, 5)
+            uiListLayout.Parent = listFrame
+
+            speedListGui.Parent = targetGuiParent
+
+            speedPlayerAdded = Players.PlayerAdded:Connect(onPlayerAdded_SpeedList)
+            speedPlayerRemoving = Players.PlayerRemoving:Connect(function(player)
+                if speedCharConns[player] then speedCharConns[player]:Disconnect(); speedCharConns[player] = nil end
+                if speedListLabels[player] then speedListLabels[player]:Destroy(); speedListLabels[player] = nil end
+                speedListPlayers[player] = nil
+            end)
+
+            for _, player in ipairs(Players:GetPlayers()) do
+                onPlayerAdded_SpeedList(player)
+            end
+
+            speedRenderConn = RunService.RenderStepped:Connect(function()
+                if not speedActive then return end
+
+                for player, data in pairs(speedListPlayers) do
+                    local label = speedListLabels[player]
+                    if label and label.Visible then
+                        local root = data.root
+                        local humanoid = data.humanoid
+
+                        if root and root.Parent and humanoid and humanoid.Health > 0 then
+                            if humanoid.MoveDirection.Magnitude == 0 then
+                                label.Text = player.Name .. ": 0.0"
+                            else
+                                local vel = root.AssemblyLinearVelocity
+                                local speed = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
+                                label.Text = string.format("%s: %.1f", player.Name, speed)
+                            end
+                        else
+                            label.Text = player.Name .. ": 0.0"
+                        end
+                    end
+                end
+            end)
         end
     end
 
@@ -1186,118 +1420,8 @@ return function(env)
     
     -- 4. WalkSpeed Detector
     toggleWalkSpeedDetector = Library:CreateToggle(Page, "WalkSpeed Detector", false, function(state)
-        if state then
-            -- Exclusão Mútua: Desliga WalkSpeed Lateral se estiver ligado
-            if toggleWalkSpeedLateral then
-                toggleWalkSpeedLateral.Set(false)
-            end
-
-            local function createSpeedTag(character, head)
-                local tag = character:FindFirstChild("SpeedTag")
-                local label
-                
-                if not tag then
-                    tag = Instance.new("BillboardGui")
-                    tag.Name = "SpeedTag"
-                    tag.Adornee = head
-                    tag.Size = UDim2.new(0, 60, 0, 20)
-                    tag.StudsOffset = Vector3.new(0, 2.5, 0)
-                    tag.AlwaysOnTop = true
-
-                    label = Instance.new("TextLabel")
-                    label.Name = "SpeedText"
-                    label.Size = UDim2.new(1, 0, 1, 0)
-                    label.BackgroundTransparency = 1
-                    label.TextSize = 18
-                    label.Font = Enum.Font.Code
-                    label.TextStrokeTransparency = 0
-                    label.TextStrokeColor3 = Color3.new(0, 0, 0)
-                    label.TextColor3 = Color3.new(1, 1, 1)
-                    label.Parent = tag
-                    
-                    tag.Parent = character
-                else
-                    label = tag:FindFirstChild("SpeedText")
-                end
-                
-                return label
-            end
-
-            local function setupCharacter(player, character)
-                local humanoid = character:WaitForChild("Humanoid", 5)
-                local root = character:WaitForChild("HumanoidRootPart", 5)
-                local head = character:WaitForChild("Head", 5)
-                
-                if not (humanoid and root and head) then return end
-                
-                local label = createSpeedTag(character, head)
-                if label then
-                    activePlayers[player] = {
-                        root = root,
-                        humanoid = humanoid,
-                        label = label
-                    }
-                end
-            end
-
-            local function onPlayerAdded(player)
-                local connection = player.CharacterAdded:Connect(function(character)
-                    setupCharacter(player, character)
-                end)
-                speedCharConns[player] = connection
-                
-                if player.Character then
-                    setupCharacter(player, player.Character)
-                end
-            end
-
-            speedPlayerAdded = Players.PlayerAdded:Connect(onPlayerAdded)
-            speedPlayerRemoving = Players.PlayerRemoving:Connect(function(player)
-                activePlayers[player] = nil
-                if speedCharConns[player] then
-                    speedCharConns[player]:Disconnect()
-                    speedCharConns[player] = nil
-                end
-            end)
-
-            for _, player in ipairs(Players:GetPlayers()) do
-                onPlayerAdded(player)
-            end
-
-            speedRenderConn = RunService.RenderStepped:Connect(function()
-                for player, data in pairs(activePlayers) do
-                    local root = data.root
-                    local humanoid = data.humanoid
-                    
-                    if root and root.Parent and humanoid and humanoid.Health > 0 then
-                        if humanoid.MoveDirection.Magnitude == 0 then
-                            data.label.Text = "0.0"
-                        else
-                            local vel = root.AssemblyLinearVelocity
-                            local speed = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
-                            data.label.Text = string.format("%s: %.1f", player.Name, speed)
-                        end
-                    else
-                        activePlayers[player] = nil
-                    end
-                end
-            end)
-        else
-            if speedPlayerAdded then speedPlayerAdded:Disconnect(); speedPlayerAdded = nil end
-            if speedPlayerRemoving then speedPlayerRemoving:Disconnect(); speedPlayerRemoving = nil end
-            if speedRenderConn then speedRenderConn:Disconnect(); speedRenderConn = nil end
-            for player, conn in pairs(speedCharConns) do
-                if conn then conn:Disconnect() end
-            end
-            table.clear(speedCharConns)
-            for _, player in ipairs(Players:GetPlayers()) do
-                local char = player.Character
-                if char and char:FindFirstChild("SpeedTag") then
-                    char.SpeedTag:Destroy()
-                end
-            end
-            table.clear(activePlayers)
-        end
+        speedActive = state
+        rebuildWalkSpeedVisuals()
     end)
 
     -- 5. Wallhop Counter
@@ -2383,206 +2507,13 @@ return function(env)
         table.clear(trackedNormalDoors)
     end)
 
-    -- 3. WalkSpeed Lateral
-    toggleWalkSpeedLateral = Library:CreateToggle(Page, "WalkSpeed Lateral", false, function(state)
-        if state then
-            -- Exclusão Mútua: Desliga WalkSpeed Detector se estiver ligado
-            if toggleWalkSpeedDetector then
-                toggleWalkSpeedDetector.Set(false)
-            end
-
-            speedActive = true
-            local function isRoundActive_SpeedList()
-                for _, p in ipairs(Players:GetPlayers()) do
-                    if p:FindFirstChild("TempPlayerStatsModule", true) then
-                        return true
-                    end
-                end
-                return false
-            end
-
-            local function createLabelIfMissing_SpeedList(player)
-                if not speedActive then return nil end
-                if not speedListLabels[player] then
-                    local label = Instance.new("TextLabel")
-                    label.Name = player.Name
-                    label.Size = UDim2.new(1, 0, 0, 24)
-                    label.BackgroundTransparency = 1
-                    label.Font = Enum.Font.GothamBold
-                    label.TextSize = 16
-                    label.TextXAlignment = Enum.TextXAlignment.Left
-                    label.TextStrokeTransparency = 0.65
-                    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-                    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    label.Parent = speedListGui.ListFrame
-                    speedListLabels[player] = label
-                end
-                return speedListLabels[player]
-            end
-
-            local function updatePlayerVisibility_SpeedList(player, roundActive)
-                local label = createLabelIfMissing_SpeedList(player)
-                if not label then return end
-
-                if roundActive then
-                    local hasStats = player:FindFirstChild("TempPlayerStatsModule", true)
-                    if not hasStats then
-                        label.Visible = false
-                    else
-                        label.Visible = true
-                    end
-                else
-                    label.Visible = true
-                end
-            end
-
-            local function setupCharacter_SpeedList(player, character)
-                if not speedActive then return end
-                local humanoid = character:WaitForChild("Humanoid", 5)
-                local root = character:WaitForChild("HumanoidRootPart", 5)
-
-                if humanoid and root then
-                    speedListPlayers[player] = {
-                        root = root,
-                        humanoid = humanoid
-                    }
-                    updatePlayerVisibility_SpeedList(player, currentRoundActive)
-                end
-            end
-
-            local function monitorPlayer_SpeedList(player)
-                if not speedActive then return end
-                if speedListPlayerConns[player] then
-                    for _, c in ipairs(speedListPlayerConns[player]) do c:Disconnect() end
-                end
-                speedListPlayerConns[player] = {}
-
-                local charConn = player.CharacterAdded:Connect(function(character)
-                    setupCharacter_SpeedList(player, character)
-                end)
-                table.insert(speedListPlayerConns[player], charConn)
-
-                local charRemovingConn = player.CharacterRemoving:Connect(function()
-                    if speedListPlayers[player] then
-                        speedListPlayers[player].root = nil
-                        speedListPlayers[player].humanoid = nil
-                    end
-                end)
-                table.insert(speedListPlayerConns[player], charRemovingConn)
-
-                local childConn = player.ChildAdded:Connect(function(child)
-                    if child.Name == "TempPlayerStatsModule" or child:FindFirstChild("TempPlayerStatsModule", true) then
-                        task.wait(0.2)
-                        updatePlayerVisibility_SpeedList(player, currentRoundActive)
-                    end
-                end)
-                table.insert(speedListPlayerConns[player], childConn)
-
-                if player.Character then
-                    setupCharacter_SpeedList(player, player.Character)
-                end
-            end
-
-            local targetGuiParent = LocalPlayer:WaitForChild("PlayerGui")
-            if targetGuiParent:FindFirstChild("SpeedListGui") then targetGuiParent.SpeedListGui:Destroy() end
-
-            speedListGui = Instance.new("ScreenGui")
-            speedListGui.Name = "SpeedListGui"
-            speedListGui.ResetOnSpawn = false
-
-            local listFrame = Instance.new("Frame")
-            listFrame.Name = "ListFrame"
-            listFrame.BackgroundTransparency = 1
-            listFrame.Position = UDim2.new(0, 25, 0.65, 0)
-            listFrame.Size = UDim2.new(0, 280, 0.3, 0)
-            listFrame.Parent = speedListGui
-
-            local uiListLayout = Instance.new("UIListLayout")
-            uiListLayout.SortOrder = Enum.SortOrder.Name
-            uiListLayout.Padding = UDim.new(0, 5)
-            uiListLayout.Parent = listFrame
-
-            speedListGui.Parent = targetGuiParent
-
-            for _, player in ipairs(Players:GetPlayers()) do
-                monitorPlayer_SpeedList(player)
-            end
-
-            local addedConn = Players.PlayerAdded:Connect(function(player)
-                monitorPlayer_SpeedList(player)
-            end)
-            table.insert(speedListConns, addedConn)
-
-            local removingConn = Players.PlayerRemoving:Connect(function(player)
-                if speedListPlayerConns[player] then
-                    for _, c in ipairs(speedListPlayerConns[player]) do c:Disconnect() end
-                    speedListPlayerConns[player] = nil
-                end
-                if speedListLabels[player] then
-                    speedListLabels[player]:Destroy()
-                    speedListLabels[player] = nil
-                end
-                speedListPlayers[player] = nil
-            end)
-            table.insert(speedListConns, removingConn)
-
-            local renderConnection = RunService.RenderStepped:Connect(function()
-                if not speedActive then return end
-
-                for player, data in pairs(speedListPlayers) do
-                    local label = speedListLabels[player]
-                    if label and label.Visible then
-                        local root = data.root
-                        local humanoid = data.humanoid
-
-                        if root and root.Parent and humanoid and humanoid.Health > 0 then
-                            if humanoid.MoveDirection.Magnitude == 0 then
-                                label.Text = player.Name .. ": 0.0"
-                            else
-                                local vel = root.AssemblyLinearVelocity
-                                local speed = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
-                                label.Text = string.format("%s: %.1f", player.Name, speed)
-                            end
-                        else
-                            label.Text = player.Name .. ": 0.0"
-                        end
-                    end
-                end
-            end)
-            table.insert(speedListConns, renderConnection)
-
-            local loopThread = task.spawn(function()
-                while speedActive do
-                    currentRoundActive = isRoundActive_SpeedList()
-                    for _, player in ipairs(Players:GetPlayers()) do
-                        updatePlayerVisibility_SpeedList(player, currentRoundActive)
-                    end
-                    task.wait(2)
-                end
-            end)
-            table.insert(speedListConns, loopThread)
-        else
-            speedActive = false
-            for _, c in ipairs(speedListConns) do
-                if typeof(c) == "thread" then task.cancel(c) else c:Disconnect() end
-            end
-            table.clear(speedListConns)
-            for player, conns in pairs(speedListPlayerConns) do
-                for _, c in ipairs(conns) do c:Disconnect() end
-            end
-            table.clear(speedListPlayerConns)
-            for _, lbl in pairs(speedListLabels) do if lbl then lbl:Destroy() end end
-            table.clear(speedListLabels)
-            table.clear(speedListPlayers)
-            local targetGuiParent = LocalPlayer:FindFirstChild("PlayerGui")
-            if targetGuiParent and targetGuiParent:FindFirstChild("SpeedListGui") then
-                targetGuiParent.SpeedListGui:Destroy()
-            end
-            speedListGui = nil
-        end
+    -- 3. WalkSpeed Design (Dropdown)
+    Library:CreateDropdown(Page, "WalkSpeed Design", {"Default", "Style 1"}, "Default", function(val)
+        currentWalkSpeedStyle = val
+        rebuildWalkSpeedVisuals()
     end)
 
-    -- 4. Hide GetUp from Head
+    -- 4. Hide GetUp from Head (Toggle)
     Library:CreateToggle(Page, "Hide GetUp from Head", false, function(state)
         hideGetUpHead = state
     end)
