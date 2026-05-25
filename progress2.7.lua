@@ -28,6 +28,7 @@ return function(env)
     local CompProgLoop = nil
     local CompProgConns = {}
     local compHighlightEnabled = false
+    local compOutlineEnabled = false
     local currentComputerStyle = "Default"
 
     -- Vars Door Progress
@@ -36,6 +37,7 @@ return function(env)
     local doorAddedConn = nil
     local trackedNormalDoors = {}
     local doorHighlightEnabled = false
+    local doorOutlineEnabled = false
     local currentDoorStyle = "Default"
     local doorMaxDistance = 150
     local lastMap = nil
@@ -48,12 +50,13 @@ return function(env)
     local actionValCache = {}
     local exitHighlightEnabled = false
 
-    -- Vars WalkSpeed Detector
+    -- Vars WalkSpeed Detector (Na Cabeça)
     local speedRenderConn = nil
     local speedPlayerAdded = nil
     local speedPlayerRemoving = nil
     local activePlayers = {}
     local speedCharConns = {}
+    local toggleWalkSpeedDetector = nil
 
     -- Vars WalkSpeed Lateral (Módulo Local)
     local speedActive = false
@@ -63,6 +66,7 @@ return function(env)
     local speedListPlayers = {}
     local speedListGui = nil
     local currentRoundActive = false
+    local toggleWalkSpeedLateral = nil
 
     -- Vars Wallhop Counter
     local WallhopStateConn = nil
@@ -76,6 +80,7 @@ return function(env)
     local getupGui = nil
     local getupList = nil
     local activeGetUp = {}
+    local hideGetUpHead = false
 
     -- Vars Life Timer (Módulo Local)
     local lifeActive = false
@@ -95,6 +100,41 @@ return function(env)
     task.spawn(function()
         IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive", 2)
     end)
+
+    -- Funções Auxiliares de Atualização de Contorno (Highlights)
+    local function updateComputerHighlight(highlight, screenColor)
+        if compOutlineEnabled then
+            highlight.Enabled = true
+            highlight.FillTransparency = 1
+            highlight.OutlineTransparency = 0
+            highlight.OutlineColor = screenColor
+        elseif compHighlightEnabled then
+            highlight.Enabled = true
+            highlight.FillTransparency = 0.5
+            highlight.OutlineTransparency = 0
+            highlight.FillColor = screenColor
+            highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
+        else
+            highlight.Enabled = false
+        end
+    end
+
+    local function updateDoorHighlight(highlight, stateColor)
+        if doorOutlineEnabled then
+            highlight.Enabled = true
+            highlight.FillTransparency = 1
+            highlight.OutlineTransparency = 0
+            highlight.OutlineColor = stateColor
+        elseif doorHighlightEnabled then
+            highlight.Enabled = true
+            highlight.FillTransparency = 0.55
+            highlight.OutlineTransparency = 0
+            highlight.FillColor = stateColor
+            highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
+        else
+            highlight.Enabled = false
+        end
+    end
 
     -- =========================================================================
     -- SECTION: ACTION TIMERS (Coluna Esquerda)
@@ -266,7 +306,6 @@ return function(env)
                 highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                 highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
                 highlight.OutlineTransparency = 0
-                highlight.Enabled = compHighlightEnabled
                 highlight.Parent = tableModel
 
                 local screen = tableModel:FindFirstChild("Screen")
@@ -297,56 +336,20 @@ return function(env)
                     end
 
                     local isGreen = false
+                    local screenColor = Color3.fromRGB(0, 180, 255)
                     if screen and screen.Parent then
-                        highlight.FillColor = screen.Color
+                        screenColor = screen.Color
                         if screen.Color.G > screen.Color.R and screen.Color.G > screen.Color.B then
                             isGreen = true
                         end
                     end
 
-                    highlight.Enabled = compHighlightEnabled
-
                     if isGreen then
                         savedProgress = 1
-                    else
-                        local highestTouch = 0
-                        local characterParts = {}
-                        local playersList = Players:GetPlayers()
-                        
-                        for i = 1, #playersList do
-                            local char = playersList[i].Character
-                            if char then
-                                table.insert(characterParts, char)
-                            end
-                        end
-
-                        if #characterParts > 0 then
-                            overlapParams.FilterDescendantsInstances = characterParts
-                            for i = 1, #triggers do
-                                local part = triggers[i]
-                                if part and part.Parent then
-                                    local touchingParts = Workspace:GetPartsInPart(part, overlapParams)
-                                    for j = 1, #touchingParts do
-                                        local character = touchingParts[j].Parent
-                                        local plr = Players:GetPlayerFromCharacter(character)
-                                        if plr then
-                                            local tpsm = plr:FindFirstChild("TempPlayerStatsModule")
-                                            if tpsm then
-                                                local ragdoll = tpsm:FindFirstChild("Ragdoll")
-                                                local ap = tpsm:FindFirstChild("ActionProgress")
-                                                if ragdoll and typeof(ragdoll.Value) == "boolean" and not ragdoll.Value then
-                                                    if ap and typeof(ap.Value) == "number" then
-                                                        highestTouch = math.max(highestTouch, ap.Value)
-                                                    end
-                                                end
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                        savedProgress = math.max(savedProgress, highestTouch)
+                        screenColor = Color3.fromRGB(0, 255, 140)
                     end
+
+                    updateComputerHighlight(highlight, screenColor)
 
                     if savedProgress ~= lastSize then
                         lastSize = savedProgress
@@ -579,7 +582,6 @@ return function(env)
                 hl.FillTransparency = 0.55
                 hl.OutlineTransparency = 0 
                 hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                hl.Enabled = doorHighlightEnabled
                 hl.Parent = model
                 return hl
             end
@@ -799,16 +801,18 @@ return function(env)
                         local baseColor = (currentDoorStyle == "Default") and Color3.fromRGB(205, 135, 25) or Color3.fromRGB(255, 210, 140)
                         local barColor = (currentDoorStyle == "Default") and Color3.fromRGB(205, 135, 25) or Color3.fromRGB(170, 100, 40)
 
+                        local stateColor = Color3.fromRGB(255, 0, 0)
                         if isPhysicallyOpen then
+                            stateColor = Color3.fromRGB(0, 255, 100)
                             if data.LastState ~= "Open" then
                                 data.LastState = "Open"
                                 data.Bar.Size = UDim2.new(1, 0, 1, 0)
                                 data.Bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
                                 data.Text.TextColor3 = Color3.fromRGB(255, 255, 255)
                                 data.Text.Text = "100.0%"
-                                data.Highlight.FillColor = DT_COLORS.HL_OPEN
                             end
                         elseif interactionVal > 0.001 then 
+                            stateColor = Color3.fromRGB(255, 200, 0)
                             if data.LastState ~= "Opening" or math.abs(data.LastProgress - interactionVal) > 0.005 then
                                 data.LastState = "Opening"
                                 data.LastProgress = interactionVal
@@ -816,18 +820,18 @@ return function(env)
                                 data.Bar.BackgroundColor3 = barColor
                                 data.Text.TextColor3 = baseColor
                                 data.Text.Text = string.format("%.1f%%", interactionVal * 100)
-                                data.Highlight.FillColor = Color3.fromRGB(255, 200, 0)
                             end
                         else
+                            stateColor = Color3.fromRGB(255, 0, 0)
                             if data.LastState ~= "Closed" then
                                 data.LastState = "Closed"
                                 data.Bar.Size = UDim2.new(0, 0, 1, 0)
                                 data.Bar.BackgroundColor3 = barColor
                                 data.Text.TextColor3 = baseColor
                                 data.Text.Text = "0.0%"
-                                data.Highlight.FillColor = Color3.fromRGB(255, 0, 0)
                             end
                         end
+                        updateDoorHighlight(data.Highlight, stateColor)
                     else
                         local COLORS_STYLE2 = {
                             CLOSE = Color3.fromRGB(255, 0, 0),
@@ -835,34 +839,32 @@ return function(env)
                             OPEN = Color3.fromRGB(0, 255, 100)
                         }
 
+                        local stateColor = COLORS_STYLE2.CLOSE
                         if isPhysicallyOpen then
+                            stateColor = COLORS_STYLE2.OPEN
                             if data.LastState ~= "Open" then
                                 data.LastState = "Open"
                                 data.Text.Text = "OPEN"
                                 data.Text.TextColor3 = COLORS_STYLE2.OPEN
-                                data.Highlight.FillColor = COLORS_STYLE2.OPEN
                                 data.BgBar.Visible = false
                             end
                         elseif interactionVal > 0.05 then 
+                            stateColor = COLORS_STYLE2.OPENING
                             data.LastState = "Opening"
                             data.Text.Text = "OPENING"
                             data.Text.TextColor3 = COLORS_STYLE2.OPENING
-                            data.Highlight.FillColor = COLORS_STYLE2.OPENING
                             data.BgBar.Visible = true
                             data.Bar.Size = UDim2.new(math.clamp(interactionVal, 0, 1), 0, 1, 0)
                         else
+                            stateColor = COLORS_STYLE2.CLOSE
                             if data.LastState ~= "Closed" then
                                 data.LastState = "Closed"
                                 data.Text.Text = "CLOSE"
                                 data.Text.TextColor3 = COLORS_STYLE2.CLOSE
-                                data.Highlight.FillColor = COLORS_STYLE2.CLOSE
                                 data.BgBar.Visible = false
                             end
                         end
-                    end
-                    
-                    if data.Highlight then
-                        data.Highlight.Enabled = doorHighlightEnabled
+                        updateDoorHighlight(data.Highlight, stateColor)
                     end
                 end
             end)
@@ -1183,8 +1185,13 @@ return function(env)
     end)
     
     -- 4. WalkSpeed Detector
-    Library:CreateToggle(Page, "WalkSpeed Detector", false, function(state)
+    toggleWalkSpeedDetector = Library:CreateToggle(Page, "WalkSpeed Detector", false, function(state)
         if state then
+            -- Exclusão Mútua: Desliga WalkSpeed Lateral se estiver ligado
+            if toggleWalkSpeedLateral then
+                toggleWalkSpeedLateral.Set(false)
+            end
+
             local function createSpeedTag(character, head)
                 local tag = character:FindFirstChild("SpeedTag")
                 local label
@@ -1544,6 +1551,7 @@ return function(env)
                 bb.Size = UDim2.new(5, 0, 3, 0) 
                 bb.StudsOffset = Vector3.new(0, 3, 0) 
                 bb.AlwaysOnTop = true
+                bb.Enabled = not hideGetUpHead
                 
                 local container = Instance.new("Frame", bb)
                 container.Size = UDim2.fromScale(1, 1)
@@ -1650,6 +1658,10 @@ return function(env)
                         local timeString = string.format("%.2f", r)
                         
                         if headTimer and headTimer.Parent then
+                            local bb = headTimer.Parent.Parent
+                            if bb and bb:IsA("BillboardGui") then
+                                bb.Enabled = not hideGetUpHead
+                            end
                             headTimer.Text = timeString
                             headTimer.TextColor3 = c
                         end
@@ -1706,11 +1718,7 @@ return function(env)
         else
             getupActive = false
             for _, c in ipairs(getupConns) do
-                if typeof(c) == "thread" then 
-                    task.cancel(c) 
-                else 
-                    c:Disconnect() 
-                end
+                if typeof(c) == "thread" then task.cancel(c) else c:Disconnect() end
             end
             table.clear(getupConns)
             
@@ -2073,7 +2081,7 @@ return function(env)
         end
     end)
     
-    -- 5. Life Timer (Adicionado com base no seu arquivo)
+    -- 5. Life Timer
     Library:CreateToggle(Page, "Life Timer", false, function(state)
         if state then
             lifeActive = true
@@ -2310,7 +2318,12 @@ return function(env)
         end
     end)
 
-    -- 2. Door Highlight
+    -- 2. Computer Outline
+    Library:CreateToggle(Page, "Computer Outline", false, function(state)
+        compOutlineEnabled = state
+    end)
+
+    -- 3. Door Highlight
     Library:CreateToggle(Page, "Door Highlight", false, function(state)
         doorHighlightEnabled = state
         for _, data in pairs(trackedNormalDoors) do
@@ -2320,7 +2333,17 @@ return function(env)
         end
     end)
 
-    -- 3. ExitDoor Highlight
+    -- 4. Door Outline
+    Library:CreateToggle(Page, "Door Outline", false, function(state)
+        doorOutlineEnabled = state
+        for _, data in pairs(trackedNormalDoors) do
+            if data.Highlight then
+                data.Highlight.Enabled = state
+            end
+        end
+    end)
+
+    -- 5. ExitDoor Highlight
     Library:CreateToggle(Page, "ExitDoor Highlight", false, function(state)
         exitHighlightEnabled = state
         for _, data in pairs(trackedExitDoors) do
@@ -2360,20 +2383,14 @@ return function(env)
         table.clear(trackedNormalDoors)
     end)
 
-    -- 3. Door Progress Distance (Slider)
-    Library:CreateSlider(Page, "Door progress distance", 30, 300, 150, function(val)
-        doorMaxDistance = val
-        -- Atualiza dinamicamente as portas ativas no mapa
-        for _, data in pairs(trackedNormalDoors) do
-            if data.Billboard then
-                data.Billboard.MaxDistance = val
-            end
-        end
-    end)
-
-    -- 4. WalkSpeed Lateral (Adicionado com base no seu arquivo)
-    Library:CreateToggle(Page, "WalkSpeed Lateral", false, function(state)
+    -- 3. WalkSpeed Lateral
+    toggleWalkSpeedLateral = Library:CreateToggle(Page, "WalkSpeed Lateral", false, function(state)
         if state then
+            -- Exclusão Mútua: Desliga WalkSpeed Detector se estiver ligado
+            if toggleWalkSpeedDetector then
+                toggleWalkSpeedDetector.Set(false)
+            end
+
             speedActive = true
             local function isRoundActive_SpeedList()
                 for _, p in ipairs(Players:GetPlayers()) do
@@ -2562,6 +2579,22 @@ return function(env)
                 targetGuiParent.SpeedListGui:Destroy()
             end
             speedListGui = nil
+        end
+    end)
+
+    -- 4. Hide GetUp from Head
+    Library:CreateToggle(Page, "Hide GetUp from Head", false, function(state)
+        hideGetUpHead = state
+    end)
+
+    -- 5. Door Progress Distance (Como Último da Seção)
+    Library:CreateSlider(Page, "Door progress distance", 30, 300, 150, function(val)
+        doorMaxDistance = val
+        -- Atualiza dinamicamente as portas ativas no mapa
+        for _, data in pairs(trackedNormalDoors) do
+            if data.Billboard then
+                data.Billboard.MaxDistance = val
+            end
         end
     end)
 end
