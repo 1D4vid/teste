@@ -63,6 +63,7 @@ return function(env)
     local currentRoundActive = false
     local currentWalkSpeedStyle = "Default"
     local toggleWalkSpeedDetector = nil
+    local toggleWalkSpeedLateral = nil
 
     -- Vars Wallhop Counter
     local WallhopStateConn = nil
@@ -96,9 +97,6 @@ return function(env)
     task.spawn(function()
         IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive", 2)
     end)
-
-    -- Verificação de plataforma mobile para reajuste de layout responsivo das listas na tela
-    local isMobileDevice = game:GetService("UserInputService").TouchEnabled and not game:GetService("UserInputService").MouseEnabled
 
     -- Funções Auxiliares de Atualização de Contorno (Highlights)
     local function updateComputerHighlight(highlight, screenColor)
@@ -270,7 +268,7 @@ return function(env)
                     label.Size = UDim2.new(1, 0, 0, 24)
                     label.BackgroundTransparency = 1
                     label.Font = Enum.Font.GothamBold
-                    label.TextSize = isMobileDevice and 12 or 16
+                    label.TextSize = 16
                     label.TextXAlignment = Enum.TextXAlignment.Left
                     label.TextStrokeTransparency = 0.65
                     label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
@@ -296,7 +294,6 @@ return function(env)
             local function setupCharacter_SpeedList(player, character)
                 local humanoid = character:WaitForChild("Humanoid", 5)
                 local root = character:WaitForChild("HumanoidRootPart", 5)
-
                 if humanoid and root then
                     speedListPlayers[player] = {
                         root = root,
@@ -325,10 +322,8 @@ return function(env)
             local listFrame = Instance.new("Frame")
             listFrame.Name = "ListFrame"
             listFrame.BackgroundTransparency = 1
-            
-            -- Posicionamento adaptado para mobile (ao lado do Life list para não embolar)
-            listFrame.Position = isMobileDevice and UDim2.new(0, 160, 0.3, 0) or UDim2.new(0, 25, 0.65, 0)
-            listFrame.Size = isMobileDevice and UDim2.new(0, 140, 0.5, 0) or UDim2.new(0, 280, 0.3, 0)
+            listFrame.Position = UDim2.new(0, 25, 0.68, 0) -- Correção de posicionamento para o mobile
+            listFrame.Size = UDim2.new(0, 280, 0.28, 0)
             listFrame.Parent = speedListGui
 
             local uiListLayout = Instance.new("UIListLayout")
@@ -677,11 +672,11 @@ return function(env)
 
             local function createDoorHUD(parent)
                 if currentDoorStyle == "Default" then
-                    -- Default design (Copiada a dimensão e escala de Style 1)
+                    -- Default design (Tamanho unificado igual ao Style 1)
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NormalDoorGUI"
                     billboard.Adornee = parent
-                    billboard.Size = UDim2.fromOffset(90, 22) -- Copiado de Style 1
+                    billboard.Size = UDim2.fromOffset(90, 22) -- Copiado tamanho compacto do Style 1
                     billboard.StudsOffset = Vector3.new(0, 1, 0)
                     billboard.AlwaysOnTop = true
                     billboard.MaxDistance = doorMaxDistance
@@ -689,7 +684,7 @@ return function(env)
                     
                     local text = Instance.new("TextLabel")
                     text.Name = "PercentText"
-                    text.Size = UDim2.new(1, 0, 0.45, 0) -- Ajuste de altura do texto para o tamanho 22px
+                    text.Size = UDim2.new(1, 0, 0.45, 0) -- Ajustado de 0.55 para caber perfeitamente na proporção 22 de altura
                     text.Position = UDim2.new(0, 0, 0, 0)
                     text.BackgroundTransparency = 1
                     text.Text = "0.0%"
@@ -703,8 +698,8 @@ return function(env)
 
                     local bgBar = Instance.new("Frame")
                     bgBar.Name = "BgBar"
-                    bgBar.Size = UDim2.new(1, 0, 0.35, 0) -- Copiado de Style 1
-                    bgBar.Position = UDim2.new(0, 0, 0.6, 0) -- Copiado de Style 1
+                    bgBar.Size = UDim2.new(1, 0, 0.35, 0) 
+                    bgBar.Position = UDim2.new(0, 0, 0.6, 0) -- Ajustado de 0.65 para 0.6 para alinhar as margens
                     bgBar.BackgroundColor3 = DT_COLORS.BAR_BG
                     bgBar.BackgroundTransparency = 0.3
                     bgBar.BorderSizePixel = 0
@@ -2244,7 +2239,7 @@ return function(env)
                     label.Size = UDim2.new(1, 0, 0, 24)
                     label.BackgroundTransparency = 1
                     label.Font = Enum.Font.GothamBold
-                    label.TextSize = isMobileDevice and 12 or 16
+                    label.TextSize = 16
                     label.TextXAlignment = Enum.TextXAlignment.Left
                     label.TextStrokeTransparency = 0.65
                     label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
@@ -2365,10 +2360,8 @@ return function(env)
             local listFrame = Instance.new("Frame")
             listFrame.Name = "ListFrame"
             listFrame.BackgroundTransparency = 1
-            
-            -- Posicionamento responsivo para mobile
-            listFrame.Position = isMobileDevice and UDim2.new(0, 15, 0.3, 0) or UDim2.new(0, 25, 0.35, 0)
-            listFrame.Size = isMobileDevice and UDim2.new(0, 140, 0.5, 0) or UDim2.new(0, 280, 0.4, 0)
+            listFrame.Position = UDim2.new(0, 25, 0.28, 0) -- Correção de posicionamento para o mobile (gap estendido)
+            listFrame.Size = UDim2.new(0, 280, 0.35, 0)
             listFrame.Parent = lifeGui
 
             local uiListLayout = Instance.new("UIListLayout")
