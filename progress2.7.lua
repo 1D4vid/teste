@@ -1,26 +1,3 @@
-O erro "attempt to call a nil value" ocorria devido a uma limitação na ordem de
-leitura do script compilado dinamicamente: as toggles eram criadas no topo do
-arquivo, mas as funções de reconstrução visual (como rebuildWalkSpeedVisuals)
-estavam definidas apenas no final do código.
-
-Se você já possuísse configurações salvas no seu arquivo JSON que estivessem
-ativadas por padrão (true), a interface disparava imediatamente o retorno de
-chamada (callback) antes que o interpretador do Roblox pudesse ler a definição
-das funções mais abaixo, resultando em uma chamada de valor nulo (nil).
-
-O que foi corrigido:
-
-1.  Ordem de Compilação Segura: Movemos todas as variáveis, estruturas de dados
-    e funções auxiliares de reconstrução visual para o topo do arquivo, antes de
-    qualquer chamada para a criação física de seções, toggles e sliders. Isso
-    garante que, mesmo que o script carregue com configurações ativadas por
-    padrão, as funções de suporte já estarão carregadas na memória.
-2.  Remoção de Resíduos de Código: Removemos a linha desnecessária American =
-    true que havia permanecido de uma mesclagem anterior na rotina do GetUp
-    Timer.
-
-Aqui está o código completo, corrigido e otimizado de forma definitiva:
-
 return function(env)
     local Library = env.Library
     local Page = env.Page
