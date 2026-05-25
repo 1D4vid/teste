@@ -12,7 +12,7 @@ return function(env)
     local SendNotification = env.SendNotification
 
     -- =========================================================================
-    -- VARIÁVEIS E ESTADOS DE CONTROLE (Declarados no topo para evitar Nil Call)
+    -- VARIÁVEIS DE CONTROLE GLOBAL (Módulo)
     -- =========================================================================
     
     -- Vars Beast Power
@@ -62,8 +62,6 @@ return function(env)
     local speedListGui = nil
     local currentRoundActive = false
     local currentWalkSpeedStyle = "Default"
-    local toggleWalkSpeedDetector = nil
-    local toggleWalkSpeedLateral = nil
 
     -- Vars Wallhop Counter
     local WallhopStateConn = nil
@@ -91,11 +89,14 @@ return function(env)
     local BeastSpawnActive = false
     local BeastSpawnLoopThread = nil
     local BeastSpawnRenderConn = nil
+    
+    -- IsGameActive carregado de forma assíncrona para não travar a UI em outros jogos
+    local IsGameActive = nil
+    task.spawn(function()
+        IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive", 2)
+    end)
 
-    -- =========================================================================
-    -- FUNÇÕES DE SUPORTE E ATUALIZAÇÃO (Declaradas no topo para evitar Nil Call)
-    -- =========================================================================
-
+    -- Funções Auxiliares de Atualização de Contorno (Highlights)
     local function updateComputerHighlight(highlight, screenColor)
         if compOutlineEnabled then
             highlight.Enabled = true
@@ -130,6 +131,7 @@ return function(env)
         end
     end
 
+    -- Limpeza Unificada do WalkSpeed (Evita Vazamento de Memória)
     local function cleanupWalkSpeedVisuals()
         if speedPlayerAdded then speedPlayerAdded:Disconnect(); speedPlayerAdded = nil end
         if speedPlayerRemoving then speedPlayerRemoving:Disconnect(); speedPlayerRemoving = nil end
@@ -158,6 +160,7 @@ return function(env)
         end
     end
 
+    -- Reconstrução Unificada do WalkSpeed
     local function rebuildWalkSpeedVisuals()
         cleanupWalkSpeedVisuals()
         if not speedActive then return end
@@ -254,6 +257,7 @@ return function(env)
                 end
             end)
         else
+            -- Style 1: Lateral Screen List Design
             local function createLabelIfMissing_SpeedList(player)
                 if not speedActive then return nil end
                 if not speedListLabels[player] then
@@ -286,8 +290,10 @@ return function(env)
             end
 
             local function setupCharacter_SpeedList(player, character)
+                if not speedActive then return end
                 local humanoid = character:WaitForChild("Humanoid", 5)
                 local root = character:WaitForChild("HumanoidRootPart", 5)
+
                 if humanoid and root then
                     speedListPlayers[player] = {
                         root = root,
@@ -316,8 +322,8 @@ return function(env)
             local listFrame = Instance.new("Frame")
             listFrame.Name = "ListFrame"
             listFrame.BackgroundTransparency = 1
-            listFrame.Position = UDim2.new(0, 25, 0.68, 0)
-            listFrame.Size = UDim2.new(0, 280, 0.28, 0)
+            listFrame.Position = UDim2.new(0, 25, 0.65, 0)
+            listFrame.Size = UDim2.new(0, 280, 0.3, 0)
             listFrame.Parent = speedListGui
 
             local uiListLayout = Instance.new("UIListLayout")
@@ -339,13 +345,15 @@ return function(env)
             end
 
             speedRenderConn = RunService.RenderStepped:Connect(function()
+                if not speedActive then return end
+
                 for player, data in pairs(speedListPlayers) do
                     local label = speedListLabels[player]
                     if label and label.Visible then
                         local root = data.root
                         local humanoid = data.humanoid
 
-                        if root and root.Parent && humanoid && humanoid.Health > 0 then
+                        if root and root.Parent and humanoid and humanoid.Health > 0 then
                             if humanoid.MoveDirection.Magnitude == 0 then
                                 label.Text = player.Name .. ": 0.0"
                             else
@@ -363,10 +371,8 @@ return function(env)
     end
 
     -- =========================================================================
-    -- INSTANCIAÇÃO DAS SEÇÕES E CRIAÇÃO VISUAL DA UI
+    -- SECTION: ACTION TIMERS (Coluna Esquerda)
     -- =========================================================================
-
-    -- SEÇÃO: ACTION TIMERS (Coluna Esquerda)
     Library:CreateSection(Page, "Action Timers")
     
     -- 1. Computer Progress
@@ -445,6 +451,7 @@ return function(env)
 
                     return billboard, bar, text
                 elseif currentComputerStyle == "Style 1" then
+                    -- Design: design computer 2.txt
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "ProgressBar"
                     billboard.Adornee = parent
@@ -483,6 +490,7 @@ return function(env)
 
                     return billboard, bar, text
                 else
+                    -- Design: design computer 3.txt (Style 2)
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "ProgressBar"
                     billboard.Adornee = parent
@@ -666,11 +674,11 @@ return function(env)
 
             local function createDoorHUD(parent)
                 if currentDoorStyle == "Default" then
-                    -- Default design (Tamanho compacto herdado do Style 1)
+                    -- Default design
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NormalDoorGUI"
                     billboard.Adornee = parent
-                    billboard.Size = UDim2.fromOffset(90, 22) 
+                    billboard.Size = UDim2.new(0, 90, 0, 35) 
                     billboard.StudsOffset = Vector3.new(0, 1, 0)
                     billboard.AlwaysOnTop = true
                     billboard.MaxDistance = doorMaxDistance
@@ -678,7 +686,7 @@ return function(env)
                     
                     local text = Instance.new("TextLabel")
                     text.Name = "PercentText"
-                    text.Size = UDim2.new(1, 0, 0.45, 0)
+                    text.Size = UDim2.new(1, 0, 0.55, 0)
                     text.Position = UDim2.new(0, 0, 0, 0)
                     text.BackgroundTransparency = 1
                     text.Text = "0.0%"
@@ -693,7 +701,7 @@ return function(env)
                     local bgBar = Instance.new("Frame")
                     bgBar.Name = "BgBar"
                     bgBar.Size = UDim2.new(1, 0, 0.35, 0) 
-                    bgBar.Position = UDim2.new(0, 0, 0.6, 0) 
+                    bgBar.Position = UDim2.new(0, 0, 0.65, 0)
                     bgBar.BackgroundColor3 = DT_COLORS.BAR_BG
                     bgBar.BackgroundTransparency = 0.3
                     bgBar.BorderSizePixel = 0
@@ -1804,6 +1812,7 @@ return function(env)
                             local hum = char and char:FindFirstChildOfClass("Humanoid")
                             
                             if hum then
+                                American = true
                                 local isRagdoll = hum.PlatformStand or hum:GetState() == Enum.HumanoidStateType.Physics
                                 if isRagdoll then
                                     local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -2353,8 +2362,8 @@ return function(env)
             local listFrame = Instance.new("Frame")
             listFrame.Name = "ListFrame"
             listFrame.BackgroundTransparency = 1
-            listFrame.Position = UDim2.new(0, 25, 0.28, 0) -- Correção de posicionamento para o mobile (gap estendido)
-            listFrame.Size = UDim2.new(0, 280, 0.35, 0)
+            listFrame.Position = UDim2.new(0, 25, 0.35, 0)
+            listFrame.Size = UDim2.new(0, 280, 0.4, 0)
             listFrame.Parent = lifeGui
 
             local uiListLayout = Instance.new("UIListLayout")
@@ -2417,3 +2426,106 @@ return function(env)
             lifeGui = nil
         end
     end)
+
+    -- =========================================================================
+    -- SECTION: HIGHLIGHT SETTINGS (Coluna Esquerda - Abaixo de Action Timers)
+    -- =========================================================================
+    Library:CreateSection(Page, "HighLight Settings")
+    
+    -- 1. Computer Highlight
+    Library:CreateToggle(Page, "Computer Highlight", false, function(state)
+        compHighlightEnabled = state
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then
+                obj.Enabled = state
+            end
+        end
+    end)
+
+    -- 2. Computer Outline
+    Library:CreateToggle(Page, "Computer Outline", false, function(state)
+        compOutlineEnabled = state
+    end)
+
+    -- 3. Door Highlight
+    Library:CreateToggle(Page, "Door Highlight", false, function(state)
+        doorHighlightEnabled = state
+        for _, data in pairs(trackedNormalDoors) do
+            if data.Highlight then
+                data.Highlight.Enabled = state
+            end
+        end
+    end)
+
+    -- 4. Door Outline
+    Library:CreateToggle(Page, "Door Outline", false, function(state)
+        doorOutlineEnabled = state
+        for _, data in pairs(trackedNormalDoors) do
+            if data.Highlight then
+                data.Highlight.Enabled = state
+            end
+        end
+    end)
+
+    -- 5. ExitDoor Highlight
+    Library:CreateToggle(Page, "ExitDoor Highlight", false, function(state)
+        exitHighlightEnabled = state
+        for _, data in pairs(trackedExitDoors) do
+            if data.Highlight then
+                data.Highlight.Enabled = state
+            end
+        end
+    end)
+
+    -- =========================================================================
+    -- SECTION: PROGRESS SETTINGS (Coluna Direita - Abaixo de Beast Indicators)
+    -- =========================================================================
+    Library:CreateSection(Page, "Progress Settings")
+    
+    -- 1. PC Progress Design (Dropdown)
+    Library:CreateDropdown(Page, "PC Progress Design", {"Default", "Style 1", "Style 2"}, "Default", function(val)
+        currentComputerStyle = val
+        -- Limpa computadores para redesenhar com o estilo selecionado
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name == "ProgressBar" and obj:IsA("BillboardGui") then obj:Destroy() end
+            if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then obj:Destroy() end
+        end
+        table.clear(CompProgConns)
+    end)
+
+    -- 2. Door Progress Design (Dropdown)
+    Library:CreateDropdown(Page, "Door Progress Design", {"Default", "Style 1", "Style 2"}, "Default", function(val)
+        currentDoorStyle = val
+        lastMap = nil -- Reseta o rastreador de mapa para forçar varredura instantânea
+        
+        -- Limpa portas para redesenhar com o estilo selecionado
+        if doorAddedConn then doorAddedConn:Disconnect(); doorAddedConn = nil end
+        for doorModel, data in pairs(trackedNormalDoors) do
+            if data.Billboard then data.Billboard:Destroy() end
+            if data.Highlight then data.Highlight:Destroy() end
+        end
+        table.clear(trackedNormalDoors)
+    end)
+
+    -- 3. WalkSpeed Design (Dropdown)
+    Library:CreateDropdown(Page, "WalkSpeed Design", {"Default", "Style 1"}, "Default", function(val)
+        currentWalkSpeedStyle = val
+        rebuildWalkSpeedVisuals()
+    end)
+
+    -- 4. Hide GetUp from Head (Toggle)
+    Library:CreateToggle(Page, "Hide GetUp from Head", false, function(state)
+        hideGetUpHead = state
+    end)
+
+    -- 5. Door Progress Distance (Como Último da Seção)
+    Library:CreateSlider(Page, "Door progress distance", 30, 300, 150, function(val)
+        doorMaxDistance = val
+        -- Atualiza dinamicamente as portas ativas no mapa
+        for _, data in pairs(trackedNormalDoors) do
+            if data.Billboard then
+                data.Billboard.MaxDistance = val
+            end
+        end
+    end)
+end
