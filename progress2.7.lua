@@ -14,7 +14,9 @@ return function(env)
     -- =========================================================================
     -- VARIÁVEIS DE CONTROLE GLOBAL (Módulo)
     -- =========================================================================
-    
+    local UserInputService = game:GetService("UserInputService")
+    local isMobileDevice = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+
     -- Vars Beast Power
     local BeastPowerConnection1 = nil
     local BeastPowerConnection2 = nil
@@ -62,6 +64,8 @@ return function(env)
     local speedListGui = nil
     local currentRoundActive = false
     local currentWalkSpeedStyle = "Default"
+    local toggleWalkSpeedDetector = nil
+    local toggleWalkSpeedLateral = nil
 
     -- Vars Wallhop Counter
     local WallhopStateConn = nil
@@ -243,7 +247,7 @@ return function(env)
                     local root = data.root
                     local humanoid = data.humanoid
                     
-                    if root and root.Parent and humanoid and humanoid.Health > 0 then
+                    if root and root.Parent && humanoid and humanoid.Health > 0 then
                         if humanoid.MoveDirection.Magnitude == 0 then
                             data.label.Text = "0.0"
                         else
@@ -290,10 +294,8 @@ return function(env)
             end
 
             local function setupCharacter_SpeedList(player, character)
-                if not speedActive then return end
                 local humanoid = character:WaitForChild("Humanoid", 5)
                 local root = character:WaitForChild("HumanoidRootPart", 5)
-
                 if humanoid and root then
                     speedListPlayers[player] = {
                         root = root,
@@ -322,8 +324,12 @@ return function(env)
             local listFrame = Instance.new("Frame")
             listFrame.Name = "ListFrame"
             listFrame.BackgroundTransparency = 1
-            listFrame.Position = UDim2.new(0, 25, 0.65, 0)
-            listFrame.Size = UDim2.new(0, 280, 0.3, 0)
+            
+            -- Posicionamento Adaptativo Mobile vs PC
+            local speedPosY = isMobileDevice and 0.62 or 0.65
+            local speedSizeY = isMobileDevice and 0.25 or 0.30
+            listFrame.Position = UDim2.new(0, 25, speedPosY, 0)
+            listFrame.Size = UDim2.new(0, 280, speedSizeY, 0)
             listFrame.Parent = speedListGui
 
             local uiListLayout = Instance.new("UIListLayout")
@@ -345,8 +351,6 @@ return function(env)
             end
 
             speedRenderConn = RunService.RenderStepped:Connect(function()
-                if not speedActive then return end
-
                 for player, data in pairs(speedListPlayers) do
                     local label = speedListLabels[player]
                     if label and label.Visible then
@@ -678,7 +682,7 @@ return function(env)
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NormalDoorGUI"
                     billboard.Adornee = parent
-                    billboard.Size = UDim2.new(0, 90, 0, 35) 
+                    billboard.Size = UDim2.new(0, 90, 0, 22) -- Unificado para 22 de altura
                     billboard.StudsOffset = Vector3.new(0, 1, 0)
                     billboard.AlwaysOnTop = true
                     billboard.MaxDistance = doorMaxDistance
@@ -686,7 +690,7 @@ return function(env)
                     
                     local text = Instance.new("TextLabel")
                     text.Name = "PercentText"
-                    text.Size = UDim2.new(1, 0, 0.55, 0)
+                    text.Size = UDim2.new(1, 0, 0.45, 0) -- Ajuste de proporção
                     text.Position = UDim2.new(0, 0, 0, 0)
                     text.BackgroundTransparency = 1
                     text.Text = "0.0%"
@@ -700,8 +704,8 @@ return function(env)
 
                     local bgBar = Instance.new("Frame")
                     bgBar.Name = "BgBar"
-                    bgBar.Size = UDim2.new(1, 0, 0.35, 0) 
-                    bgBar.Position = UDim2.new(0, 0, 0.65, 0)
+                    bgBar.Size = UDim2.new(1, 0, 0.35, 0) -- Ajuste de proporção
+                    bgBar.Position = UDim2.new(0, 0, 0.6, 0) -- Ajuste de proporção
                     bgBar.BackgroundColor3 = DT_COLORS.BAR_BG
                     bgBar.BackgroundTransparency = 0.3
                     bgBar.BorderSizePixel = 0
@@ -1080,6 +1084,7 @@ return function(env)
                                 data.LastState = "Open"
                                 data.Text.Text = "OPEN"
                                 data.Text.TextColor3 = COLORS_STYLE2.OPEN
+                                data.Highlight.FillColor = COLORS_STYLE2.OPEN
                                 data.BgBar.Visible = false
                             end
                         elseif interactionVal > 0.05 then 
@@ -2245,6 +2250,13 @@ return function(env)
                     label.TextXAlignment = Enum.TextXAlignment.Left
                     label.TextStrokeTransparency = 0.65
                     label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                    
+                    -- Posicionamento Adaptativo Mobile vs PC para evitar sobreposição
+                    local lifePosY = isMobileDevice and 0.26 or 0.30
+                    local lifeSizeY = isMobileDevice and 0.32 or 0.32
+                    lifeGui.ListFrame.Position = UDim2.new(0, 25, lifePosY, 0)
+                    lifeGui.ListFrame.Size = UDim2.new(0, 280, lifeSizeY, 0)
+                    
                     label.Parent = lifeGui.ListFrame
                     lifeLabels[player] = label
                 end
@@ -2362,8 +2374,12 @@ return function(env)
             local listFrame = Instance.new("Frame")
             listFrame.Name = "ListFrame"
             listFrame.BackgroundTransparency = 1
-            listFrame.Position = UDim2.new(0, 25, 0.35, 0)
-            listFrame.Size = UDim2.new(0, 280, 0.4, 0)
+            
+            -- Posicionamento Adaptativo Mobile vs PC
+            local lifePosY = isMobileDevice and 0.26 or 0.30
+            local lifeSizeY = isMobileDevice and 0.32 or 0.32
+            listFrame.Position = UDim2.new(0, 25, lifePosY, 0)
+            listFrame.Size = UDim2.new(0, 280, lifeSizeY, 0)
             listFrame.Parent = lifeGui
 
             local uiListLayout = Instance.new("UIListLayout")
