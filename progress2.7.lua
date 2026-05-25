@@ -15,6 +15,10 @@ return function(env)
     -- VARIÁVEIS DE CONTROLE GLOBAL (Módulo)
     -- =========================================================================
     
+    -- Instância global de OverlapParams para evitar alocação de memória contínua
+    local globalOverlapParams = OverlapParams.new()
+    globalOverlapParams.FilterType = Enum.RaycastFilterType.Include
+
     -- Vars Beast Power
     local BeastPowerConnection1 = nil
     local BeastPowerConnection2 = nil
@@ -50,7 +54,7 @@ return function(env)
     local actionValCache = {}
     local exitHighlightEnabled = false
 
-    -- Vars WalkSpeed Detector (Unified System)
+    -- Vars WalkSpeed Detector (Unified Speed Tracker)
     local speedActive = false
     local lateralSpeedActive = false
     local speedRenderConn = nil
@@ -86,7 +90,7 @@ return function(env)
     local lifeScreenGui = nil
     local lifeListFrame = nil
     
-    -- IsGameActive carregado de forma assíncrona para não travar a UI em outros jogos
+    -- IsGameActive carregado de forma assíncrona para não travar a UI
     local IsGameActive = nil
     task.spawn(function()
         IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive", 2)
@@ -273,10 +277,8 @@ return function(env)
 
                 local savedProgress = 0
                 local lastSize = -1
-                local overlapParams = OverlapParams.new()
-                overlapParams.FilterType = Enum.RaycastFilterType.Include
 
-                local updateInterval = 0.08
+                local updateInterval = 0.12 -- Otimizado de 0.08 para 0.12 segundos
                 local accumulatedTime = 0
 
                 local connection
@@ -338,11 +340,11 @@ return function(env)
                         end
 
                         if #characterParts > 0 then
-                            overlapParams.FilterDescendantsInstances = characterParts
+                            globalOverlapParams.FilterDescendantsInstances = characterParts
                             for i = 1, #triggers do
                                 local part = triggers[i]
                                 if part and part.Parent then
-                                    local touchingParts = Workspace:GetPartsInPart(part, overlapParams)
+                                    local touchingParts = Workspace:GetPartsInPart(part, globalOverlapParams)
                                     for j = 1, #touchingParts do
                                         local character = touchingParts[j].Parent
                                         local plr = Players:GetPlayerFromCharacter(character)
@@ -1065,7 +1067,7 @@ return function(env)
             end)
 
             ExitDoorConn = task.spawn(function()
-                while state and task.wait(0.1) do
+                while state and task.wait(0.15) do -- Otimizado de 0.1 para 0.15 segundos
                     local openingNow = {}
                     local playersList = Players:GetPlayers()
 
@@ -1215,8 +1217,14 @@ return function(env)
         speedActive = state
         if state then
             if not speedRenderConn then
-                speedRenderConn = RunService.RenderStepped:Connect(function()
+                local speedUpdateAccum = 0 -- Acumulador para otimizar taxa de atualização de texto
+                
+                speedRenderConn = RunService.RenderStepped:Connect(function(dt)
                     if not speedActive then return end
+                    
+                    speedUpdateAccum = speedUpdateAccum + dt
+                    if speedUpdateAccum < 0.08 then return end -- Limita atualizações visuais a ~12 FPS (Economiza CPU)
+                    speedUpdateAccum = 0
 
                     local roundActive = false
                     for _, p in ipairs(Players:GetPlayers()) do
@@ -1599,7 +1607,7 @@ return function(env)
                 local old = head:FindFirstChild("RC")
                 if old then old:Destroy() end
                 
-                if hideHeadGetUp then return nil end
+                if hideHeadGetUp then return nil end -- Se oculto, não cria o billboard
 
                 local bb = Instance.new("BillboardGui", head)
                 bb.Name = "RC"
@@ -1648,7 +1656,10 @@ return function(env)
                 local lastHealth = hum.Health
                 
                 local head = char:FindFirstChild("Head")
-                local headTimer = billboard(p, head)
+                local headTimer = nil
+                if not hideHeadGetUp and head then
+                    headTimer = billboard(p, head)
+                end
                 
                 local playerFrame = Instance.new("Frame", getupList)
                 playerFrame.Name = p.Name 
@@ -1702,6 +1713,19 @@ return function(env)
                     if not getupActive or not isRagdoll or isCaptured or isDead or forceExpired then
                         cleanupPlayer(p, con, playerFrame, char)
                         return
+                    end
+                    
+                    -- Gerenciamento dinâmico do billboard 3D (Cria e destrói dependendo da toggle "Hide Head GetUp")
+                    if not hideHeadGetUp then
+                        if head and (not headTimer or not headTimer.Parent) then
+                            headTimer = billboard(p, head)
+                        end
+                    else
+                        if headTimer then
+                            local old = head:FindFirstChild("RC")
+                            if old then old:Destroy() end
+                            headTimer = nil
+                        end
                     end
                     
                     if now - lastUpdate >= UI_UPDATE_INTERVAL then
@@ -2468,7 +2492,7 @@ return function(env)
         end
     end)
 
-    -- 5. Door Progress Distance (Deve permanecer como último)
+    -- 5. Door Progress Distance (slider posicionado como último elemento)
     Library:CreateSlider(Page, "Door progress distance", 30, 300, 150, function(val)
         doorMaxDistance = val
         for _, data in pairs(trackedNormalDoors) do
