@@ -34,6 +34,7 @@ return function(env)
     local compHighlightEnabled = false
     local compOutlineEnabled = false
     local currentComputerStyle = "Default"
+    local initializedComputers = {}
 
     -- Vars Door Progress & Highlight Outlines
     local DoorProgLoop = nil
@@ -255,7 +256,8 @@ return function(env)
             end
 
             local function setupComputer(tableModel)
-                if tableModel:FindFirstChild("ProgressBar") then return end
+                if initializedComputers[tableModel] then return end
+                initializedComputers[tableModel] = true
 
                 local billboard, bar, text = createProgressBar(tableModel)
                 
@@ -278,7 +280,7 @@ return function(env)
                 local savedProgress = 0
                 local lastSize = -1
 
-                local updateInterval = 0.12 -- Otimizado de 0.08 para 0.12 segundos
+                local updateInterval = 0.12 
                 local accumulatedTime = 0
 
                 local connection
@@ -344,18 +346,24 @@ return function(env)
                             for i = 1, #triggers do
                                 local part = triggers[i]
                                 if part and part.Parent then
-                                    local touchingParts = Workspace:GetPartsInPart(part, globalOverlapParams)
-                                    for j = 1, #touchingParts do
-                                        local character = touchingParts[j].Parent
-                                        local plr = Players:GetPlayerFromCharacter(character)
-                                        if plr then
-                                            local tpsm = plr:FindFirstChild("TempPlayerStatsModule")
-                                            if tpsm then
-                                                local ragdoll = tpsm:FindFirstChild("Ragdoll")
-                                                local ap = tpsm:FindFirstChild("ActionProgress")
-                                                if ragdoll and typeof(ragdoll.Value) == "boolean" and not ragdoll.Value then
-                                                    if ap and typeof(ap.Value) == "number" then
-                                                        highestTouch = math.max(highestTouch, ap.Value)
+                                    local touchingParts = {}
+                                    local success = pcall(function()
+                                        touchingParts = Workspace:GetPartsInPart(part, globalOverlapParams)
+                                    end)
+                                    
+                                    if success then
+                                        for j = 1, #touchingParts do
+                                            local character = touchingParts[j].Parent
+                                            local plr = Players:GetPlayerFromCharacter(character)
+                                            if plr then
+                                                local tpsm = plr:FindFirstChild("TempPlayerStatsModule")
+                                                if tpsm then
+                                                    local ragdoll = tpsm:FindFirstChild("Ragdoll")
+                                                    local ap = tpsm:FindFirstChild("ActionProgress")
+                                                    if ragdoll and typeof(ragdoll.Value) == "boolean" and not ragdoll.Value then
+                                                        if ap and typeof(ap.Value) == "number" then
+                                                            highestTouch = math.max(highestTouch, ap.Value)
+                                                        end
                                                     end
                                                 end
                                             end
@@ -430,6 +438,7 @@ return function(env)
                 if c then c:Disconnect() end 
             end
             table.clear(CompProgConns)
+            table.clear(initializedComputers)
             for _, obj in ipairs(Workspace:GetDescendants()) do
                 if obj.Name == "ProgressBar" and obj:IsA("BillboardGui") then obj:Destroy() end
                 if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then obj:Destroy() end
@@ -459,7 +468,7 @@ return function(env)
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NormalDoorGUI"
                     billboard.Adornee = parent
-                    billboard.Size = UDim2.new(0, 90, 0, 35) 
+                    billboard.Size = UDim2.new(0, 90, 0, 22) -- Redimensionado para altura 22 (idêntico ao tamanho do Style 1)
                     billboard.StudsOffset = Vector3.new(0, 1, 0)
                     billboard.AlwaysOnTop = true
                     billboard.MaxDistance = doorMaxDistance
@@ -482,7 +491,7 @@ return function(env)
                     local bgBar = Instance.new("Frame")
                     bgBar.Name = "BgBar"
                     bgBar.Size = UDim2.new(1, 0, 0.35, 0) 
-                    bgBar.Position = UDim2.new(0, 0, 0.65, 0)
+                    bgBar.Position = UDim2.new(0, 0, 0.6, 0) -- Centralizado em harmonia com a nova proporção de altura
                     bgBar.BackgroundColor3 = DT_COLORS.BAR_BG
                     bgBar.BackgroundTransparency = 0.3
                     bgBar.BorderSizePixel = 0
@@ -1048,26 +1057,36 @@ return function(env)
                 }
             end
 
-            task.spawn(function()
-                local workspaceDescendants = workspace:GetDescendants()
-                for i = 1, #workspaceDescendants do
-                    local obj = workspaceDescendants[i]
+            -- Otimização Crítica: Escaneamento focado para evitar travamento geral
+            local function scanExitDoors()
+                local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
+                if currentMap and currentMap.Value ~= "" then
+                    local map = Workspace:FindFirstChild(tostring(currentMap.Value))
+                    if map then
+                        for _, obj in ipairs(map:GetDescendants()) do
+                            if obj.Name == "ExitDoor" and obj:IsA("Model") then
+                                registerExitDoor(obj)
+                            end
+                        end
+                    end
+                end
+                for _, obj in ipairs(Workspace:GetChildren()) do
                     if obj.Name == "ExitDoor" and obj:IsA("Model") then
                         registerExitDoor(obj)
                     end
                 end
-            end)
+            end
 
-            ExitDoorAdded = workspace.DescendantAdded:Connect(function(obj)
+            task.spawn(scanExitDoors)
+
+            ExitDoorAdded = Workspace.DescendantAdded:Connect(function(obj)
                 if obj.Name == "ExitDoor" and obj:IsA("Model") then
-                    task.defer(function()
-                        registerExitDoor(obj)
-                    end)
+                    task.defer(registerExitDoor, obj)
                 end
             end)
 
             ExitDoorConn = task.spawn(function()
-                while state and task.wait(0.15) do -- Otimizado de 0.1 para 0.15 segundos
+                while state and task.wait(0.15) do 
                     local openingNow = {}
                     local playersList = Players:GetPlayers()
 
@@ -1217,13 +1236,13 @@ return function(env)
         speedActive = state
         if state then
             if not speedRenderConn then
-                local speedUpdateAccum = 0 -- Acumulador para otimizar taxa de atualização de texto
+                local speedUpdateAccum = 0 
                 
                 speedRenderConn = RunService.RenderStepped:Connect(function(dt)
                     if not speedActive then return end
                     
                     speedUpdateAccum = speedUpdateAccum + dt
-                    if speedUpdateAccum < 0.08 then return end -- Limita atualizações visuais a ~12 FPS (Economiza CPU)
+                    if speedUpdateAccum < 0.08 then return end 
                     speedUpdateAccum = 0
 
                     local roundActive = false
@@ -1607,7 +1626,7 @@ return function(env)
                 local old = head:FindFirstChild("RC")
                 if old then old:Destroy() end
                 
-                if hideHeadGetUp then return nil end -- Se oculto, não cria o billboard
+                if hideHeadGetUp then return nil end 
 
                 local bb = Instance.new("BillboardGui", head)
                 bb.Name = "RC"
@@ -1715,7 +1734,7 @@ return function(env)
                         return
                     end
                     
-                    -- Gerenciamento dinâmico do billboard 3D (Cria e destrói dependendo da toggle "Hide Head GetUp")
+                    -- Monitoramento dinâmico da criação e destruição do billboard 3D
                     if not hideHeadGetUp then
                         if head and (not headTimer or not headTimer.Parent) then
                             headTimer = billboard(p, head)
@@ -2454,6 +2473,7 @@ return function(env)
             if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then obj:Destroy() end
         end
         table.clear(CompProgConns)
+        table.clear(initializedComputers)
     end)
 
     -- 2. Door Progress Design (Dropdown)
