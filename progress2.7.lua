@@ -46,13 +46,14 @@ return function(env)
     local doorMaxDistance = 150
     local lastMap = nil
 
-    -- Vars ExitDoor Progress
+    -- Vars ExitDoor Progress & Highlight Outlines
     local ExitDoorConn = nil
     local ExitDoorAdded = nil
     local ExitDoorRemoving = nil
     local trackedExitDoors = {}
     local actionValCache = {}
     local exitHighlightEnabled = false
+    local exitOutlineEnabled = false
 
     -- Vars WalkSpeed Detector (Unified Speed Tracker)
     local speedActive = false
@@ -80,15 +81,6 @@ return function(env)
     local BeastSpawnActive = false
     local BeastSpawnLoopThread = nil
     local BeastSpawnRenderConn = nil
-
-    -- Vars Life Timer
-    local lifeTimerActive = false
-    local lifeTimerConns = {}
-    local lifeActiveLabels = {}
-    local lifeCachedStats = {}
-    local lifePlayerConns = {}
-    local lifeScreenGui = nil
-    local lifeListFrame = nil
     
     -- IsGameActive carregado de forma assíncrona para não travar a UI
     local IsGameActive = nil
@@ -278,7 +270,7 @@ return function(env)
                 local savedProgress = 0
                 local lastSize = -1
 
-                local updateInterval = 0.12 -- Otimizado de 0.08 para 0.12 segundos
+                local updateInterval = 0.12 
                 local accumulatedTime = 0
 
                 local connection
@@ -459,7 +451,7 @@ return function(env)
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NormalDoorGUI"
                     billboard.Adornee = parent
-                    billboard.Size = UDim2.new(0, 90, 0, 35) 
+                    billboard.Size = UDim2.new(0, 90, 0, 22) -- Reduzida a altura total de 35 para 22 (Ajuste de espessura)
                     billboard.StudsOffset = Vector3.new(0, 1, 0)
                     billboard.AlwaysOnTop = true
                     billboard.MaxDistance = doorMaxDistance
@@ -482,7 +474,7 @@ return function(env)
                     local bgBar = Instance.new("Frame")
                     bgBar.Name = "BgBar"
                     bgBar.Size = UDim2.new(1, 0, 0.35, 0) 
-                    bgBar.Position = UDim2.new(0, 0, 0.65, 0)
+                    bgBar.Position = UDim2.new(0, 0, 0.6, 0) -- Ajustado verticalmente para melhor centralização
                     bgBar.BackgroundColor3 = DT_COLORS.BAR_BG
                     bgBar.BackgroundTransparency = 0.3
                     bgBar.BorderSizePixel = 0
@@ -982,12 +974,10 @@ return function(env)
                 local highlight = Instance.new("Highlight")
                 highlight.Name = "ExitDoorHighlight"
                 highlight.Adornee = door
-                highlight.FillColor = Color3.fromRGB(255, 255, 0)
                 highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
-                highlight.FillTransparency = 0.55
                 highlight.OutlineTransparency = 0
                 highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                highlight.Enabled = exitHighlightEnabled
+                highlight.Enabled = exitHighlightEnabled or exitOutlineEnabled
                 highlight.Parent = folder
 
                 local bgui = Instance.new("BillboardGui")
@@ -1067,7 +1057,7 @@ return function(env)
             end)
 
             ExitDoorConn = task.spawn(function()
-                while state and task.wait(0.15) do -- Otimizado de 0.1 para 0.15 segundos
+                while state and task.wait(0.15) do 
                     local openingNow = {}
                     local playersList = Players:GetPlayers()
 
@@ -1170,22 +1160,36 @@ return function(env)
                             end
                         end
                         
+                        if data.Highlight then
+                            data.Highlight.Enabled = exitHighlightEnabled or exitOutlineEnabled
+                            
+                            if exitOutlineEnabled then
+                                data.Highlight.FillTransparency = 1
+                                data.Highlight.OutlineTransparency = 0
+                                if data.Completed then
+                                    data.Highlight.OutlineColor = Color3.fromRGB(40, 255, 80)
+                                else
+                                    data.Highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
+                                end
+                            else
+                                data.Highlight.FillTransparency = 0.55
+                                data.Highlight.OutlineTransparency = 0
+                                if data.Completed then
+                                    data.Highlight.FillColor = Color3.fromRGB(40, 255, 80)
+                                else
+                                    data.Highlight.FillColor = Color3.fromRGB(255, 255, 0)
+                                end
+                            end
+                        end
+                        
                         if data.Completed then
                             data.FillElement.Size = UDim2.new(1, 0, 1, 0)
                             data.FillElement.BackgroundColor3 = Color3.fromRGB(40, 255, 80)
                             data.TextElement.Text = "DOOR OPENED!"
                             data.TextElement.TextColor3 = Color3.fromRGB(40, 255, 80)
-                            
-                            if data.Highlight then
-                                data.Highlight.FillColor = Color3.fromRGB(40, 255, 80)
-                            end
                         else
                             data.FillElement.Size = UDim2.new(data.Progress, 0, 1, 0)
                             data.FillElement.BackgroundColor3 = Color3.fromRGB(255, 160, 20)
-                            
-                            if data.Highlight then
-                                data.Highlight.FillColor = Color3.fromRGB(255, 255, 0)
-                            end
                             
                             if data.Progress > 0 then
                                 data.TextElement.Text = "OPENING: " .. math.floor(data.Progress * 100) .. "%"
@@ -1193,10 +1197,6 @@ return function(env)
                                 data.TextElement.Text = "EXIT"
                             end
                             data.TextElement.TextColor3 = Color3.fromRGB(255, 255, 255)
-                        end
-                        
-                        if data.Highlight then
-                            data.Highlight.Enabled = exitHighlightEnabled
                         end
                     end
                 end
@@ -1217,13 +1217,13 @@ return function(env)
         speedActive = state
         if state then
             if not speedRenderConn then
-                local speedUpdateAccum = 0 -- Acumulador para otimizar taxa de atualização de texto
+                local speedUpdateAccum = 0 
                 
                 speedRenderConn = RunService.RenderStepped:Connect(function(dt)
                     if not speedActive then return end
                     
                     speedUpdateAccum = speedUpdateAccum + dt
-                    if speedUpdateAccum < 0.08 then return end -- Limita atualizações visuais a ~12 FPS (Economiza CPU)
+                    if speedUpdateAccum < 0.08 then return end 
                     speedUpdateAccum = 0
 
                     local roundActive = false
@@ -1607,7 +1607,7 @@ return function(env)
                 local old = head:FindFirstChild("RC")
                 if old then old:Destroy() end
                 
-                if hideHeadGetUp then return nil end -- Se oculto, não cria o billboard
+                if hideHeadGetUp then return nil end 
 
                 local bb = Instance.new("BillboardGui", head)
                 bb.Name = "RC"
@@ -1715,7 +1715,6 @@ return function(env)
                         return
                     end
                     
-                    -- Gerenciamento dinâmico do billboard 3D (Cria e destrói dependendo da toggle "Hide Head GetUp")
                     if not hideHeadGetUp then
                         if head and (not headTimer or not headTimer.Parent) then
                             headTimer = billboard(p, head)
@@ -2158,234 +2157,6 @@ return function(env)
         end
     end)
 
-    -- 5. Life Timer
-    Library:CreateToggle(Page, "Life Timer", false, function(state)
-        lifeTimerActive = state
-        
-        if state then
-            local targetGuiParent = (pcall(function() return CoreGui end) and CoreGui) or LocalPlayer:WaitForChild("PlayerGui")
-            
-            if targetGuiParent:FindFirstChild("LifeListGui") then
-                targetGuiParent.LifeListGui:Destroy()
-            end
-
-            lifeScreenGui = Instance.new("ScreenGui")
-            lifeScreenGui.Name = "LifeListGui"
-            lifeScreenGui.ResetOnSpawn = false
-            lifeScreenGui.Parent = targetGuiParent
-
-            lifeListFrame = Instance.new("Frame")
-            lifeListFrame.Name = "ListFrame"
-            lifeListFrame.BackgroundTransparency = 1
-            lifeListFrame.Position = UDim2.new(0, 25, 0.35, 0)
-            lifeListFrame.Size = UDim2.new(0, 280, 0.4, 0)
-            lifeListFrame.Parent = lifeScreenGui
-
-            local uiListLayout = Instance.new("UIListLayout")
-            uiListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-            uiListLayout.Padding = UDim.new(0, 5)
-            uiListLayout.Parent = lifeListFrame
-
-            local function cleanupLifePlayer(player)
-                if lifePlayerConns[player] then
-                    for _, connection in ipairs(lifePlayerConns[player]) do
-                        if connection then connection:Disconnect() end
-                    end
-                    lifePlayerConns[player] = nil
-                end
-
-                if lifeActiveLabels[player] then
-                    lifeActiveLabels[player]:Destroy()
-                    lifeActiveLabels[player] = nil
-                end
-
-                lifeCachedStats[player] = nil
-            end
-
-            local function isLifeRoundActive()
-                for _, stats in pairs(lifeCachedStats) do
-                    if stats.health and stats.isBeast then
-                        return true
-                    end
-                end
-                return false
-            end
-
-            local function isLifeBeast(player)
-                local stats = lifeCachedStats[player]
-                return stats and stats.isBeast and stats.isBeast.Value
-            end
-
-            local function getLifeColor(seconds)
-                if seconds >= 40 then
-                    return Color3.fromRGB(80, 255, 120)
-                elseif seconds >= 20 then
-                    return Color3.fromRGB(255, 200, 60)
-                else
-                    return Color3.fromRGB(255, 80, 80)
-                end
-            end
-
-            local function createLifeLabelIfMissing(player)
-                if not lifeActiveLabels[player] then
-                    local label = Instance.new("TextLabel")
-                    label.Name = player.Name
-                    label.Size = UDim2.new(1, 0, 0, 24)
-                    label.BackgroundTransparency = 1
-                    label.Font = Enum.Font.GothamBold
-                    label.TextSize = 16
-                    label.TextXAlignment = Enum.TextXAlignment.Left
-                    label.TextStrokeTransparency = 0.65
-                    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-                    label.Parent = lifeListFrame
-                    lifeActiveLabels[player] = label
-                end
-            end
-
-            local function updateLifePlayerRow(player, roundActive)
-                if not lifeTimerActive then return end
-
-                if roundActive then
-                    if isLifeBeast(player) then
-                        if lifeActiveLabels[player] then
-                            lifeActiveLabels[player]:Destroy()
-                            lifeActiveLabels[player] = nil
-                        end
-                        return
-                    end
-
-                    local stats = lifeCachedStats[player]
-                    local health = stats and stats.health
-                    
-                    if not health then
-                        if lifeActiveLabels[player] then
-                            lifeActiveLabels[player]:Destroy()
-                            lifeActiveLabels[player] = nil
-                        end
-                        return
-                    end
-
-                    createLifeLabelIfMissing(player)
-                    local label = lifeActiveLabels[player]
-                    
-                    if health.Value > 0 then
-                        local secondsLeft = math.floor((health.Value * 0.5) + 0.5)
-                        label.Text = player.Name .. ": " .. tostring(secondsLeft) .. "s"
-                        label.TextColor3 = getLifeColor(secondsLeft)
-                        label.LayoutOrder = 100 - math.floor(health.Value)
-                    else
-                        label.Text = player.Name .. ": 0s"
-                        label.TextColor3 = getLifeColor(0)
-                        label.LayoutOrder = 100
-                    end
-                else
-                    createLifeLabelIfMissing(player)
-                    local label = lifeActiveLabels[player]
-                    label.Text = player.Name .. ": 0s"
-                    label.TextColor3 = getLifeColor(0)
-                    label.LayoutOrder = 100
-                end
-            end
-
-            local function monitorLifePlayer(player)
-                cleanupLifePlayer(player)
-                lifePlayerConns[player] = {}
-
-                local function onStatsLoaded(statsInstance)
-                    local health = statsInstance:WaitForChild("Health", 5)
-                    local isBeastVal = statsInstance:WaitForChild("IsBeast", 5)
-
-                    if health and isBeastVal then
-                        lifeCachedStats[player] = {
-                            health = health,
-                            isBeast = isBeastVal
-                        }
-
-                        local hConn = health:GetPropertyChangedSignal("Value"):Connect(function()
-                            updateLifePlayerRow(player, isLifeRoundActive())
-                        end)
-                        table.insert(lifePlayerConns[player], hConn)
-
-                        local bConn = isBeastVal:GetPropertyChangedSignal("Value"):Connect(function()
-                            updateLifePlayerRow(player, isLifeRoundActive())
-                        end)
-                        table.insert(lifePlayerConns[player], bConn)
-                    end
-
-                    updateLifePlayerRow(player, isLifeRoundActive())
-                end
-
-                local stats = player:FindFirstChild("TempPlayerStatsModule", true)
-                if stats then
-                    onStatsLoaded(stats)
-                end
-
-                local childConn = player.ChildAdded:Connect(function(child)
-                    if child.Name == "TempPlayerStatsModule" or child:FindFirstChild("TempPlayerStatsModule", true) then
-                        local freshStats = player:FindFirstChild("TempPlayerStatsModule", true)
-                        if freshStats then
-                            onStatsLoaded(freshStats)
-                        end
-                    end
-                end)
-                table.insert(lifePlayerConns[player], childConn)
-
-                local charConn = player.CharacterAdded:Connect(function()
-                    task.wait(0.3)
-                    updateLifePlayerRow(player, isLifeRoundActive())
-                end)
-                table.insert(lifePlayerConns[player], charConn)
-            end
-
-            for _, player in ipairs(Players:GetPlayers()) do
-                monitorLifePlayer(player)
-            end
-
-            local playerAddedConn = Players.PlayerAdded:Connect(function(player)
-                monitorLifePlayer(player)
-                updateLifePlayerRow(player, isLifeRoundActive())
-            end)
-            table.insert(lifeTimerConns, playerAddedConn)
-
-            local playerRemovingConn = Players.PlayerRemoving:Connect(function(player)
-                cleanupLifePlayer(player)
-            end)
-            table.insert(lifeTimerConns, playerRemovingConn)
-
-            local loopThread = task.spawn(function()
-                while lifeTimerActive do
-                    local roundActive = isLifeRoundActive()
-                    for _, player in ipairs(Players:GetPlayers()) do
-                        updateLifePlayerRow(player, roundActive)
-                    end
-                    task.wait(2)
-                end
-            end)
-            table.insert(lifeTimerConns, loopThread)
-        else
-            for _, conn in ipairs(lifeTimerConns) do
-                if typeof(conn) == "thread" then
-                    task.cancel(conn)
-                else
-                    conn:Disconnect()
-                end
-            end
-            table.clear(lifeTimerConns)
-
-            if lifeScreenGui then
-                lifeScreenGui:Destroy()
-                lifeScreenGui = nil
-            end
-
-            for _, player in ipairs(Players:GetPlayers()) do
-                cleanupLifePlayer(player)
-            end
-            table.clear(lifePlayerConns)
-            table.clear(lifeActiveLabels)
-            table.clear(lifeCachedStats)
-        end
-    end)
-
     -- =========================================================================
     -- SECTION: HIGHLIGHT SETTINGS (Coluna Esquerda - Abaixo de Action Timers)
     -- =========================================================================
@@ -2436,7 +2207,17 @@ return function(env)
         exitHighlightEnabled = state
         for _, data in pairs(trackedExitDoors) do
             if data.Highlight then
-                data.Highlight.Enabled = state
+                data.Highlight.Enabled = state or exitOutlineEnabled
+            end
+        end
+    end)
+
+    -- 6. ExitDoor Outline
+    Library:CreateToggle(Page, "ExitDoor Outline", false, function(state)
+        exitOutlineEnabled = state
+        for _, data in pairs(trackedExitDoors) do
+            if data.Highlight then
+                data.Highlight.Enabled = exitHighlightEnabled or state
             end
         end
     end)
