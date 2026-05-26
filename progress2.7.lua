@@ -81,6 +81,13 @@ return function(env)
     local BeastSpawnActive = false
     local BeastSpawnLoopThread = nil
     local BeastSpawnRenderConn = nil
+
+    -- Vars Life Timer (New Electric Blue Version)
+    local lifeActive = false
+    local lifeConns = {}
+    local lifePlayerConns = {}
+    local lifeCachedStats = {}
+    local lifeTimerOrigin = "Head"
     
     -- IsGameActive carregado de forma assíncrona para não travar a UI
     local IsGameActive = nil
@@ -451,7 +458,7 @@ return function(env)
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NormalDoorGUI"
                     billboard.Adornee = parent
-                    billboard.Size = UDim2.new(0, 90, 0, 22) -- Reduzida a altura total de 35 para 22 (Ajuste de espessura)
+                    billboard.Size = UDim2.new(0, 90, 0, 22) 
                     billboard.StudsOffset = Vector3.new(0, 1, 0)
                     billboard.AlwaysOnTop = true
                     billboard.MaxDistance = doorMaxDistance
@@ -474,7 +481,7 @@ return function(env)
                     local bgBar = Instance.new("Frame")
                     bgBar.Name = "BgBar"
                     bgBar.Size = UDim2.new(1, 0, 0.35, 0) 
-                    bgBar.Position = UDim2.new(0, 0, 0.6, 0) -- Ajustado verticalmente para melhor centralização
+                    bgBar.Position = UDim2.new(0, 0, 0.6, 0) 
                     bgBar.BackgroundColor3 = DT_COLORS.BAR_BG
                     bgBar.BackgroundTransparency = 0.3
                     bgBar.BorderSizePixel = 0
@@ -881,10 +888,6 @@ return function(env)
                                 data.BgBar.Visible = false
                             end
                         end
-                    end
-                    
-                    if data.Highlight then
-                        data.Highlight.Enabled = doorHighlightEnabled or doorOutlineEnabled
                     end
                 end
             end)
@@ -2157,6 +2160,247 @@ return function(env)
         end
     end)
 
+    -- 5. Life Timer (New logic integration)
+    Library:CreateToggle(Page, "Life Timer", false, function(state)
+        lifeActive = state
+        
+        if state then
+            local TIMER_COLOR = Color3.fromRGB(0, 170, 255)
+
+            local function isLifeBeast(player)
+                local stats = lifeCachedStats[player]
+                return stats and stats.isBeast and stats.isBeast.Value
+            end
+
+            local function isCharacterWeldedToPod(character)
+                if not character then return false end
+                local root = character:FindFirstChild("HumanoidRootPart")
+                if not root then return false end
+
+                local rootChildren = root:GetChildren()
+                for i = 1, #rootChildren do
+                    local child = rootChildren[i]
+                    if child:IsA("Weld") or child:IsA("Motor6D") then
+                        local part = child.Part1 or child.Part0
+                        if part then
+                            local nameLower = part.Name:lower()
+                            local parentNameLower = part.Parent and part.Parent.Name:lower() or ""
+                            if nameLower == "seat" or nameLower:find("pod") or parentNameLower:find("pod") or parentNameLower:find("capsule") then
+                                return true
+                            end
+                        end
+                    end
+                end
+                return false
+            end
+
+            local function isPlayerCaptured(player)
+                local stats = lifeCachedStats[player]
+                if not stats or not stats.module then 
+                    return isCharacterWeldedToPod(player.Character) 
+                end
+
+                local isCapVal = stats.module:FindFirstChild("IsCaptured") or stats.module:FindFirstChild("Captured")
+                if isCapVal then
+                    return isCapVal.Value == true
+                end
+
+                return isCharacterWeldedToPod(player.Character)
+            end
+
+            local function getLifeTimerTarget(char)
+                if not char then return nil, Vector3.new(0, 0, 0) end
+                if lifeTimerOrigin == "Head" then
+                    local head = char:FindFirstChild("Head")
+                    return head, Vector3.new(0, 0, 0) -- Centralizado na cabeça
+                elseif lifeTimerOrigin == "Torso" then
+                    local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char:FindFirstChild("HumanoidRootPart")
+                    return torso, Vector3.new(0, 0, 0)
+                else -- "Inferior"
+                    local hrp = char:FindFirstChild("HumanoidRootPart")
+                    return hrp, Vector3.new(0, -3.2, 0)
+                end
+            end
+
+            local function cleanupPlayer(player)
+                if lifePlayerConns[player] then
+                    for _, connection in ipairs(lifePlayerConns[player]) do
+                        if connection then connection:Disconnect() end
+                    end
+                    lifePlayerConns[player] = nil
+                end
+
+                local char = player.Character
+                if char then
+                    local existingTag = char:FindFirstChild("CapsuleLifeTag", true)
+                    if existingTag then existingTag:Destroy() end
+                end
+
+                lifeCachedStats[player] = nil
+            end
+
+            local function updatePlayerTag(player)
+                if not lifeActive then return end
+
+                local char = player.Character
+                if not char then return end
+
+                local targetPart, offset = getLifeTimerTarget(char)
+                if not targetPart then return end
+
+                if isLifeBeast(player) then
+                    local tag = char:FindFirstChild("CapsuleLifeTag", true)
+                    if tag then tag:Destroy() end
+                    return
+                end
+
+                local stats = lifeCachedStats[player]
+                local health = stats and stats.health
+
+                if health and health.Value > 0 and isPlayerCaptured(player) then
+                    local tag = char:FindFirstChild("CapsuleLifeTag", true)
+                    
+                    if not tag then
+                        local billboard = Instance.new("BillboardGui")
+                        billboard.Name = "CapsuleLifeTag"
+                        billboard.Size = UDim2.new(0, 90, 0, 30)
+                        billboard.AlwaysOnTop = true
+
+                        local label = Instance.new("TextLabel")
+                        label.Size = UDim2.new(1, 0, 1, 0)
+                        label.BackgroundTransparency = 1
+                        label.Font = Enum.Font.GothamBold
+                        label.TextSize = 20
+                        label.TextStrokeTransparency = 0.5
+                        label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                        label.Parent = billboard
+
+                        billboard.Parent = targetPart
+                        tag = billboard
+                    else
+                        tag.Parent = targetPart
+                    end
+
+                    tag.StudsOffset = offset
+
+                    local label = tag:FindFirstChildOfClass("TextLabel")
+                    if label then
+                        local secondsLeft = health.Value * 0.5
+                        label.Text = string.format("%.1f", secondsLeft) .. "s"
+                        label.TextColor3 = TIMER_COLOR 
+                    end
+                else
+                    local tag = char:FindFirstChild("CapsuleLifeTag", true)
+                    if tag then tag:Destroy() end
+                end
+            end
+
+            local function monitorPlayer(player)
+                cleanupPlayer(player)
+                lifePlayerConns[player] = {}
+
+                local function onStatsLoaded(statsInstance)
+                    local health = statsInstance:WaitForChild("Health", 5)
+                    local isBeastVal = statsInstance:WaitForChild("IsBeast", 5)
+                    local isCapVal = statsInstance:FindFirstChild("IsCaptured") or statsInstance:FindFirstChild("Captured")
+
+                    if health and isBeastVal then
+                        lifeCachedStats[player] = {
+                            health = health,
+                            isBeast = isBeastVal,
+                            module = statsInstance
+                        }
+
+                        local hConn = health:GetPropertyChangedSignal("Value"):Connect(function()
+                            updatePlayerTag(player)
+                        end)
+                        table.insert(lifePlayerConns[player], hConn)
+
+                        local bConn = isBeastVal:GetPropertyChangedSignal("Value"):Connect(function()
+                            updatePlayerTag(player)
+                        end)
+                        table.insert(lifePlayerConns[player], bConn)
+                    end
+
+                    if isCapVal then
+                        local cConn = isCapVal:GetPropertyChangedSignal("Value"):Connect(function()
+                            updatePlayerTag(player)
+                        end)
+                        table.insert(lifePlayerConns[player], cConn)
+                    end
+
+                    updatePlayerTag(player)
+                end
+
+                local stats = player:FindFirstChild("TempPlayerStatsModule", true)
+                if stats then
+                    onStatsLoaded(stats)
+                end
+
+                local childConn = player.ChildAdded:Connect(function(child)
+                    if child.Name == "TempPlayerStatsModule" or child:FindFirstChild("TempPlayerStatsModule", true) then
+                        local freshStats = player:FindFirstChild("TempPlayerStatsModule", true)
+                        if freshStats then
+                            onStatsLoaded(freshStats)
+                        end
+                    end
+                end)
+                table.insert(lifePlayerConns[player], childConn)
+
+                local charConn = player.CharacterAdded:Connect(function()
+                    task.wait(0.3)
+                    updatePlayerTag(player)
+                end)
+                table.insert(lifePlayerConns[player], charConn)
+            end
+
+            for _, player in ipairs(Players:GetPlayers()) do
+                monitorPlayer(player)
+            end
+
+            local playerAddedConn = Players.PlayerAdded:Connect(function(player)
+                monitorPlayer(player)
+            end)
+            table.insert(lifeConns, playerAddedConn)
+
+            local playerRemovingConn = Players.PlayerRemoving:Connect(function(player)
+                cleanupPlayer(player)
+            end)
+            table.insert(lifeConns, playerRemovingConn)
+
+            local loopThread = task.spawn(function()
+                while lifeActive do
+                    for _, player in ipairs(Players:GetPlayers()) do
+                        updatePlayerTag(player)
+                    end
+                    task.wait(2)
+                end
+            end)
+            table.insert(lifeConns, loopThread)
+        else
+            for _, conn in ipairs(lifeConns) do
+                if typeof(conn) == "thread" then
+                    task.cancel(conn)
+                else
+                    conn:Disconnect()
+                end
+            end
+            table.clear(lifeConns)
+
+            for _, player in ipairs(Players:GetPlayers()) do
+                local char = player.Character
+                if char then
+                    local tag = char:FindFirstChild("CapsuleLifeTag", true)
+                    if tag then tag:Destroy() end
+                end
+                lifePlayerConns[player] = nil
+                lifeCachedStats[player] = nil
+            end
+            table.clear(lifePlayerConns)
+            table.clear(lifeCachedStats)
+        end
+    end)
+
     -- =========================================================================
     -- SECTION: HIGHLIGHT SETTINGS (Coluna Esquerda - Abaixo de Action Timers)
     -- =========================================================================
@@ -2273,7 +2517,38 @@ return function(env)
         end
     end)
 
-    -- 5. Door Progress Distance (slider posicionado como último elemento)
+    -- 5. Life Timer Origin (Novo Dropdown)
+    Library:CreateDropdown(Page, "Life Timer Origin", {"Head", "Torso", "Inferior"}, "Head", function(val)
+        lifeTimerOrigin = val
+        -- Atualiza dinamicamente as posições dos marcadores ativos se a toggle estiver ligada
+        if lifeActive then
+            for _, player in ipairs(Players:GetPlayers()) do
+                local char = player.Character
+                if char then
+                    local tag = char:FindFirstChild("CapsuleLifeTag", true)
+                    if tag then
+                        local targetPart, offset = nil, Vector3.new(0, 0, 0)
+                        if lifeTimerOrigin == "Head" then
+                            targetPart = char:FindFirstChild("Head")
+                            offset = Vector3.new(0, 0, 0)
+                        elseif lifeTimerOrigin == "Torso" then
+                            targetPart = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char:FindFirstChild("HumanoidRootPart")
+                            offset = Vector3.new(0, 0, 0)
+                        else
+                            targetPart = char:FindFirstChild("HumanoidRootPart")
+                            offset = Vector3.new(0, -3.2, 0)
+                        end
+                        if targetPart then
+                            tag.Parent = targetPart
+                            tag.StudsOffset = offset
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    -- 6. Door Progress Distance (slider posicionado como último elemento)
     Library:CreateSlider(Page, "Door progress distance", 30, 300, 150, function(val)
         doorMaxDistance = val
         for _, data in pairs(trackedNormalDoors) do
