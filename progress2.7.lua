@@ -21,10 +21,6 @@ return function(env)
     local globalOverlapParams = OverlapParams.new()
     globalOverlapParams.FilterType = Enum.RaycastFilterType.Include
 
-    -- Vars de Estado Ativo dos Toggles (Necessário para a troca instantânea de design)
-    local compProgressToggleActive = false
-    local doorProgressToggleActive = false
-
     -- Vars Beast Power
     local BeastPowerConnection1 = nil
     local BeastPowerConnection2 = nil
@@ -40,6 +36,7 @@ return function(env)
     local compHighlightEnabled = false
     local compOutlineEnabled = false
     local currentComputerStyle = "Default"
+    local setupComputer = nil -- Definido no escopo principal para ser chamado instantaneamente
 
     -- Vars Door Progress & Highlight Outlines
     local DoorProgLoop = nil
@@ -51,6 +48,7 @@ return function(env)
     local currentDoorStyle = "Default"
     local doorMaxDistance = 150
     local lastMap = nil
+    local setupNormalDoor = nil -- Definido no escopo principal para ser chamado instantaneamente
 
     -- Vars ExitDoor Progress & Highlight Outlines
     local ExitDoorConn = nil
@@ -101,1141 +99,1133 @@ return function(env)
     end)
 
     -- =========================================================================
-    -- INSTANT DESIGN SETUP SYSTEM (Modularizado fora dos Toggles para velocidade)
+    -- SECTION: ACTION TIMERS (Coluna Esquerda)
     -- =========================================================================
-    local function createProgressBar(parent)
-        if currentComputerStyle == "Default" or currentComputerStyle == "Style 1" then
-            local billboard = Instance.new("BillboardGui")
-            billboard.Name = "ProgressBar"
-            billboard.Adornee = parent
-            billboard.Size = UDim2.new(0, 80, 0, 26)
-            billboard.StudsOffset = Vector3.new(0, 2.5, 0)
-            billboard.AlwaysOnTop = true
-            billboard.Parent = parent
-
-            local background = Instance.new("Frame")
-            background.Name = "BgBar"
-            background.Size = UDim2.new(1, 0, 1, 0)
-            background.BackgroundTransparency = 1
-            background.BorderSizePixel = 0
-            background.Parent = billboard
-
-            local text = Instance.new("TextLabel")
-            text.Name = "ProgressText"
-            text.Size = UDim2.new(1, 0, 0, 14)
-            text.Position = UDim2.new(0, 0, 0, 0)
-            text.BackgroundTransparency = 1
-            text.TextColor3 = Color3.fromRGB(255, 255, 255)
-            text.TextSize = 12
-            text.Font = Enum.Font.GothamBold
-            text.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-            text.TextStrokeTransparency = 0
-            text.Text = "0.0%"
-            text.Parent = background
-
-            local track = Instance.new("Frame")
-            track.Name = "Track"
-            track.Size = UDim2.new(0, 70, 0, 6)
-            track.Position = UDim2.new(0.5, -35, 0, 16)
-            
-            if currentComputerStyle == "Default" then
-                track.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-            else
-                track.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-            end
-            
-            track.BorderSizePixel = 0
-            track.Parent = background
-
-            local trackCorner = Instance.new("UICorner")
-            trackCorner.CornerRadius = UDim.new(0, 2)
-            trackCorner.Parent = track
-
-            local trackStroke = Instance.new("UIStroke")
-            trackStroke.Thickness = 1
-            trackStroke.Color = Color3.fromRGB(0, 0, 0)
-            trackStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-            trackStroke.Parent = track
-
-            local bar = Instance.new("Frame")
-            bar.Name = "Bar"
-            bar.Size = UDim2.new(0, 0, 1, 0)
-            
-            if currentComputerStyle == "Default" then
-                bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
-            else
-                bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            end
-            
-            bar.BorderSizePixel = 0
-            bar.Parent = track
-
-            local barCorner = Instance.new("UICorner")
-            barCorner.CornerRadius = UDim.new(0, 2)
-            barCorner.Parent = bar
-
-            return billboard, bar, text
-        elseif currentComputerStyle == "Style 1" then
-            local billboard = Instance.new("BillboardGui")
-            billboard.Name = "ProgressBar"
-            billboard.Adornee = parent
-            billboard.Size = UDim2.new(0, 110, 0, 30)
-            billboard.StudsOffset = Vector3.new(0, 4.5, 0)
-            billboard.AlwaysOnTop = true
-            billboard.Parent = parent
-
-            local text = Instance.new("TextLabel")
-            text.Name = "ProgressText"
-            text.Size = UDim2.new(1, 0, 0, 20)
-            text.BackgroundTransparency = 1
-            text.TextColor3 = Color3.fromRGB(255, 255, 255)
-            text.TextStrokeTransparency = 0
-            text.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-            text.Font = Enum.Font.GothamBold
-            text.TextSize = 16
-            text.Text = "0%"
-            text.Parent = billboard
-
-            local bgBar = Instance.new("Frame")
-            bgBar.Name = "BackgroundBar"
-            bgBar.Size = UDim2.new(1, 0, 0, 6)
-            bgBar.Position = UDim2.new(0, 0, 1, -6)
-            bgBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-            bgBar.BorderSizePixel = 1
-            bgBar.BorderColor3 = Color3.fromRGB(0, 0, 0)
-            bgBar.Parent = billboard
-
-            local bar = Instance.new("Frame")
-            bar.Name = "Bar"
-            bar.Size = UDim2.new(0, 0, 1, 0)
-            bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            bar.BorderSizePixel = 0
-            bar.Parent = bgBar
-
-            return billboard, bar, text
-        else
-            local billboard = Instance.new("BillboardGui")
-            billboard.Name = "ProgressBar"
-            billboard.Adornee = parent
-            billboard.Size = UDim2.new(0, 120, 0, 12)
-            billboard.StudsOffset = Vector3.new(0, 4.2, 0)
-            billboard.AlwaysOnTop = true
-            billboard.Parent = parent
-
-            local background = Instance.new("Frame")
-            background.Name = "BgBar"
-            background.Size = UDim2.new(1, 0, 1, 0)
-            background.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-            background.BorderSizePixel = 2
-            background.BorderColor3 = Color3.fromRGB(255, 255, 255)
-            background.Parent = billboard
-
-            local bar = Instance.new("Frame")
-            bar.Name = "Bar"
-            bar.Size = UDim2.new(0, 0, 1, 0)
-            bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            bar.BorderSizePixel = 0
-            bar.Parent = background
-
-            local text = Instance.new("TextLabel")
-            text.Name = "ProgressText"
-            text.Size = UDim2.new(1, 0, 1, 0)
-            text.BackgroundTransparency = 1
-            text.TextColor3 = Color3.fromRGB(255, 255, 255)
-            text.TextStrokeTransparency = 0
-            text.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-            text.TextScaled = true
-            text.Font = Enum.Font.SciFi
-            text.Text = "0.0%"
-            text.Parent = background
-
-            return billboard, bar, text
-        end
-    end
-
-    local function setupComputer(tableModel)
-        if tableModel:FindFirstChild("ProgressBar") then return end
-
-        local billboard, bar, text = createProgressBar(tableModel)
-        
-        local highlight = tableModel:FindFirstChildOfClass("Highlight") or Instance.new("Highlight")
-        highlight.Name = "ComputerHighlight"
-        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
-        highlight.OutlineTransparency = 0
-        highlight.Enabled = compHighlightEnabled or compOutlineEnabled
-        highlight.Parent = tableModel
-
-        local screen = tableModel:FindFirstChild("Screen")
-        local triggers = {}
-        for _, child in ipairs(tableModel:GetChildren()) do
-            if child:IsA("BasePart") and child.Name:find("ComputerTrigger") then
-                table.insert(triggers, child)
-            end
-        end
-
-        local savedProgress = 0
-        local lastSize = -1
-
-        local updateInterval = 0.12 
-        local accumulatedTime = 0
-
-        local connection
-        connection = RunService.Heartbeat:Connect(function(dt)
-            accumulatedTime = accumulatedTime + dt
-            if accumulatedTime < updateInterval then return end
-            accumulatedTime = 0
-
-            if not tableModel or not tableModel.Parent or not bar or not text then
-                connection:Disconnect()
-                return
-            end
-
-            local isGreen = false
-            if screen and screen.Parent then
-                if screen.Color.G > screen.Color.R and screen.Color.G > screen.Color.B then
-                    isGreen = true
-                end
-            end
-
-            highlight.Enabled = compHighlightEnabled or compOutlineEnabled
-
-            if compOutlineEnabled then
-                highlight.FillTransparency = 1
-                highlight.OutlineTransparency = 0
-                if isGreen then
-                    highlight.OutlineColor = Color3.fromRGB(0, 255, 0)
-                else
-                    if screen then
-                        local color = screen.Color
-                        if color.R > color.G and color.R > color.B then
-                            highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
-                        else
-                            highlight.OutlineColor = Color3.fromRGB(0, 180, 255)
-                        end
-                    end
-                end
-            else
-                highlight.FillTransparency = 0.5
-                highlight.OutlineTransparency = 0
-                highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
-                if screen then
-                    highlight.FillColor = screen.Color
-                end
-            end
-
-            if isGreen then
-                savedProgress = 1
-            else
-                local highestTouch = 0
-                local characterParts = {}
-                
-                for i = 1, #cachedPlayersList do
-                    local char = cachedPlayersList[i].Character
-                    if char then
-                        table.insert(characterParts, char)
-                    end
-                end
-
-                if #characterParts > 0 then
-                    globalOverlapParams.FilterDescendantsInstances = characterParts
-                    for i = 1, #triggers do
-                        local part = triggers[i]
-                        if part and part.Parent then
-                            local touchingParts = Workspace:GetPartsInPart(part, globalOverlapParams)
-                            for j = 1, #touchingParts do
-                                local character = touchingParts[j].Parent
-                                local plr = Players:GetPlayerFromCharacter(character)
-                                if plr then
-                                    local tpsm = plr:FindFirstChild("TempPlayerStatsModule")
-                                    if tpsm then
-                                        local ragdoll = tpsm:FindFirstChild("Ragdoll")
-                                        local ap = tpsm:FindFirstChild("ActionProgress")
-                                        if ragdoll and typeof(ragdoll.Value) == "boolean" and not ragdoll.Value then
-                                            if ap and typeof(ap.Value) == "number" then
-                                                highestTouch = math.max(highestTouch, ap.Value)
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-                savedProgress = math.max(savedProgress, highestTouch)
-            end
-
-            if savedProgress ~= lastSize then
-                lastSize = savedProgress
-                local tweenInfo = TweenInfo.new(0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-                local tween = TweenService:Create(bar, tweenInfo, {Size = UDim2.new(savedProgress, 0, 1, 0)})
-                tween:Play()
-            end
-
-            if currentComputerStyle == "Default" then
-                if savedProgress >= 1 then
-                    bar.BackgroundColor3 = Color3.fromRGB(0, 255, 140)
-                    text.TextColor3 = Color3.fromRGB(0, 255, 140)
-                    text.Text = "COMPLETED"
-                else
-                    bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
-                    text.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    text.Text = string.format("%.1f%%", math.floor(savedProgress * 200 + 0.1) / 2)
-                end
-            elseif currentComputerStyle == "Style 1" then
-                if savedProgress >= 0.99 then
-                    bar.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
-                    text.TextColor3 = Color3.fromRGB(0, 255, 100)
-                    text.Text = "DONE"
-                else
-                    bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                    text.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    text.Text = string.format("%d%%", math.floor(savedProgress * 100))
-                end
-            else
-                if savedProgress >= 1 then
-                    bar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-                    text.Text = "COMPLETED"
-                else
-                    bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                    text.Text = string.format("%.1f%%", math.floor(savedProgress * 200 + 0.1) / 2)
-                end
-            end
-        end)
-        table.insert(CompProgConns, connection)
-    end
-
-    local function setupAllComputers()
-        local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
-        if currentMap and currentMap.Value ~= "" then
-            local mapName = tostring(currentMap.Value)
-            local map = Workspace:FindFirstChild(mapName)
-            if map then
-                local children = map:GetChildren()
-                for i = 1, #children do
-                    local obj = children[i]
-                    if obj.Name == "ComputerTable" then
-                        setupComputer(obj)
-                    end
-                end
-            end
-        end
-    end
-
-    local function createDoorHUD(parent)
-        if currentDoorStyle == "Default" then
-            local billboard = Instance.new("BillboardGui")
-            billboard.Name = "NormalDoorGUI"
-            billboard.Adornee = parent
-            billboard.Size = UDim2.new(0, 90, 0, 22) 
-            billboard.StudsOffset = Vector3.new(0, 1, 0)
-            billboard.AlwaysOnTop = true
-            billboard.MaxDistance = doorMaxDistance
-            billboard.Parent = parent
-            
-            local text = Instance.new("TextLabel")
-            text.Name = "PercentText"
-            text.Size = UDim2.new(1, 0, 0.55, 0)
-            text.Position = UDim2.new(0, 0, 0, 0)
-            text.BackgroundTransparency = 1
-            text.Text = "0.0%"
-            text.TextColor3 = Color3.fromRGB(205, 135, 25)
-            text.TextStrokeTransparency = 0.7
-            text.TextStrokeColor3 = Color3.new(0,0,0)
-            text.Font = Enum.Font.GothamMedium
-            text.TextScaled = true 
-            text.ZIndex = 6
-            text.Parent = billboard
-
-            local bgBar = Instance.new("Frame")
-            bgBar.Name = "BgBar"
-            bgBar.Size = UDim2.new(1, 0, 0.35, 0) 
-            bgBar.Position = UDim2.new(0, 0, 0.6, 0) 
-            bgBar.BackgroundColor3 = Color3.fromRGB(35, 30, 30)
-            bgBar.BackgroundTransparency = 0.3
-            bgBar.BorderSizePixel = 0
-            bgBar.ZIndex = 5
-            bgBar.Parent = billboard
-            
-            local fill = Instance.new("Frame")
-            fill.Name = "Fill"
-            fill.Size = UDim2.new(0, 0, 1, 0)
-            fill.BackgroundColor3 = Color3.fromRGB(205, 135, 25)
-            fill.BackgroundTransparency = 0.1
-            fill.BorderSizePixel = 0
-            fill.ZIndex = 6
-            fill.Parent = bgBar
-            
-            return billboard, fill, text, bgBar
-        elseif currentDoorStyle == "Style 1" then
-            local billboard = Instance.new("BillboardGui")
-            billboard.Name = "NormalDoorGUI"
-            billboard.Adornee = parent
-            billboard.Size = UDim2.fromOffset(90, 22)
-            billboard.StudsOffsetWorldSpace = Vector3.new(0, 0, 0.1)
-            billboard.AlwaysOnTop = true
-            billboard.MaxDistance = doorMaxDistance
-            billboard.Parent = parent
-
-            local text = Instance.new("TextLabel")
-            text.Name = "PercentText"
-            text.Size = UDim2.new(1, 0, 0.45, 0)
-            text.BackgroundTransparency = 1
-            text.Text = "0.0%"
-            text.TextColor3 = Color3.fromRGB(255, 210, 140)
-            text.TextStrokeTransparency = 0.6
-            text.Font = Enum.Font.GothamMedium
-            text.TextScaled = true
-            text.ZIndex = 6
-            text.Parent = billboard
-
-            local bgBar = Instance.new("Frame")
-            bgBar.Name = "BgBar"
-            bgBar.Size = UDim2.new(1, 0, 0.35, 0)
-            bgBar.Position = UDim2.new(0, 0, 0.6, 0)
-            bgBar.BackgroundColor3 = Color3.fromRGB(25, 15, 5)
-            bgBar.BackgroundTransparency = 0.5
-            bgBar.BorderSizePixel = 0
-            bgBar.ZIndex = 5
-            bgBar.Parent = billboard
-
-            local fill = Instance.new("Frame")
-            fill.Name = "Fill"
-            fill.Size = UDim2.new(0, 0, 1, 0)
-            fill.BackgroundColor3 = Color3.fromRGB(170, 100, 40)
-            fill.BorderSizePixel = 0
-            fill.ZIndex = 6
-            fill.Parent = bgBar
-
-            return billboard, fill, text, bgBar
-        else
-            local billboard = Instance.new("BillboardGui")
-            billboard.Name = "NormalDoorGUI"
-            billboard.Adornee = parent
-            billboard.Size = UDim2.new(0, 100, 0, 40) 
-            billboard.StudsOffset = Vector3.new(0, 0, 0)
-            billboard.AlwaysOnTop = true
-            billboard.MaxDistance = doorMaxDistance
-            billboard.Parent = parent
-
-            local text = Instance.new("TextLabel")
-            text.Name = "PercentText"
-            text.Size = UDim2.new(1, 0, 0, 15)
-            text.Position = UDim2.new(0, 0, 0.3, 0)
-            text.BackgroundTransparency = 1
-            text.Text = "CLOSE"
-            text.TextColor3 = Color3.fromRGB(255, 0, 0)
-            text.TextStrokeTransparency = 0.8
-            text.TextStrokeColor3 = Color3.new(0,0,0)
-            text.Font = Enum.Font.GothamBold
-            text.TextSize = 13
-            text.ZIndex = 5
-            text.Parent = billboard
-
-            local bgBar = Instance.new("Frame")
-            bgBar.Name = "BgBar"
-            bgBar.Size = UDim2.new(0.8, 0, 0, 6)
-            bgBar.Position = UDim2.new(0.1, 0, 0.7, 0)
-            bgBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-            bgBar.BorderSizePixel = 1
-            bgBar.Visible = false
-            bgBar.ZIndex = 5
-            bgBar.Parent = billboard
-
-            local fill = Instance.new("Frame")
-            fill.Name = "Fill"
-            fill.Size = UDim2.new(0, 0, 1, 0)
-            fill.BackgroundColor3 = Color3.fromRGB(255, 255, 0)
-            fill.BorderSizePixel = 0
-            fill.ZIndex = 6
-            fill.Parent = bgBar
-
-            return billboard, fill, text, bgBar
-        end
-    end
-
-    local function setupNormalDoor(doorModel)
-        if trackedNormalDoors[doorModel] then return end
-        
-        local DT_CONFIG = { 
-            DOOR_NAMES = {["SingleDoor"]=true,["DoubleDoor"]=true,["SlidingDoor"]=true}, 
-            BLACKLIST = {["ExitDoor"]=true,["Decorative"]=true,["FakeDoor"]=true,["ElevatorDoor"]=true, ["Closet"]=false} 
-        }
-        if DT_CONFIG.BLACKLIST[doorModel.Name] then return end
-        
-        local name = doorModel.Name
-        if string.find(name, "Exit", 1, true) or string.find(name, "Decor", 1, true) then return end
-        
-        local anchorPart = nil
-        local explicitDoor = doorModel:FindFirstChild("Door") or doorModel:FindFirstChild("Left") or doorModel:FindFirstChild("Right")
-        if explicitDoor and explicitDoor:IsA("BasePart") then 
-            anchorPart = explicitDoor 
-        else
-            local biggestPart = nil
-            local maxVolume = 0
-            local descendants = doorModel:GetDescendants()
-            for i = 1, #descendants do
-                local part = descendants[i]
-                if part:IsA("BasePart") then
-                    local pName = part.Name
-                    if not string.find(pName, "Frame", 1, true) and not string.find(pName, "Wall", 1, true) and part.Transparency < 1 then
-                        local size = part.Size
-                        local v = size.X * size.Y * size.Z
-                        if v > maxVolume then 
-                            maxVolume = v
-                            biggestPart = part 
-                        end
-                    end
-                end
-            end
-            anchorPart = biggestPart or doorModel.PrimaryPart
-        end
-        if not anchorPart then return end
-        
-        if anchorPart:FindFirstChild("NormalDoorGUI") then anchorPart.NormalDoorGUI:Destroy() end
-        
-        local billboard, bar, text, bgBar = createDoorHUD(anchorPart)
-        
-        local highlight = doorModel:FindFirstChild("NormalDoorESP")
-        if not highlight then
-            highlight = Instance.new("Highlight")
-            highlight.Name = "NormalDoorESP"
-            highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
-            highlight.OutlineTransparency = 0 
-            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-            highlight.Parent = doorModel
-        end
-        highlight.Enabled = doorHighlightEnabled or doorOutlineEnabled
-        
-        trackedNormalDoors[doorModel] = { 
-            Model = doorModel, 
-            Anchor = anchorPart, 
-            InitialCFrame = anchorPart.CFrame, 
-            Billboard = billboard, 
-            Bar = bar, 
-            Text = text,
-            BgBar = bgBar,
-            Highlight = highlight,
-            LastState = "Closed",
-            LastProgress = -1
-        }
-    end
-
-    local function setupAllNormalDoors()
-        local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
-        local mapName = currentMap and tostring(currentMap.Value) or ""
-        if mapName ~= "" then
-            lastMap = mapName
-            local map = Workspace:FindFirstChild(mapName)
-            if map then
-                local mapChildren = map:GetChildren()
-                for i = 1, #mapChildren do
-                    local obj = mapChildren[i]
-                    if obj:IsA("Model") and (obj.Name == "SingleDoor" or obj.Name == "DoubleDoor" or obj.Name == "SlidingDoor") then 
-                        setupNormalDoor(obj) 
-                    end
-                end
-            end
-        end
-    end
-
-    local function cleanupNormalDoors()
-        if doorAddedConn then doorAddedConn:Disconnect(); doorAddedConn = nil end
-        for doorModel, data in pairs(trackedNormalDoors) do
-            if data.Billboard then data.Billboard:Destroy() end
-            if data.Highlight then data.Highlight:Destroy() end
-        end
-        table.clear(trackedNormalDoors)
-    end
-
-    -- =========================================================================
-    -- CONFIGURAÇÃO DOS TOGGLES E ELEMENTOS DA UI
-    -- =========================================================================
-
+    Library:CreateSection(Page, "Action Timers")
+    
     -- 1. Computer Progress
     Library:CreateToggle(Page, "Computer Progress", false, function(state)
-        compProgressToggleActive = state
-        if state then
-            setupAllComputers()
-            CompProgLoop = task.spawn(function()
-                while compProgressToggleActive do
-                    local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
-                    if currentMap and currentMap.Value ~= "" then
-                        local mapName = tostring(currentMap.Value)
-                        local map = Workspace:FindFirstChild(mapName)
-                        if map then
-                            local children = map:GetChildren()
-                            for i = 1, #children do
-                                local obj = children[i]
-                                if obj.Name == "ComputerTable" then
-                                    setupComputer(obj)
-                                end
-                                if i % 10 == 0 then task.wait() end
-                            end
+        task.defer(function()
+            if state then
+                local function createProgressBar(parent)
+                    if currentComputerStyle == "Default" or currentComputerStyle == "Style 1" then
+                        local billboard = Instance.new("BillboardGui")
+                        billboard.Name = "ProgressBar"
+                        billboard.Adornee = parent
+                        billboard.Size = UDim2.new(0, 80, 0, 26)
+                        billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+                        billboard.AlwaysOnTop = true
+                        billboard.Parent = parent
+
+                        local background = Instance.new("Frame")
+                        background.Name = "BgBar"
+                        background.Size = UDim2.new(1, 0, 1, 0)
+                        background.BackgroundTransparency = 1
+                        background.BorderSizePixel = 0
+                        background.Parent = billboard
+
+                        local text = Instance.new("TextLabel")
+                        text.Name = "ProgressText"
+                        text.Size = UDim2.new(1, 0, 0, 14)
+                        text.Position = UDim2.new(0, 0, 0, 0)
+                        text.BackgroundTransparency = 1
+                        text.TextColor3 = Color3.fromRGB(255, 255, 255)
+                        text.TextSize = 12
+                        text.Font = Enum.Font.GothamBold
+                        text.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                        text.TextStrokeTransparency = 0
+                        text.Text = "0.0%"
+                        text.Parent = background
+
+                        local track = Instance.new("Frame")
+                        track.Name = "Track"
+                        track.Size = UDim2.new(0, 70, 0, 6)
+                        track.Position = UDim2.new(0.5, -35, 0, 16)
+                        
+                        if currentComputerStyle == "Default" then
+                            track.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+                        else
+                            track.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
                         end
+                        
+                        track.BorderSizePixel = 0
+                        track.Parent = background
+
+                        local trackCorner = Instance.new("UICorner")
+                        trackCorner.CornerRadius = UDim.new(0, 2)
+                        trackCorner.Parent = track
+
+                        local trackStroke = Instance.new("UIStroke")
+                        trackStroke.Thickness = 1
+                        trackStroke.Color = Color3.fromRGB(0, 0, 0)
+                        trackStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+                        trackStroke.Parent = track
+
+                        local bar = Instance.new("Frame")
+                        bar.Name = "Bar"
+                        bar.Size = UDim2.new(0, 0, 1, 0)
+                        
+                        if currentComputerStyle == "Default" then
+                            bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+                        else
+                            bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                        end
+                        
+                        bar.BorderSizePixel = 0
+                        bar.Parent = track
+
+                        local barCorner = Instance.new("UICorner")
+                        barCorner.CornerRadius = UDim.new(0, 2)
+                        barCorner.Parent = bar
+
+                        return billboard, bar, text
+                    elseif currentComputerStyle == "Style 1" then
+                        local billboard = Instance.new("BillboardGui")
+                        billboard.Name = "ProgressBar"
+                        billboard.Adornee = parent
+                        billboard.Size = UDim2.new(0, 110, 0, 30)
+                        billboard.StudsOffset = Vector3.new(0, 4.5, 0)
+                        billboard.AlwaysOnTop = true
+                        billboard.Parent = parent
+
+                        local text = Instance.new("TextLabel")
+                        text.Name = "ProgressText"
+                        text.Size = UDim2.new(1, 0, 0, 20)
+                        text.BackgroundTransparency = 1
+                        text.TextColor3 = Color3.fromRGB(255, 255, 255)
+                        text.TextStrokeTransparency = 0
+                        text.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                        text.Font = Enum.Font.GothamBold
+                        text.TextSize = 16
+                        text.Text = "0%"
+                        text.Parent = billboard
+
+                        local bgBar = Instance.new("Frame")
+                        bgBar.Name = "BackgroundBar"
+                        bgBar.Size = UDim2.new(1, 0, 0, 6)
+                        bgBar.Position = UDim2.new(0, 0, 1, -6)
+                        bgBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+                        bgBar.BorderSizePixel = 1
+                        bgBar.BorderColor3 = Color3.fromRGB(0, 0, 0)
+                        bgBar.Parent = billboard
+
+                        local bar = Instance.new("Frame")
+                        bar.Name = "Bar"
+                        bar.Size = UDim2.new(0, 0, 1, 0)
+                        bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                        bar.BorderSizePixel = 0
+                        bar.Parent = bgBar
+
+                        return billboard, bar, text
+                    else
+                        local billboard = Instance.new("BillboardGui")
+                        billboard.Name = "ProgressBar"
+                        billboard.Adornee = parent
+                        billboard.Size = UDim2.new(0, 120, 0, 12)
+                        billboard.StudsOffset = Vector3.new(0, 4.2, 0)
+                        billboard.AlwaysOnTop = true
+                        billboard.Parent = parent
+
+                        local background = Instance.new("Frame")
+                        background.Name = "BgBar"
+                        background.Size = UDim2.new(1, 0, 1, 0)
+                        background.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+                        background.BorderSizePixel = 2
+                        background.BorderColor3 = Color3.fromRGB(255, 255, 255)
+                        background.Parent = billboard
+
+                        local bar = Instance.new("Frame")
+                        bar.Name = "Bar"
+                        bar.Size = UDim2.new(0, 0, 1, 0)
+                        bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                        bar.BorderSizePixel = 0
+                        bar.Parent = background
+
+                        local text = Instance.new("TextLabel")
+                        text.Name = "ProgressText"
+                        text.Size = UDim2.new(1, 0, 1, 0)
+                        text.BackgroundTransparency = 1
+                        text.TextColor3 = Color3.fromRGB(255, 255, 255)
+                        text.TextStrokeTransparency = 0
+                        text.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                        text.TextScaled = true
+                        text.Font = Enum.Font.SciFi
+                        text.Text = "0.0%"
+                        text.Parent = background
+
+                        return billboard, bar, text
                     end
-                    task.wait(1.5)
                 end
-            end)
-        else
-            if CompProgLoop then task.cancel(CompProgLoop); CompProgLoop = nil end
-            for _, c in ipairs(CompProgConns) do 
-                if c then c:Disconnect() end 
-            end
-            table.clear(CompProgConns)
-            for _, obj in ipairs(Workspace:GetDescendants()) do
-                if obj.Name == "ProgressBar" and obj:IsA("BillboardGui") then obj:Destroy() end
-                if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then obj:Destroy() end
-            end
-        end
-    end)
-    
-    -- 2. Door Progress
-    Library:CreateToggle(Page, "Door Progress", false, function(state)
-        doorProgressToggleActive = state
-        if state then
-            setupAllNormalDoors()
-            
-            DoorProgLoop = task.spawn(function()
-                while doorProgressToggleActive do
-                    local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
-                    local mapName = currentMap and tostring(currentMap.Value) or ""
+
+                setupComputer = function(tableModel)
+                    if tableModel:FindFirstChild("ProgressBar") then return end
+
+                    local billboard, bar, text = createProgressBar(tableModel)
                     
-                    if mapName ~= "" and lastMap ~= mapName then
-                        lastMap = mapName
-                        cleanupNormalDoors()
-                        setupAllNormalDoors()
-                        
-                        local map = Workspace:FindFirstChild(mapName)
-                        if map then
-                            doorAddedConn = map.DescendantAdded:Connect(function(obj)
-                                if obj:IsA("Model") and (obj.Name == "SingleDoor" or obj.Name == "DoubleDoor" or obj.Name == "SlidingDoor") then 
-                                    task.defer(setupNormalDoor, obj)
-                                end
-                            end)
+                    local highlight = tableModel:FindFirstChildOfClass("Highlight") or Instance.new("Highlight")
+                    highlight.Name = "ComputerHighlight"
+                    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
+                    highlight.OutlineTransparency = 0
+                    highlight.Enabled = compHighlightEnabled or compOutlineEnabled
+                    highlight.Parent = tableModel
+
+                    local screen = tableModel:FindFirstChild("Screen")
+                    local triggers = {}
+                    for _, child in ipairs(tableModel:GetChildren()) do
+                        if child:IsA("BasePart") and child.Name:find("ComputerTrigger") then
+                            table.insert(triggers, child)
                         end
-                    elseif mapName == "" and lastMap ~= "" then
-                        lastMap = ""
-                        cleanupNormalDoors()
                     end
-                    task.wait(1.5)
-                end
-            end)
 
-            local accum = 0
-            local currentDoorInteractions = {}
+                    local savedProgress = 0
+                    local lastSize = -1
 
-            DoorProgHeartbeat = RunService.Heartbeat:Connect(function(dt)
-                accum = accum + dt
-                if accum < 0.1 then return end
-                accum = 0
-                
-                table.clear(currentDoorInteractions)
+                    local updateInterval = 0.12 
+                    local accumulatedTime = 0
 
-                for i = 1, #cachedPlayersList do
-                    local player = cachedPlayersList[i]
-                    local stats = player:FindFirstChild("TempPlayerStatsModule")
-                    if stats then
-                        local action = stats:FindFirstChild("ActionProgress")
-                        local isRagdolled = stats:FindFirstChild("Ragdoll")
-                        
-                        if action and action.Value > 0 then
-                            local playerFallen = false
-                            if isRagdolled and isRagdolled:IsA("BoolValue") then
-                                playerFallen = isRagdolled.Value
+                    local connection
+                    connection = RunService.Heartbeat:Connect(function(dt)
+                        accumulatedTime = accumulatedTime + dt
+                        if accumulatedTime < updateInterval then return end
+                        accumulatedTime = 0
+
+                        if not tableModel or not tableModel.Parent or not bar or not text then
+                            connection:Disconnect()
+                            return
+                        end
+
+                        local isGreen = false
+                        if screen and screen.Parent then
+                            if screen.Color.G > screen.Color.R and screen.Color.G > screen.Color.B then
+                                isGreen = true
                             end
+                        end
+
+                        highlight.Enabled = compHighlightEnabled or compOutlineEnabled
+
+                        if compOutlineEnabled then
+                            highlight.FillTransparency = 1
+                            highlight.OutlineTransparency = 0
+                            if isGreen then
+                                highlight.OutlineColor = Color3.fromRGB(0, 255, 0)
+                            else
+                                if screen then
+                                    local color = screen.Color
+                                    if color.R > color.G and color.R > color.B then
+                                        highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+                                    else
+                                        highlight.OutlineColor = Color3.fromRGB(0, 180, 255)
+                                    end
+                                end
+                            end
+                        else
+                            highlight.FillTransparency = 0.5
+                            highlight.OutlineTransparency = 0
+                            highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
+                            if screen then
+                                highlight.FillColor = screen.Color
+                            end
+                        end
+
+                        if isGreen then
+                            savedProgress = 1
+                        else
+                            local highestTouch = 0
+                            local characterParts = {}
                             
-                            if not playerFallen then
-                                local char = player.Character
-                                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                                
-                                if hrp then
-                                    local closestDoor = nil
-                                    local minDistanceSq = 225
-                                    local hrpPos = hrp.Position
-                                    
-                                    for doorModel, data in pairs(trackedNormalDoors) do
-                                        if data.Anchor and data.Anchor.Parent then
-                                            local anchorPos = data.Anchor.Position
-                                            local dx = anchorPos.X - hrpPos.X
-                                            local dy = anchorPos.Y - hrpPos.Y
-                                            local dz = anchorPos.Z - hrpPos.Z
-                                            local distSq = dx*dx + dy*dy + dz*dz
-                                            
-                                            if distSq < minDistanceSq then
-                                                minDistanceSq = distSq
-                                                closestDoor = doorModel
-                                            end
-                                        end
-                                    end
-                                    
-                                    if closestDoor then
-                                        local rawVal = action.Value
-                                        local progress = (rawVal > 1) and (rawVal / 100) or rawVal 
-                                        
-                                        local currentMax = currentDoorInteractions[closestDoor] or 0
-                                        currentDoorInteractions[closestDoor] = math.max(currentMax, progress)
-                                    end
+                            for i = 1, #cachedPlayersList do
+                                local char = cachedPlayersList[i].Character
+                                if char then
+                                    table.insert(characterParts, char)
                                 end
                             end
-                        end
-                    end
-                end
-                
-                local cam = Workspace.CurrentCamera
-                local camPos = cam and cam.CFrame.Position or Vector3.new(0, 0, 0)
 
-                for doorModel, data in pairs(trackedNormalDoors) do
-                    if not doorModel.Parent or not data.Anchor or not data.Anchor.Parent then
-                        if data.Billboard then data.Billboard:Destroy() end
-                        if data.Highlight then data.Highlight:Destroy() end
-                        trackedNormalDoors[doorModel] = nil
-                        continue
-                    end
-
-                    local anchorPos = data.Anchor.Position
-                    local dx = anchorPos.X - camPos.X
-                    local dy = anchorPos.Y - camPos.Y
-                    local dz = anchorPos.Z - camPos.Z
-                    local distSq = dx*dx + dy*dy + dz*dz
-                    local dist = math.sqrt(distSq)
-
-                    if dist > doorMaxDistance then
-                        if data.Billboard.Enabled then
-                            data.Billboard.Enabled = false
-                            data.Highlight.Enabled = false
-                        end
-                        continue
-                    else
-                        data.Billboard.Enabled = true
-                        data.Highlight.Enabled = doorHighlightEnabled or doorOutlineEnabled
-                    end
-
-                    local currentCF = data.Anchor.CFrame
-                    local initialPos = data.InitialCFrame.Position
-                    local currentPos = currentCF.Position
-                    
-                    local mx = currentPos.X - initialPos.X
-                    local my = currentPos.Y - initialPos.Y
-                    local mz = currentPos.Z - initialPos.Z
-                    local distMovedSq = mx*mx + my*my + mz*mz
-                    
-                    local dot = currentCF.LookVector:Dot(data.InitialCFrame.LookVector)
-                    
-                    if data.Anchor.CanCollide == true then
-                        if dot < 0.9 or distMovedSq > 0.25 then
-                            data.InitialCFrame = currentCF
-                            dot = 1
-                            distMovedSq = 0
-                        end
-                    end
-
-                    local isPhysicallyOpen = false
-                    if not data.Anchor.CanCollide or dot < 0.85 or distMovedSq > 0.25 or data.Anchor.Transparency > 0.8 then
-                        isPhysicallyOpen = true
-                    end
-                    
-                    local interactionVal = currentDoorInteractions[doorModel] or 0
-
-                    if doorOutlineEnabled then
-                        data.Highlight.FillTransparency = 1
-                        data.Highlight.OutlineTransparency = 0
-                        if isPhysicallyOpen then
-                            data.Highlight.OutlineColor = Color3.fromRGB(0, 255, 100)
-                        elseif interactionVal > 0.001 then
-                            data.Highlight.OutlineColor = Color3.fromRGB(255, 200, 0)
-                        else
-                            data.Highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
-                        end
-                    else
-                        data.Highlight.FillTransparency = 0.55
-                        data.Highlight.OutlineTransparency = 0
-                        data.Highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
-                        if isPhysicallyOpen then
-                            data.Highlight.FillColor = Color3.fromRGB(0, 255, 100)
-                        elseif interactionVal > 0.001 then
-                            data.Highlight.FillColor = Color3.fromRGB(255, 200, 0)
-                        else
-                            data.Highlight.FillColor = Color3.fromRGB(255, 0, 0)
-                        end
-                    end
-
-                    if currentDoorStyle == "Default" or currentDoorStyle == "Style 1" then
-                        local baseColor = (currentDoorStyle == "Default") and Color3.fromRGB(205, 135, 25) or Color3.fromRGB(255, 210, 140)
-                        local barColor = (currentDoorStyle == "Default") and Color3.fromRGB(205, 135, 25) or Color3.fromRGB(170, 100, 40)
-
-                        if isPhysicallyOpen then
-                            if data.LastState ~= "Open" then
-                                data.LastState = "Open"
-                                data.Bar.Size = UDim2.new(1, 0, 1, 0)
-                                data.Bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                                data.Text.TextColor3 = Color3.fromRGB(255, 255, 255)
-                                data.Text.Text = "100.0%"
-                            end
-                        elseif interactionVal > 0.001 then 
-                            if data.LastState ~= "Opening" or math.abs(data.LastProgress - interactionVal) > 0.005 then
-                                data.LastState = "Opening"
-                                data.LastProgress = interactionVal
-                                data.Bar.Size = UDim2.new(math.clamp(interactionVal, 0, 1), 0, 1, 0)
-                                data.Bar.BackgroundColor3 = barColor
-                                data.Text.TextColor3 = baseColor
-                                data.Text.Text = string.format("%.1f%%", interactionVal * 100)
-                            end
-                        else
-                            if data.LastState ~= "Closed" then
-                                data.LastState = "Closed"
-                                data.Bar.Size = UDim2.new(0, 0, 1, 0)
-                                data.Bar.BackgroundColor3 = barColor
-                                data.Text.TextColor3 = baseColor
-                                data.Text.Text = "0.0%"
-                            end
-                        end
-                    else
-                        local COLORS_STYLE2 = {
-                            CLOSE = Color3.fromRGB(255, 0, 0),
-                            OPENING = Color3.fromRGB(255, 255, 0),
-                            OPEN = Color3.fromRGB(0, 255, 100)
-                        }
-
-                        if isPhysicallyOpen then
-                            if data.LastState ~= "Open" then
-                                data.LastState = "Open"
-                                data.Text.Text = "OPEN"
-                                data.Text.TextColor3 = COLORS_STYLE2.OPEN
-                                data.BgBar.Visible = false
-                            end
-                        elseif interactionVal > 0.05 then 
-                            data.LastState = "Opening"
-                            data.Text.Text = "OPENING"
-                            data.Text.TextColor3 = COLORS_STYLE2.OPENING
-                            data.BgBar.Visible = true
-                            data.Bar.Size = UDim2.new(math.clamp(interactionVal, 0, 1), 0, 1, 0)
-                        else
-                            if data.LastState ~= "Closed" then
-                                data.LastState = "Closed"
-                                data.Text.Text = "CLOSE"
-                                data.Text.TextColor3 = COLORS_STYLE2.CLOSE
-                                data.BgBar.Visible = false
-                            end
-                        end
-                    end
-                end
-            end)
-        else
-            if DoorProgLoop then task.cancel(DoorProgLoop); DoorProgLoop = nil end
-            if DoorProgHeartbeat then DoorProgHeartbeat:Disconnect(); DoorProgHeartbeat = nil end
-            cleanupNormalDoors()
-        end
-    end)
-    
-    -- 3. ExitDoor Progress
-    Library:CreateToggle(Page, "ExitDoor Progress", false, function(state)
-        if state then
-            local guiName = "FTF_ExitDoorESP_Premium"
-            local targetGuiParent = (pcall(function() return CoreGui end) and CoreGui) or LocalPlayer:WaitForChild("PlayerGui")
-            
-            if targetGuiParent:FindFirstChild(guiName) then
-                targetGuiParent[guiName]:Destroy()
-            end
-
-            local folder = Instance.new("Folder")
-            folder.Name = guiName
-            folder.Parent = targetGuiParent
-
-            local function getPlayerProgress(plr)
-                local actionVal = actionValCache[plr]
-                if not actionVal or not actionVal.Parent then
-                    actionVal = plr:FindFirstChild("ActionProgress", true)
-                    if actionVal and actionVal:IsA("NumberValue") then
-                        actionValCache[plr] = actionVal
-                    else
-                        actionValCache[plr] = nil
-                    end
-                end
-                
-                if actionVal then
-                    return actionVal.Value
-                end
-                
-                return 0
-            end
-
-            ExitDoorRemoving = Players.PlayerRemoving:Connect(function(plr)
-                actionValCache[plr] = nil
-            end)
-
-            local function registerExitDoor(door)
-                if trackedExitDoors[door] then return end 
-                
-                local mainPart = door.PrimaryPart
-                if not mainPart then
-                    local descendants = door:GetDescendants()
-                    for i = 1, #descendants do
-                        local p = descendants[i]
-                        if p:IsA("BasePart") and p.Transparency < 1 then
-                            mainPart = p
-                            break
-                        end
-                    end
-                    if not mainPart then
-                        mainPart = door:FindFirstChildWhichIsA("BasePart")
-                    end
-                end
-                if not mainPart then return end
-
-                local doorParts = {}
-                local lightParts = {}
-                
-                local descendants = door:GetDescendants()
-                for i = 1, #descendants do
-                    local part = descendants[i]
-                    if part:IsA("BasePart") then
-                        table.insert(doorParts, part)
-                        local lowerName = string.lower(part.Name)
-                        if string.find(lowerName, "light", 1, true) or string.find(lowerName, "screen", 1, true) then
-                            table.insert(lightParts, part)
-                        end
-                    end
-                end
-
-                local highlight = Instance.new("Highlight")
-                highlight.Name = "ExitDoorHighlight"
-                highlight.Adornee = door
-                highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
-                highlight.OutlineTransparency = 0
-                highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                highlight.Enabled = exitHighlightEnabled or exitOutlineEnabled
-                highlight.Parent = folder
-
-                local bgui = Instance.new("BillboardGui")
-                bgui.Name = "UI"
-                bgui.Size = UDim2.new(0, 140, 0, 45) 
-                bgui.StudsOffset = Vector3.new(0, 5, 0)
-                bgui.AlwaysOnTop = true
-                bgui.Adornee = mainPart
-                bgui.Parent = folder
-                
-                local txt = Instance.new("TextLabel", bgui)
-                txt.Name = "Text"
-                txt.Size = UDim2.new(1, 0, 0.6, 0)
-                txt.Position = UDim2.new(0, 0, 0, 0)
-                txt.BackgroundTransparency = 1
-                txt.Text = "EXIT"
-                txt.TextColor3 = Color3.fromRGB(255, 255, 255)
-                txt.Font = Enum.Font.GothamBlack
-                txt.TextSize = 13
-                txt.TextStrokeTransparency = 0 
-                txt.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-                
-                local barBg = Instance.new("Frame", bgui)
-                barBg.Name = "BarBg"
-                barBg.Size = UDim2.new(0.8, 0, 0, 6) 
-                barBg.Position = UDim2.new(0.1, 0, 0.7, 0) 
-                barBg.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-                barBg.BackgroundTransparency = 0.4
-                barBg.BorderSizePixel = 0
-                
-                local bgCorner = Instance.new("UICorner", barBg)
-                bgCorner.CornerRadius = UDim.new(1, 0)
-                
-                local bgStroke = Instance.new("UIStroke", barBg)
-                bgStroke.Color = Color3.fromRGB(0, 0, 0)
-                bgStroke.Thickness = 1.2
-                bgStroke.Transparency = 0.2
-                
-                local fill = Instance.new("Frame", barBg)
-                fill.Name = "Fill"
-                fill.Size = UDim2.new(0, 0, 1, 0)
-                fill.BackgroundColor3 = Color3.fromRGB(255, 160, 20) 
-                fill.BorderSizePixel = 0
-                
-                local fillCorner = Instance.new("UICorner", fill)
-                fillCorner.CornerRadius = UDim.new(1, 0)
-                
-                trackedExitDoors[door] = {
-                    UI = bgui,
-                    Highlight = highlight,
-                    Progress = 0,
-                    Completed = false,
-                    MainPart = mainPart,
-                    DoorParts = doorParts,
-                    LightParts = lightParts,
-                    TextElement = txt,
-                    FillElement = fill
-                }
-            end
-
-            task.spawn(function()
-                local workspaceDescendants = workspace:GetDescendants()
-                for i = 1, #workspaceDescendants do
-                    local obj = workspaceDescendants[i]
-                    if obj.Name == "ExitDoor" and obj:IsA("Model") then
-                        registerExitDoor(obj)
-                    end
-                    if i % 40 == 0 then task.wait() end
-                end
-            end)
-
-            ExitDoorAdded = workspace.DescendantAdded:Connect(function(obj)
-                if obj.Name == "ExitDoor" and obj:IsA("Model") then
-                    task.defer(function()
-                        registerExitDoor(obj)
-                    end)
-                end
-            end)
-
-            ExitDoorConn = task.spawn(function()
-                while state and task.wait(0.15) do 
-                    local openingNow = {}
-
-                    for i = 1, #cachedPlayersList do
-                        local plr = cachedPlayersList[i]
-                        local char = plr.Character
-                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                        
-                        if hrp then
-                            local playerFallen = false
-                            local stats = plr:FindFirstChild("TempPlayerStatsModule")
-                            if stats then
-                                    local ragdoll = stats:FindFirstChild("Ragdoll")
-                                    if ragdoll and ragdoll:IsA("BoolValue") and ragdoll.Value == true then
-                                        playerFallen = true
-                                    end
-                            end
-                            
-                            if not playerFallen then
-                                local currentProgress = getPlayerProgress(plr)
-                                
-                                if currentProgress > 0 then
-                                    local plrPos = hrp.Position
-                                    local closestDoor = nil
-                                    local minDist = 5 
-                                    
-                                    for door, data in pairs(trackedExitDoors) do
-                                        if door.Parent then
-                                            local parts = data.DoorParts
-                                            for j = 1, #parts do
-                                                local part = parts[j]
-                                                if part.Parent then
-                                                    local dist = (part.Position - plrPos).Magnitude
-                                                    if dist < minDist then
-                                                        minDist = dist
-                                                        closestDoor = door
+                            if #characterParts > 0 then
+                                globalOverlapParams.FilterDescendantsInstances = characterParts
+                                for i = 1, #triggers do
+                                    local part = triggers[i]
+                                    if part and part.Parent then
+                                        local touchingParts = Workspace:GetPartsInPart(part, globalOverlapParams)
+                                        for j = 1, #touchingParts do
+                                            local character = touchingParts[j].Parent
+                                            local plr = Players:GetPlayerFromCharacter(character)
+                                            if plr then
+                                                local tpsm = plr:FindFirstChild("TempPlayerStatsModule")
+                                                if tpsm then
+                                                    local ragdoll = tpsm:FindFirstChild("Ragdoll")
+                                                    local ap = tpsm:FindFirstChild("ActionProgress")
+                                                    if ragdoll and typeof(ragdoll.Value) == "boolean" and not ragdoll.Value then
+                                                        if ap and typeof(ap.Value) == "number" then
+                                                            highestTouch = math.max(highestTouch, ap.Value)
+                                                        end
                                                     end
                                                 end
                                             end
                                         end
                                     end
+                                end
+                            end
+                            savedProgress = math.max(savedProgress, highestTouch)
+                        end
+
+                        if savedProgress ~= lastSize then
+                            lastSize = savedProgress
+                            local tweenInfo = TweenInfo.new(0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+                            local tween = TweenService:Create(bar, tweenInfo, {Size = UDim2.new(savedProgress, 0, 1, 0)})
+                            tween:Play()
+                        end
+
+                        if currentComputerStyle == "Default" then
+                            if savedProgress >= 1 then
+                                bar.BackgroundColor3 = Color3.fromRGB(0, 255, 140)
+                                text.TextColor3 = Color3.fromRGB(0, 255, 140)
+                                text.Text = "COMPLETED"
+                            else
+                                bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+                                text.TextColor3 = Color3.fromRGB(255, 255, 255)
+                                text.Text = string.format("%.1f%%", math.floor(savedProgress * 200 + 0.1) / 2)
+                            end
+                        elseif currentComputerStyle == "Style 1" then
+                            if savedProgress >= 0.99 then
+                                bar.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+                                text.TextColor3 = Color3.fromRGB(0, 255, 100)
+                                text.Text = "DONE"
+                            else
+                                bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                                text.TextColor3 = Color3.fromRGB(255, 255, 255)
+                                text.Text = string.format("%d%%", math.floor(savedProgress * 100))
+                            end
+                        else
+                            if savedProgress >= 1 then
+                                bar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+                                text.Text = "COMPLETED"
+                            else
+                                bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                                text.Text = string.format("%.1f%%", math.floor(savedProgress * 200 + 0.1) / 2)
+                            end
+                        end
+                    end)
+                    table.insert(CompProgConns, connection)
+                end
+
+                CompProgLoop = task.spawn(function()
+                    while state do
+                        local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
+                        if currentMap and currentMap.Value ~= "" then
+                            local mapName = tostring(currentMap.Value)
+                            local map = Workspace:FindFirstChild(mapName)
+                            if map then
+                                local children = map:GetChildren()
+                                for i = 1, #children do
+                                    local obj = children[i]
+                                    if obj.Name == "ComputerTable" then
+                                        setupComputer(obj)
+                                    end
+                                    if i % 8 == 0 then task.wait() end
+                                end
+                            end
+                        end
+                        task.wait(1.5)
+                    end
+                end)
+            else
+                if CompProgLoop then task.cancel(CompProgLoop); CompProgLoop = nil end
+                for _, c in ipairs(CompProgConns) do 
+                    if c then c:Disconnect() end 
+                end
+                table.clear(CompProgConns)
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    if obj.Name == "ProgressBar" and obj:IsA("BillboardGui") then obj:Destroy() end
+                    if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then obj:Destroy() end
+                end
+            end
+        end)
+    end)
+    
+    -- 2. Door Progress
+    Library:CreateToggle(Page, "Door Progress", false, function(state)
+        task.defer(function()
+            if state then
+                local DT_CONFIG = { 
+                    DOOR_NAMES = {["SingleDoor"]=true,["DoubleDoor"]=true,["SlidingDoor"]=true}, 
+                    BLACKLIST = {["ExitDoor"]=true,["Decorative"]=true,["FakeDoor"]=true,["ElevatorDoor"]=true, ["Closet"]=false} 
+                }
+
+                local DT_COLORS = { 
+                    BAR_BG = Color3.fromRGB(35, 30, 30), 
+                    MUSTARD = Color3.fromRGB(205, 135, 25), 
+                    WHITE = Color3.fromRGB(230, 230, 230),
+                    HL_CLOSE = Color3.fromRGB(255, 0, 0),
+                    HL_OPENING = Color3.fromRGB(255, 200, 0),
+                    HL_OPEN = Color3.fromRGB(0, 255, 100)
+                }
+
+                local function createDoorHUD(parent)
+                    if currentDoorStyle == "Default" then
+                        local billboard = Instance.new("BillboardGui")
+                        billboard.Name = "NormalDoorGUI"
+                        billboard.Adornee = parent
+                        billboard.Size = UDim2.new(0, 90, 0, 22) 
+                        billboard.StudsOffset = Vector3.new(0, 1, 0)
+                        billboard.AlwaysOnTop = true
+                        billboard.MaxDistance = doorMaxDistance
+                        billboard.Parent = parent
+                        
+                        local text = Instance.new("TextLabel")
+                        text.Name = "PercentText"
+                        text.Size = UDim2.new(1, 0, 0.55, 0)
+                        text.Position = UDim2.new(0, 0, 0, 0)
+                        text.BackgroundTransparency = 1
+                        text.Text = "0.0%"
+                        text.TextColor3 = DT_COLORS.MUSTARD
+                        text.TextStrokeTransparency = 0.7
+                        text.TextStrokeColor3 = Color3.new(0,0,0)
+                        text.Font = Enum.Font.GothamMedium
+                        text.TextScaled = true 
+                        text.ZIndex = 6
+                        text.Parent = billboard
+
+                        local bgBar = Instance.new("Frame")
+                        bgBar.Name = "BgBar"
+                        bgBar.Size = UDim2.new(1, 0, 0.35, 0) 
+                        bgBar.Position = UDim2.new(0, 0, 0.6, 0) 
+                        bgBar.BackgroundColor3 = DT_COLORS.BAR_BG
+                        bgBar.BackgroundTransparency = 0.3
+                        bgBar.BorderSizePixel = 0
+                        bgBar.ZIndex = 5
+                        bgBar.Parent = billboard
+                        
+                        local fill = Instance.new("Frame")
+                        fill.Name = "Fill"
+                        fill.Size = UDim2.new(0, 0, 1, 0)
+                        fill.BackgroundColor3 = DT_COLORS.MUSTARD
+                        fill.BackgroundTransparency = 0.1
+                        fill.BorderSizePixel = 0
+                        fill.ZIndex = 6
+                        fill.Parent = bgBar
+                        
+                        return billboard, fill, text, bgBar
+                    elseif currentDoorStyle == "Style 1" then
+                        local billboard = Instance.new("BillboardGui")
+                        billboard.Name = "NormalDoorGUI"
+                        billboard.Adornee = parent
+                        billboard.Size = UDim2.fromOffset(90, 22)
+                        billboard.StudsOffsetWorldSpace = Vector3.new(0, 0, 0.1)
+                        billboard.AlwaysOnTop = true
+                        billboard.MaxDistance = doorMaxDistance
+                        billboard.Parent = parent
+
+                        local text = Instance.new("TextLabel")
+                        text.Name = "PercentText"
+                        text.Size = UDim2.new(1, 0, 0.45, 0)
+                        text.BackgroundTransparency = 1
+                        text.Text = "0.0%"
+                        text.TextColor3 = Color3.fromRGB(255, 210, 140)
+                        text.TextStrokeTransparency = 0.6
+                        text.Font = Enum.Font.GothamMedium
+                        text.TextScaled = true
+                        text.ZIndex = 6
+                        text.Parent = billboard
+
+                        local bgBar = Instance.new("Frame")
+                        bgBar.Name = "BgBar"
+                        bgBar.Size = UDim2.new(1, 0, 0.35, 0)
+                        bgBar.Position = UDim2.new(0, 0, 0.6, 0)
+                        bgBar.BackgroundColor3 = Color3.fromRGB(25, 15, 5)
+                        bgBar.BackgroundTransparency = 0.5
+                        bgBar.BorderSizePixel = 0
+                        bgBar.ZIndex = 5
+                        bgBar.Parent = billboard
+
+                        local fill = Instance.new("Frame")
+                        fill.Name = "Fill"
+                        fill.Size = UDim2.new(0, 0, 1, 0)
+                        fill.BackgroundColor3 = Color3.fromRGB(170, 100, 40)
+                        fill.BorderSizePixel = 0
+                        fill.ZIndex = 6
+                        fill.Parent = bgBar
+
+                        return billboard, fill, text, bgBar
+                    else
+                        local billboard = Instance.new("BillboardGui")
+                        billboard.Name = "NormalDoorGUI"
+                        billboard.Adornee = parent
+                        billboard.Size = UDim2.new(0, 100, 0, 40) 
+                        billboard.StudsOffset = Vector3.new(0, 0, 0)
+                        billboard.AlwaysOnTop = true
+                        billboard.MaxDistance = doorMaxDistance
+                        billboard.Parent = parent
+
+                        local text = Instance.new("TextLabel")
+                        text.Name = "PercentText"
+                        text.Size = UDim2.new(1, 0, 0, 15)
+                        text.Position = UDim2.new(0, 0, 0.3, 0)
+                        text.BackgroundTransparency = 1
+                        text.Text = "CLOSE"
+                        text.TextColor3 = Color3.fromRGB(255, 0, 0)
+                        text.TextStrokeTransparency = 0.8
+                        text.TextStrokeColor3 = Color3.new(0,0,0)
+                        text.Font = Enum.Font.GothamBold
+                        text.TextSize = 13
+                        text.ZIndex = 5
+                        text.Parent = billboard
+
+                        local bgBar = Instance.new("Frame")
+                        bgBar.Name = "BgBar"
+                        bgBar.Size = UDim2.new(0.8, 0, 0, 6)
+                        bgBar.Position = UDim2.new(0.1, 0, 0.7, 0)
+                        bgBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+                        bgBar.BorderSizePixel = 1
+                        bgBar.Visible = false
+                        bgBar.ZIndex = 5
+                        bgBar.Parent = billboard
+
+                        local fill = Instance.new("Frame")
+                        fill.Name = "Fill"
+                        fill.Size = UDim2.new(0, 0, 1, 0)
+                        fill.BackgroundColor3 = Color3.fromRGB(255, 255, 0)
+                        fill.BorderSizePixel = 0
+                        fill.ZIndex = 6
+                        fill.Parent = bgBar
+
+                        return billboard, fill, text, bgBar
+                    end
+                end
+
+                local function createHighlight(model)
+                    if model:FindFirstChild("NormalDoorESP") then model.NormalDoorESP:Destroy() end
+                    local hl = Instance.new("Highlight")
+                    hl.Name = "NormalDoorESP"
+                    hl.OutlineColor = Color3.fromRGB(0, 0, 0)
+                    hl.OutlineTransparency = 0 
+                    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    hl.Enabled = doorHighlightEnabled or doorOutlineEnabled
+                    hl.Parent = model
+                    return hl
+                end
+
+                local function getRealDoorPart(model)
+                    local explicitDoor = model:FindFirstChild("Door") or model:FindFirstChild("Left") or model:FindFirstChild("Right")
+                    if explicitDoor and explicitDoor:IsA("BasePart") then return explicitDoor end
+                    
+                    local biggestPart = nil
+                    local maxVolume = 0
+                    local descendants = model:GetDescendants()
+                    
+                    for i = 1, #descendants do
+                        local part = descendants[i]
+                        if part:IsA("BasePart") then
+                            local name = part.Name
+                            if not string.find(name, "Frame", 1, true) and not string.find(name, "Wall", 1, true) and part.Transparency < 1 then
+                                local size = part.Size
+                                local v = size.X * size.Y * size.Z
+                                if v > maxVolume then 
+                                    maxVolume = v
+                                    biggestPart = part 
+                                end
+                            end
+                        end
+                    end
+                    return biggestPart or model.PrimaryPart
+                end
+
+                setupNormalDoor = function(doorModel)
+                    if trackedNormalDoors[doorModel] then return end
+                    if DT_CONFIG.BLACKLIST[doorModel.Name] then return end
+                    
+                    local name = doorModel.Name
+                    if string.find(name, "Exit", 1, true) or string.find(name, "Decor", 1, true) then return end
+                    
+                    local anchorPart = getRealDoorPart(doorModel)
+                    if not anchorPart then return end
+                    
+                    if anchorPart:FindFirstChild("NormalDoorGUI") then anchorPart.NormalDoorGUI:Destroy() end
+                    
+                    local billboard, bar, text, bgBar = createDoorHUD(anchorPart)
+                    local highlight = createHighlight(doorModel)
+                    
+                    trackedNormalDoors[doorModel] = { 
+                        Model = doorModel, 
+                        Anchor = anchorPart, 
+                        InitialCFrame = anchorPart.CFrame, 
+                        Billboard = billboard, 
+                        Bar = bar, 
+                        Text = text,
+                        BgBar = bgBar,
+                        Highlight = highlight,
+                        LastState = "Closed",
+                        LastProgress = -1
+                    }
+                end
+
+                local function cleanupNormalDoors()
+                    if doorAddedConn then doorAddedConn:Disconnect(); doorAddedConn = nil end
+                    for doorModel, data in pairs(trackedNormalDoors) do
+                        if data.Billboard then data.Billboard:Destroy() end
+                        if data.Highlight then data.Highlight:Destroy() end
+                    end
+                    table.clear(trackedNormalDoors)
+                end
+
+                DoorProgLoop = task.spawn(function()
+                    while state do
+                        local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
+                        local mapName = currentMap and tostring(currentMap.Value) or ""
+                        
+                        if mapName ~= "" and lastMap ~= mapName then
+                            lastMap = mapName
+                            cleanupNormalDoors()
+
+                            local map = Workspace:FindFirstChild(mapName)
+                            if map then
+                                local mapChildren = map:GetChildren()
+                                for i = 1, #mapChildren do
+                                    local obj = mapChildren[i]
+                                    if obj:IsA("Model") and DT_CONFIG.DOOR_NAMES[obj.Name] and not DT_CONFIG.BLACKLIST[obj.Name] then 
+                                        setupNormalDoor(obj) 
+                                    end
+                                    if i % 10 == 0 then task.wait() end
+                                end
+                                
+                                doorAddedConn = map.DescendantAdded:Connect(function(obj)
+                                    if obj:IsA("Model") and DT_CONFIG.DOOR_NAMES[obj.Name] and not DT_CONFIG.BLACKLIST[obj.Name] then 
+                                        task.defer(setupNormalDoor, obj)
+                                    end
+                                end)
+                            end
+                        elseif mapName == "" and lastMap ~= "" then
+                            lastMap = ""
+                            cleanupNormalDoors()
+                        end
+                        task.wait(1.5)
+                    end
+                end)
+
+                local accum = 0
+                local currentDoorInteractions = {}
+
+                DoorProgHeartbeat = RunService.Heartbeat:Connect(function(dt)
+                    accum = accum + dt
+                    if accum < 0.1 then return end
+                    accum = 0
+                    
+                    table.clear(currentDoorInteractions)
+
+                    for i = 1, #cachedPlayersList do
+                        local player = cachedPlayersList[i]
+                        local stats = player:FindFirstChild("TempPlayerStatsModule")
+                        if stats then
+                            local action = stats:FindFirstChild("ActionProgress")
+                            local isRagdolled = stats:FindFirstChild("Ragdoll")
+                            
+                            if action and action.Value > 0 then
+                                local playerFallen = false
+                                if isRagdolled and isRagdolled:IsA("BoolValue") then
+                                    playerFallen = isRagdolled.Value
+                                end
+                                
+                                if not playerFallen then
+                                    local char = player.Character
+                                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
                                     
-                                    if closestDoor then
-                                        openingNow[closestDoor] = currentProgress
+                                    if hrp then
+                                        local closestDoor = nil
+                                        local minDistanceSq = 225
+                                        local hrpPos = hrp.Position
+                                        
+                                        for doorModel, data in pairs(trackedNormalDoors) do
+                                            if data.Anchor and data.Anchor.Parent then
+                                                local anchorPos = data.Anchor.Position
+                                                local dx = anchorPos.X - hrpPos.X
+                                                local dy = anchorPos.Y - hrpPos.Y
+                                                local dz = anchorPos.Z - hrpPos.Z
+                                                local distSq = dx*dx + dy*dy + dz*dz
+                                                
+                                                if distSq < minDistanceSq then
+                                                    minDistanceSq = distSq
+                                                    closestDoor = doorModel
+                                                end
+                                            end
+                                        end
+                                        
+                                        if closestDoor then
+                                            local rawVal = action.Value
+                                            local progress = (rawVal > 1) and (rawVal / 100) or rawVal 
+                                            
+                                            local currentMax = currentDoorInteractions[closestDoor] or 0
+                                            currentDoorInteractions[closestDoor] = math.max(currentMax, progress)
+                                        end
                                     end
                                 end
                             end
                         end
                     end
+                    
+                    local cam = Workspace.CurrentCamera
+                    local camPos = cam and cam.CFrame.Position or Vector3.new(0, 0, 0)
 
-                    for door, data in pairs(trackedExitDoors) do
-                        if not door.Parent then
-                            if data.UI then data.UI:Destroy() end
+                    for doorModel, data in pairs(trackedNormalDoors) do
+                        if not doorModel.Parent or not data.Anchor or not data.Anchor.Parent then
+                            if data.Billboard then data.Billboard:Destroy() end
                             if data.Highlight then data.Highlight:Destroy() end
-                            trackedExitDoors[door] = nil
+                            trackedNormalDoors[doorModel] = nil
                             continue
                         end
-                        
-                        if not data.MainPart or not data.MainPart.Parent then
-                            local newMain = nil
-                            local doorDescendants = door:GetDescendants()
-                            for i = 1, #doorDescendants do
-                                if p:IsA("BasePart") and p.Name ~= "Trigger" then
-                                    newMain = p
-                                    break
-                                end
+
+                        local anchorPos = data.Anchor.Position
+                        local dx = anchorPos.X - camPos.X
+                        local dy = anchorPos.Y - camPos.Y
+                        local dz = anchorPos.Z - camPos.Z
+                        local distSq = dx*dx + dy*dy + dz*dz
+                        local dist = math.sqrt(distSq)
+
+                        if dist > doorMaxDistance then
+                            if data.Billboard.Enabled then
+                                data.Billboard.Enabled = false
+                                data.Highlight.Enabled = false
                             end
-                            
-                            if newMain then
-                                data.MainPart = newMain
-                                data.UI.Adornee = newMain
-                            end
-                        end
-                        
-                        if not data.Completed then
-                            local nativelyOpen = false
-                            local lParts = data.LightParts
-                            
-                            for i = 1, #lParts do
-                                local part = lParts[i]
-                                if part.Parent and string.find(string.lower(part.BrickColor.Name), "green", 1, true) then
-                                    nativelyOpen = true
-                                    break
-                                end
-                            end
-                            
-                            if nativelyOpen then
-                                data.Completed = true
-                                data.Progress = 1
-                            elseif openingNow[door] then
-                                data.Progress = openingNow[door]
-                            else
-                                data.Progress = 0
-                            end
-                            
-                            if data.Progress >= 0.99 then
-                                data.Completed = true
-                                data.Progress = 1
-                            end
-                        end
-                        
-                        if data.Highlight then
-                            data.Highlight.Enabled = exitHighlightEnabled or exitOutlineEnabled
-                            
-                            if exitOutlineEnabled then
-                                data.Highlight.FillTransparency = 1
-                                data.Highlight.OutlineTransparency = 0
-                                if data.Completed then
-                                    data.Highlight.OutlineColor = Color3.fromRGB(40, 255, 80)
-                                else
-                                    data.Highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
-                                end
-                            else
-                                data.Highlight.FillTransparency = 0.55
-                                data.Highlight.OutlineTransparency = 0
-                                if data.Completed then
-                                    data.Highlight.FillColor = Color3.fromRGB(40, 255, 80)
-                                else
-                                    data.Highlight.FillColor = Color3.fromRGB(255, 255, 0)
-                                end
-                            end
-                        end
-                        
-                        if data.Completed then
-                            data.FillElement.Size = UDim2.new(1, 0, 1, 0)
-                            data.FillElement.BackgroundColor3 = Color3.fromRGB(40, 255, 80)
-                            data.TextElement.Text = "DOOR OPENED!"
-                            data.TextElement.TextColor3 = Color3.fromRGB(40, 255, 80)
+                            continue
                         else
-                            data.FillElement.Size = UDim2.new(data.Progress, 0, 1, 0)
-                            data.FillElement.BackgroundColor3 = Color3.fromRGB(255, 160, 20)
-                            
-                            if data.Progress > 0 then
-                                data.TextElement.Text = "OPENING: " .. math.floor(data.Progress * 100) .. "%"
-                            else
-                                data.TextElement.Text = "EXIT"
+                            data.Billboard.Enabled = true
+                            data.Highlight.Enabled = doorHighlightEnabled or doorOutlineEnabled
+                        end
+
+                        local currentCF = data.Anchor.CFrame
+                        local initialPos = data.InitialCFrame.Position
+                        local currentPos = currentCF.Position
+                        
+                        local mx = currentPos.X - initialPos.X
+                        local my = currentPos.Y - initialPos.Y
+                        local mz = currentPos.Z - initialPos.Z
+                        local distMovedSq = mx*mx + my*my + mz*mz
+                        
+                        local dot = currentCF.LookVector:Dot(data.InitialCFrame.LookVector)
+                        
+                        if data.Anchor.CanCollide == true then
+                            if dot < 0.9 or distMovedSq > 0.25 then
+                                data.InitialCFrame = currentCF
+                                dot = 1
+                                distMovedSq = 0
                             end
-                            data.TextElement.TextColor3 = Color3.fromRGB(255, 255, 255)
+                        end
+
+                        local isPhysicallyOpen = false
+                        if not data.Anchor.CanCollide or dot < 0.85 or distMovedSq > 0.25 or data.Anchor.Transparency > 0.8 then
+                            isPhysicallyOpen = true
+                        end
+                        
+                        local interactionVal = currentDoorInteractions[doorModel] or 0
+
+                        if doorOutlineEnabled then
+                            data.Highlight.FillTransparency = 1
+                            data.Highlight.OutlineTransparency = 0
+                            if isPhysicallyOpen then
+                                data.Highlight.OutlineColor = Color3.fromRGB(0, 255, 100)
+                            elseif interactionVal > 0.001 then
+                                data.Highlight.OutlineColor = Color3.fromRGB(255, 200, 0)
+                            else
+                                data.Highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+                            end
+                        else
+                            data.Highlight.FillTransparency = 0.55
+                            data.Highlight.OutlineTransparency = 0
+                            data.Highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
+                            if isPhysicallyOpen then
+                                data.Highlight.FillColor = Color3.fromRGB(0, 255, 100)
+                            elseif interactionVal > 0.001 then
+                                data.Highlight.FillColor = Color3.fromRGB(255, 200, 0)
+                            else
+                                data.Highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                            end
+                        end
+
+                        if currentDoorStyle == "Default" or currentDoorStyle == "Style 1" then
+                            local baseColor = (currentDoorStyle == "Default") and Color3.fromRGB(205, 135, 25) or Color3.fromRGB(255, 210, 140)
+                            local barColor = (currentDoorStyle == "Default") and Color3.fromRGB(205, 135, 25) or Color3.fromRGB(170, 100, 40)
+
+                            if isPhysicallyOpen then
+                                if data.LastState ~= "Open" then
+                                    data.LastState = "Open"
+                                    data.Bar.Size = UDim2.new(1, 0, 1, 0)
+                                    data.Bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                                    data.Text.TextColor3 = Color3.fromRGB(255, 255, 255)
+                                    data.Text.Text = "100.0%"
+                                end
+                            elseif interactionVal > 0.001 then 
+                                if data.LastState ~= "Opening" or math.abs(data.LastProgress - interactionVal) > 0.005 then
+                                    data.LastState = "Opening"
+                                    data.LastProgress = interactionVal
+                                    data.Bar.Size = UDim2.new(math.clamp(interactionVal, 0, 1), 0, 1, 0)
+                                    data.Bar.BackgroundColor3 = barColor
+                                    data.Text.TextColor3 = baseColor
+                                    data.Text.Text = string.format("%.1f%%", interactionVal * 100)
+                                end
+                            else
+                                if data.LastState ~= "Closed" then
+                                    data.LastState = "Closed"
+                                    data.Bar.Size = UDim2.new(0, 0, 1, 0)
+                                    data.Bar.BackgroundColor3 = barColor
+                                    data.Text.TextColor3 = baseColor
+                                    data.Text.Text = "0.0%"
+                                end
+                            end
+                        else
+                            local COLORS_STYLE2 = {
+                                CLOSE = Color3.fromRGB(255, 0, 0),
+                                OPENING = Color3.fromRGB(255, 255, 0),
+                                OPEN = Color3.fromRGB(0, 255, 100)
+                            }
+
+                            if isPhysicallyOpen then
+                                if data.LastState ~= "Open" then
+                                    data.LastState = "Open"
+                                    data.Text.Text = "OPEN"
+                                    data.Text.TextColor3 = COLORS_STYLE2.OPEN
+                                    data.BgBar.Visible = false
+                                end
+                            elseif interactionVal > 0.05 then 
+                                data.LastState = "Opening"
+                                data.Text.Text = "OPENING"
+                                data.Text.TextColor3 = COLORS_STYLE2.OPENING
+                                data.BgBar.Visible = true
+                                data.Bar.Size = UDim2.new(math.clamp(interactionVal, 0, 1), 0, 1, 0)
+                            else
+                                if data.LastState ~= "Closed" then
+                                    data.LastState = "Closed"
+                                    data.Text.Text = "CLOSE"
+                                    data.Text.TextColor3 = COLORS_STYLE2.CLOSE
+                                    data.BgBar.Visible = false
+                                end
+                            end
                         end
                     end
+                end)
+            else
+                if DoorProgLoop then task.cancel(DoorProgLoop); DoorProgLoop = nil end
+                if DoorProgHeartbeat then DoorProgHeartbeat:Disconnect(); DoorProgHeartbeat = nil end
+                if doorAddedConn then doorAddedConn:Disconnect(); doorAddedConn = nil end
+                lastMap = nil 
+                for doorModel, data in pairs(trackedNormalDoors) do
+                    if data.Billboard then data.Billboard:Destroy() end
+                    if data.Highlight then data.Highlight:Destroy() end
                 end
-            end)
-        else
-            if ExitDoorRemoving then ExitDoorRemoving:Disconnect(); ExitDoorRemoving = nil end
-            if ExitDoorAdded then ExitDoorAdded:Disconnect(); ExitDoorAdded = nil end
-            if ExitDoorConn then task.cancel(ExitDoorConn); ExitDoorConn = nil end
-            local targetGuiParent = (pcall(function() return CoreGui end) and CoreGui) or LocalPlayer:WaitForChild("PlayerGui")
-            if targetGuiParent:FindFirstChild("FTF_ExitDoorESP_Premium") then targetGuiParent.FTF_ExitDoorESP_Premium:Destroy() end
-            table.clear(trackedExitDoors)
-            table.clear(actionValCache)
-        end
+                table.clear(trackedNormalDoors)
+            end
+        end)
+    end)
+    
+    -- 3. ExitDoor Progress
+    Library:CreateToggle(Page, "ExitDoor Progress", false, function(state)
+        task.defer(function()
+            if state then
+                local guiName = "FTF_ExitDoorESP_Premium"
+                local targetGuiParent = (pcall(function() return CoreGui end) and CoreGui) or LocalPlayer:WaitForChild("PlayerGui")
+                
+                if targetGuiParent:FindFirstChild(guiName) then
+                    targetGuiParent[guiName]:Destroy()
+                end
+
+                local folder = Instance.new("Folder")
+                folder.Name = guiName
+                folder.Parent = targetGuiParent
+
+                local function getPlayerProgress(plr)
+                    local actionVal = actionValCache[plr]
+                    if not actionVal or not actionVal.Parent then
+                        actionVal = plr:FindFirstChild("ActionProgress", true)
+                        if actionVal and actionVal:IsA("NumberValue") then
+                            actionValCache[plr] = actionVal
+                        else
+                            actionValCache[plr] = nil
+                        end
+                    end
+                    
+                    if actionVal then
+                        return actionVal.Value
+                    end
+                    
+                    return 0
+                end
+
+                ExitDoorRemoving = Players.PlayerRemoving:Connect(function(plr)
+                    actionValCache[plr] = nil
+                end)
+
+                local function registerExitDoor(door)
+                    if trackedExitDoors[door] then return end 
+                    
+                    local mainPart = door.PrimaryPart
+                    if not mainPart then
+                        local descendants = door:GetDescendants()
+                        for i = 1, #descendants do
+                            local p = descendants[i]
+                            if p:IsA("BasePart") and p.Transparency < 1 then
+                                mainPart = p
+                                break
+                            end
+                        end
+                        if not mainPart then
+                            mainPart = door:FindFirstChildWhichIsA("BasePart")
+                        end
+                    end
+                    if not mainPart then return end
+
+                    local doorParts = {}
+                    local lightParts = {}
+                    
+                    local descendants = door:GetDescendants()
+                    for i = 1, #descendants do
+                        local part = descendants[i]
+                        if part:IsA("BasePart") then
+                            table.insert(doorParts, part)
+                            local lowerName = string.lower(part.Name)
+                            if string.find(lowerName, "light", 1, true) or string.find(lowerName, "screen", 1, true) then
+                                table.insert(lightParts, part)
+                            end
+                        end
+                    end
+
+                    local highlight = Instance.new("Highlight")
+                    highlight.Name = "ExitDoorHighlight"
+                    highlight.Adornee = door
+                    highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
+                    highlight.OutlineTransparency = 0
+                    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    highlight.Enabled = exitHighlightEnabled or exitOutlineEnabled
+                    highlight.Parent = folder
+
+                    local bgui = Instance.new("BillboardGui")
+                    bgui.Name = "UI"
+                    bgui.Size = UDim2.new(0, 140, 0, 45) 
+                    bgui.StudsOffset = Vector3.new(0, 5, 0)
+                    bgui.AlwaysOnTop = true
+                    bgui.Adornee = mainPart
+                    bgui.Parent = folder
+                    
+                    local txt = Instance.new("TextLabel", bgui)
+                    txt.Name = "Text"
+                    txt.Size = UDim2.new(1, 0, 0.6, 0)
+                    txt.Position = UDim2.new(0, 0, 0, 0)
+                    txt.BackgroundTransparency = 1
+                    txt.Text = "EXIT"
+                    txt.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    txt.Font = Enum.Font.GothamBlack
+                    txt.TextSize = 13
+                    txt.TextStrokeTransparency = 0 
+                    txt.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                    
+                    local barBg = Instance.new("Frame", bgui)
+                    barBg.Name = "BarBg"
+                    barBg.Size = UDim2.new(0.8, 0, 0, 6) 
+                    barBg.Position = UDim2.new(0.1, 0, 0.7, 0) 
+                    barBg.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+                    barBg.BackgroundTransparency = 0.4
+                    barBg.BorderSizePixel = 0
+                    
+                    local bgCorner = Instance.new("UICorner", barBg)
+                    bgCorner.CornerRadius = UDim.new(1, 0)
+                    
+                    local bgStroke = Instance.new("UIStroke", barBg)
+                    bgStroke.Color = Color3.fromRGB(0, 0, 0)
+                    bgStroke.Thickness = 1.2
+                    bgStroke.Transparency = 0.2
+                    
+                    local fill = Instance.new("Frame", barBg)
+                    fill.Name = "Fill"
+                    fill.Size = UDim2.new(0, 0, 1, 0)
+                    fill.BackgroundColor3 = Color3.fromRGB(255, 160, 20) 
+                    fill.BorderSizePixel = 0
+                    
+                    local fillCorner = Instance.new("UICorner", fill)
+                    fillCorner.CornerRadius = UDim.new(1, 0)
+                    
+                    trackedExitDoors[door] = {
+                        UI = bgui,
+                        Highlight = highlight,
+                        Progress = 0,
+                        Completed = false,
+                        MainPart = mainPart,
+                        DoorParts = doorParts,
+                        LightParts = lightParts,
+                        TextElement = txt,
+                        FillElement = fill
+                    }
+                end
+
+                task.spawn(function()
+                    local workspaceDescendants = workspace:GetDescendants()
+                    for i = 1, #workspaceDescendants do
+                        local obj = workspaceDescendants[i]
+                        if obj.Name == "ExitDoor" and obj:IsA("Model") then
+                            registerExitDoor(obj)
+                        end
+                        if i % 40 == 0 then task.wait() end
+                    end
+                end)
+
+                ExitDoorAdded = workspace.DescendantAdded:Connect(function(obj)
+                    if obj.Name == "ExitDoor" and obj:IsA("Model") then
+                        task.defer(function()
+                            registerExitDoor(obj)
+                        end)
+                    end
+                end)
+
+                ExitDoorConn = task.spawn(function()
+                    while state and task.wait(0.15) do 
+                        local openingNow = {}
+
+                        for i = 1, #cachedPlayersList do
+                            local plr = cachedPlayersList[i]
+                            local char = plr.Character
+                            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                            
+                            if hrp then
+                                local playerFallen = false
+                                local stats = plr:FindFirstChild("TempPlayerStatsModule")
+                                if stats then
+                                        local ragdoll = stats:FindFirstChild("Ragdoll")
+                                        if ragdoll and ragdoll:IsA("BoolValue") and ragdoll.Value == true then
+                                            playerFallen = true
+                                        end
+                                end
+                                
+                                if not playerFallen then
+                                    local currentProgress = getPlayerProgress(plr)
+                                    
+                                    if currentProgress > 0 then
+                                        local plrPos = hrp.Position
+                                        local closestDoor = nil
+                                        local minDist = 5 
+                                        
+                                        for door, data in pairs(trackedExitDoors) do
+                                            if door.Parent then
+                                                local parts = data.DoorParts
+                                                for j = 1, #parts do
+                                                    local part = parts[j]
+                                                    if part.Parent then
+                                                        local dist = (part.Position - plrPos).Magnitude
+                                                        if dist < minDist then
+                                                            minDist = dist
+                                                            closestDoor = door
+                                                        end
+                                                    end
+                                                end
+                                            end
+                                        end
+                                        
+                                        if closestDoor then
+                                            openingNow[closestDoor] = currentProgress
+                                        end
+                                    end
+                                end
+                            end
+                        end
+
+                        for door, data in pairs(trackedExitDoors) do
+                            if not door.Parent then
+                                if data.UI then data.UI:Destroy() end
+                                if data.Highlight then data.Highlight:Destroy() end
+                                trackedExitDoors[door] = nil
+                                continue
+                            end
+                            
+                            if not data.MainPart or not data.MainPart.Parent then
+                                local newMain = nil
+                                local doorDescendants = door:GetDescendants()
+                                for i = 1, #doorDescendants do
+                                    local p = doorDescendants[i]
+                                    if p:IsA("BasePart") and p.Name ~= "Trigger" then
+                                        newMain = p
+                                        break
+                                    end
+                                end
+                                
+                                if newMain then
+                                    data.MainPart = newMain
+                                    data.UI.Adornee = newMain
+                                end
+                            end
+                            
+                            if not data.Completed then
+                                local nativelyOpen = false
+                                local lParts = data.LightParts
+                                
+                                for i = 1, #lParts do
+                                    local part = lParts[i]
+                                    if part.Parent and string.find(string.lower(part.BrickColor.Name), "green", 1, true) then
+                                        nativelyOpen = true
+                                        break
+                                    end
+                                end
+                                
+                                if nativelyOpen then
+                                    data.Completed = true
+                                    data.Progress = 1
+                                elseif openingNow[door] then
+                                    data.Progress = openingNow[door]
+                                else
+                                    data.Progress = 0
+                                end
+                                
+                                if data.Progress >= 0.99 then
+                                    data.Completed = true
+                                    data.Progress = 1
+                                end
+                            end
+                            
+                            if data.Highlight then
+                                data.Highlight.Enabled = exitHighlightEnabled or exitOutlineEnabled
+                                
+                                if exitOutlineEnabled then
+                                    data.Highlight.FillTransparency = 1
+                                    data.Highlight.OutlineTransparency = 0
+                                    if data.Completed then
+                                        data.Highlight.OutlineColor = Color3.fromRGB(40, 255, 80)
+                                    else
+                                        data.Highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
+                                    end
+                                else
+                                    data.Highlight.FillTransparency = 0.55
+                                    data.Highlight.OutlineTransparency = 0
+                                    if data.Completed then
+                                        data.Highlight.FillColor = Color3.fromRGB(40, 255, 80)
+                                    else
+                                        data.Highlight.FillColor = Color3.fromRGB(255, 255, 0)
+                                    end
+                                end
+                            end
+                            
+                            if data.Completed then
+                                data.FillElement.Size = UDim2.new(1, 0, 1, 0)
+                                data.FillElement.BackgroundColor3 = Color3.fromRGB(40, 255, 80)
+                                data.TextElement.Text = "DOOR OPENED!"
+                                data.TextElement.TextColor3 = Color3.fromRGB(40, 255, 80)
+                            else
+                                data.FillElement.Size = UDim2.new(data.Progress, 0, 1, 0)
+                                data.FillElement.BackgroundColor3 = Color3.fromRGB(255, 160, 20)
+                                
+                                if data.Progress > 0 then
+                                    data.TextElement.Text = "OPENING: " .. math.floor(data.Progress * 100) .. "%"
+                                else
+                                    data.TextElement.Text = "EXIT"
+                                end
+                                data.TextElement.TextColor3 = Color3.fromRGB(255, 255, 255)
+                            end
+                        end
+                    end
+                end)
+            else
+                if ExitDoorRemoving then ExitDoorRemoving:Disconnect(); ExitDoorRemoving = nil end
+                if ExitDoorAdded then ExitDoorAdded:Disconnect(); ExitDoorAdded = nil end
+                if ExitDoorConn then task.cancel(ExitDoorConn); ExitDoorConn = nil end
+                local targetGuiParent = (pcall(function() return CoreGui end) and CoreGui) or LocalPlayer:WaitForChild("PlayerGui")
+                if targetGuiParent:FindFirstChild("FTF_ExitDoorESP_Premium") then targetGuiParent.FTF_ExitDoorESP_Premium:Destroy() end
+                table.clear(trackedExitDoors)
+                table.clear(actionValCache)
+            end
+        end)
     end)
     
     -- 4. WalkSpeed Detector (Unified Speed Tracker)
