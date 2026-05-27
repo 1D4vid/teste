@@ -6,15 +6,32 @@ return function(env)
     local Workspace = env.Workspace
     local CoreGui = env.CoreGui
     local ReplicatedStorage = env.ReplicatedStorage
-    local RunService = env.RunService
+    local RunService = game:GetService("RunService")
     local TweenService = env.TweenService
     local Theme = env.Theme
     local SendNotification = env.SendNotification
 
     -- =========================================================================
-    -- VARIÁVEIS DE CONTROLE GLOBAL (Módulo)
+    -- ESCOPO DE SEGURANÇA E CACHE DE ALTA PERFORMANCE (Evita gargalos de CPU)
     -- =========================================================================
-    
+    local cachedPlayersList = Players:GetPlayers()
+    local globalConnections = {}
+
+    table.insert(globalConnections, Players.PlayerAdded:Connect(function() 
+        cachedPlayersList = Players:GetPlayers() 
+    end))
+    table.insert(globalConnections, Players.PlayerRemoving:Connect(function() 
+        cachedPlayersList = Players:GetPlayers() 
+    end))
+
+    local globalOverlapParams = OverlapParams.new()
+    globalOverlapParams.FilterType = Enum.RaycastFilterType.Include
+
+    -- Controle de Estados Ativos (Evita loops órfãos)
+    local compProgressActive = false
+    local doorProgressActive = false
+    local exitDoorActive = false
+
     -- Vars Beast Power
     local BeastPowerConnection1 = nil
     local BeastPowerConnection2 = nil
@@ -24,44 +41,49 @@ return function(env)
     local isDraining = false
     local BeastPowerLoop2 = nil
 
-    -- Vars Computer Progress
+    -- Vars Computer Progress & Highlight Outlines
     local CompProgLoop = nil
     local CompProgConns = {}
     local compHighlightEnabled = false
+    local compOutlineEnabled = false
     local currentComputerStyle = "Default"
 
-    -- Vars Door Progress
+    -- Vars Door Progress & Highlight Outlines
     local DoorProgLoop = nil
     local DoorProgHeartbeat = nil
     local doorAddedConn = nil
     local trackedNormalDoors = {}
     local doorHighlightEnabled = false
+    local doorOutlineEnabled = false
     local currentDoorStyle = "Default"
     local doorMaxDistance = 150
     local lastMap = nil
 
-    -- Vars ExitDoor Progress
+    -- Vars ExitDoor Progress & Highlight Outlines
     local ExitDoorConn = nil
     local ExitDoorAdded = nil
     local ExitDoorRemoving = nil
     local trackedExitDoors = {}
     local actionValCache = {}
     local exitHighlightEnabled = false
+    local exitOutlineEnabled = false
 
-    -- Vars WalkSpeed Detector
+    -- Vars WalkSpeed Detector (Unified Speed Tracker)
+    local speedActive = false
+    local lateralSpeedActive = false
     local speedRenderConn = nil
-    local speedPlayerAdded = nil
-    local speedPlayerRemoving = nil
-    local activePlayers = {}
-    local speedCharConns = {}
+    local speedLabels2D = {}
+    local speedScreenGui = nil
+    local speedListFrame = nil
 
     -- Vars Wallhop Counter
     local WallhopStateConn = nil
     local WallhopCharConn = nil
     local WallhopTimerConn = nil
 
-    -- Vars GetUp Timer
+    -- Vars GetUp Timer & Hide Setting
     local getupActive = false
+    local hideHeadGetUp = false
     local getupConns = {} 
     local activeConnections = {} 
     local getupGui = nil
@@ -72,8 +94,14 @@ return function(env)
     local BeastSpawnActive = false
     local BeastSpawnLoopThread = nil
     local BeastSpawnRenderConn = nil
+
+    -- Vars Life Timer (New Electric Blue Version)
+    local lifeActive = false
+    local lifeConns = {}
+    local lifePlayerConns = {}
+    local lifeCachedStats = {}
+    local lifeTimerOrigin = "Head"
     
-    -- IsGameActive carregado de forma assíncrona para não travar a UI em outros jogos
     local IsGameActive = nil
     task.spawn(function()
         IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive", 2)
@@ -86,6 +114,7 @@ return function(env)
     
     -- 1. Computer Progress
     Library:CreateToggle(Page, "Computer Progress", false, function(state)
+        compProgressActive = state
         if state then
             local function createProgressBar(parent)
                 if currentComputerStyle == "Default" or currentComputerStyle == "Style 1" then
@@ -95,7 +124,6 @@ return function(env)
                     billboard.Size = UDim2.new(0, 80, 0, 26)
                     billboard.StudsOffset = Vector3.new(0, 2.5, 0)
                     billboard.AlwaysOnTop = true
-                    billboard.Parent = parent
 
                     local background = Instance.new("Frame")
                     background.Name = "BgBar"
@@ -158,16 +186,15 @@ return function(env)
                     barCorner.CornerRadius = UDim.new(0, 2)
                     barCorner.Parent = bar
 
+                    billboard.Parent = parent
                     return billboard, bar, text
                 elseif currentComputerStyle == "Style 1" then
-                    -- Design: design computer 2.txt
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "ProgressBar"
                     billboard.Adornee = parent
                     billboard.Size = UDim2.new(0, 110, 0, 30)
                     billboard.StudsOffset = Vector3.new(0, 4.5, 0)
                     billboard.AlwaysOnTop = true
-                    billboard.Parent = parent
 
                     local text = Instance.new("TextLabel")
                     text.Name = "ProgressText"
@@ -197,16 +224,15 @@ return function(env)
                     bar.BorderSizePixel = 0
                     bar.Parent = bgBar
 
+                    billboard.Parent = parent
                     return billboard, bar, text
                 else
-                    -- Design: design computer 3.txt (Style 2)
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "ProgressBar"
                     billboard.Adornee = parent
                     billboard.Size = UDim2.new(0, 120, 0, 12)
                     billboard.StudsOffset = Vector3.new(0, 4.2, 0)
                     billboard.AlwaysOnTop = true
-                    billboard.Parent = parent
 
                     local background = Instance.new("Frame")
                     background.Name = "BgBar"
@@ -235,6 +261,7 @@ return function(env)
                     text.Text = "0.0%"
                     text.Parent = background
 
+                    billboard.Parent = parent
                     return billboard, bar, text
                 end
             end
@@ -249,7 +276,7 @@ return function(env)
                 highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                 highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
                 highlight.OutlineTransparency = 0
-                highlight.Enabled = compHighlightEnabled
+                highlight.Enabled = compHighlightEnabled or compOutlineEnabled
                 highlight.Parent = tableModel
 
                 local screen = tableModel:FindFirstChild("Screen")
@@ -262,10 +289,7 @@ return function(env)
 
                 local savedProgress = 0
                 local lastSize = -1
-                local overlapParams = OverlapParams.new()
-                overlapParams.FilterType = Enum.RaycastFilterType.Include
-
-                local updateInterval = 0.08
+                local updateInterval = 0.03 -- Atualização rápida de interface
                 local accumulatedTime = 0
 
                 local connection
@@ -281,34 +305,56 @@ return function(env)
 
                     local isGreen = false
                     if screen and screen.Parent then
-                        highlight.FillColor = screen.Color
                         if screen.Color.G > screen.Color.R and screen.Color.G > screen.Color.B then
                             isGreen = true
                         end
                     end
 
-                    highlight.Enabled = compHighlightEnabled
+                    highlight.Enabled = compHighlightEnabled or compOutlineEnabled
+
+                    if compOutlineEnabled then
+                        highlight.FillTransparency = 1
+                        highlight.OutlineTransparency = 0
+                        if isGreen then
+                            highlight.OutlineColor = Color3.fromRGB(0, 255, 0)
+                        else
+                            if screen then
+                                local color = screen.Color
+                                if color.R > color.G and color.R > color.B then
+                                    highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+                                else
+                                    highlight.OutlineColor = Color3.fromRGB(0, 180, 255)
+                                end
+                            end
+                        end
+                    else
+                        highlight.FillTransparency = 0.5
+                        highlight.OutlineTransparency = 0
+                        highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
+                        if screen then
+                            highlight.FillColor = screen.Color
+                        end
+                    end
 
                     if isGreen then
                         savedProgress = 1
                     else
                         local highestTouch = 0
                         local characterParts = {}
-                        local playersList = Players:GetPlayers()
                         
-                        for i = 1, #playersList do
-                            local char = playersList[i].Character
+                        for i = 1, #cachedPlayersList do
+                            local char = cachedPlayersList[i].Character
                             if char then
                                 table.insert(characterParts, char)
                             end
                         end
 
                         if #characterParts > 0 then
-                            overlapParams.FilterDescendantsInstances = characterParts
+                            globalOverlapParams.FilterDescendantsInstances = characterParts
                             for i = 1, #triggers do
                                 local part = triggers[i]
                                 if part and part.Parent then
-                                    local touchingParts = Workspace:GetPartsInPart(part, overlapParams)
+                                    local touchingParts = Workspace:GetPartsInPart(part, globalOverlapParams)
                                     for j = 1, #touchingParts do
                                         local character = touchingParts[j].Parent
                                         local plr = Players:GetPlayerFromCharacter(character)
@@ -333,7 +379,7 @@ return function(env)
 
                     if savedProgress ~= lastSize then
                         lastSize = savedProgress
-                        local tweenInfo = TweenInfo.new(0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+                        local tweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
                         local tween = TweenService:Create(bar, tweenInfo, {Size = UDim2.new(savedProgress, 0, 1, 0)})
                         tween:Play()
                     end
@@ -372,13 +418,15 @@ return function(env)
             end
 
             CompProgLoop = task.spawn(function()
-                while state do
+                while compProgressActive do
                     local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
                     if currentMap and currentMap.Value ~= "" then
                         local mapName = tostring(currentMap.Value)
                         local map = Workspace:FindFirstChild(mapName)
                         if map then
-                            for _, obj in ipairs(map:GetChildren()) do
+                            local children = map:GetChildren()
+                            for i = 1, #children do
+                                local obj = children[i]
                                 if obj.Name == "ComputerTable" then
                                     setupComputer(obj)
                                 end
@@ -403,6 +451,7 @@ return function(env)
     
     -- 2. Door Progress
     Library:CreateToggle(Page, "Door Progress", false, function(state)
+        doorProgressActive = state
         if state then
             local DT_CONFIG = { 
                 DOOR_NAMES = {["SingleDoor"]=true,["DoubleDoor"]=true,["SlidingDoor"]=true}, 
@@ -420,15 +469,13 @@ return function(env)
 
             local function createDoorHUD(parent)
                 if currentDoorStyle == "Default" then
-                    -- Default design
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NormalDoorGUI"
                     billboard.Adornee = parent
-                    billboard.Size = UDim2.new(0, 90, 0, 35) 
+                    billboard.Size = UDim2.new(0, 90, 0, 22) 
                     billboard.StudsOffset = Vector3.new(0, 1, 0)
                     billboard.AlwaysOnTop = true
                     billboard.MaxDistance = doorMaxDistance
-                    billboard.Parent = parent
                     
                     local text = Instance.new("TextLabel")
                     text.Name = "PercentText"
@@ -447,7 +494,7 @@ return function(env)
                     local bgBar = Instance.new("Frame")
                     bgBar.Name = "BgBar"
                     bgBar.Size = UDim2.new(1, 0, 0.35, 0) 
-                    bgBar.Position = UDim2.new(0, 0, 0.65, 0)
+                    bgBar.Position = UDim2.new(0, 0, 0.6, 0) 
                     bgBar.BackgroundColor3 = DT_COLORS.BAR_BG
                     bgBar.BackgroundTransparency = 0.3
                     bgBar.BorderSizePixel = 0
@@ -463,9 +510,9 @@ return function(env)
                     fill.ZIndex = 6
                     fill.Parent = bgBar
                     
+                    billboard.Parent = parent
                     return billboard, fill, text, bgBar
                 elseif currentDoorStyle == "Style 1" then
-                    -- Design: design door progress 2.txt
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NormalDoorGUI"
                     billboard.Adornee = parent
@@ -473,7 +520,6 @@ return function(env)
                     billboard.StudsOffsetWorldSpace = Vector3.new(0, 0, 0.1)
                     billboard.AlwaysOnTop = true
                     billboard.MaxDistance = doorMaxDistance
-                    billboard.Parent = parent
 
                     local text = Instance.new("TextLabel")
                     text.Name = "PercentText"
@@ -505,9 +551,9 @@ return function(env)
                     fill.ZIndex = 6
                     fill.Parent = bgBar
 
+                    billboard.Parent = parent
                     return billboard, fill, text, bgBar
                 else
-                    -- Design: design door progress.txt (Style 2)
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NormalDoorGUI"
                     billboard.Adornee = parent
@@ -515,7 +561,6 @@ return function(env)
                     billboard.StudsOffset = Vector3.new(0, 0, 0)
                     billboard.AlwaysOnTop = true
                     billboard.MaxDistance = doorMaxDistance
-                    billboard.Parent = parent
 
                     local text = Instance.new("TextLabel")
                     text.Name = "PercentText"
@@ -549,6 +594,7 @@ return function(env)
                     fill.ZIndex = 6
                     fill.Parent = bgBar
 
+                    billboard.Parent = parent
                     return billboard, fill, text, bgBar
                 end
             end
@@ -557,12 +603,10 @@ return function(env)
                 if model:FindFirstChild("NormalDoorESP") then model.NormalDoorESP:Destroy() end
                 local hl = Instance.new("Highlight")
                 hl.Name = "NormalDoorESP"
-                hl.FillColor = DT_COLORS.HL_CLOSE
                 hl.OutlineColor = Color3.fromRGB(0, 0, 0)
-                hl.FillTransparency = 0.55
                 hl.OutlineTransparency = 0 
                 hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                hl.Enabled = doorHighlightEnabled
+                hl.Enabled = doorHighlightEnabled or doorOutlineEnabled
                 hl.Parent = model
                 return hl
             end
@@ -631,7 +675,7 @@ return function(env)
             end
 
             DoorProgLoop = task.spawn(function()
-                while state do
+                while doorProgressActive do
                     local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
                     local mapName = currentMap and tostring(currentMap.Value) or ""
                     
@@ -641,7 +685,9 @@ return function(env)
 
                         local map = Workspace:FindFirstChild(mapName)
                         if map then
-                            for _, obj in ipairs(map:GetChildren()) do
+                            local mapChildren = map:GetChildren()
+                            for i = 1, #mapChildren do
+                                local obj = mapChildren[i]
                                 if obj:IsA("Model") and DT_CONFIG.DOOR_NAMES[obj.Name] and not DT_CONFIG.BLACKLIST[obj.Name] then 
                                     setupNormalDoor(obj) 
                                 end
@@ -666,14 +712,13 @@ return function(env)
 
             DoorProgHeartbeat = RunService.Heartbeat:Connect(function(dt)
                 accum = accum + dt
-                if accum < 0.1 then return end
+                if accum < 0.03 then return end -- Frequência de atualização mais rápida
                 accum = 0
                 
                 table.clear(currentDoorInteractions)
-                local playersList = Players:GetPlayers()
 
-                for i = 1, #playersList do
-                    local player = playersList[i]
+                for i = 1, #cachedPlayersList do
+                    local player = cachedPlayersList[i]
                     local stats = player:FindFirstChild("TempPlayerStatsModule")
                     if stats then
                         local action = stats:FindFirstChild("ActionProgress")
@@ -733,7 +778,6 @@ return function(env)
                         continue
                     end
 
-                    -- Otimização Matemática de Distância sem alocação de Vector3
                     local anchorPos = data.Anchor.Position
                     local dx = anchorPos.X - camPos.X
                     local dy = anchorPos.Y - camPos.Y
@@ -749,7 +793,7 @@ return function(env)
                         continue
                     else
                         data.Billboard.Enabled = true
-                        data.Highlight.Enabled = doorHighlightEnabled
+                        data.Highlight.Enabled = doorHighlightEnabled or doorOutlineEnabled
                     end
 
                     local currentCF = data.Anchor.CFrame
@@ -778,6 +822,29 @@ return function(env)
                     
                     local interactionVal = currentDoorInteractions[doorModel] or 0
 
+                    if doorOutlineEnabled then
+                        data.Highlight.FillTransparency = 1
+                        data.Highlight.OutlineTransparency = 0
+                        if isPhysicallyOpen then
+                            data.Highlight.OutlineColor = Color3.fromRGB(0, 255, 100)
+                        elseif interactionVal > 0.001 then
+                            data.Highlight.OutlineColor = Color3.fromRGB(255, 200, 0)
+                        else
+                            data.Highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+                        end
+                    else
+                        data.Highlight.FillTransparency = 0.55
+                        data.Highlight.OutlineTransparency = 0
+                        data.Highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
+                        if isPhysicallyOpen then
+                            data.Highlight.FillColor = Color3.fromRGB(0, 255, 100)
+                        elseif interactionVal > 0.001 then
+                            data.Highlight.FillColor = Color3.fromRGB(255, 200, 0)
+                        else
+                            data.Highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                        end
+                    end
+
                     if currentDoorStyle == "Default" or currentDoorStyle == "Style 1" then
                         local baseColor = (currentDoorStyle == "Default") and Color3.fromRGB(205, 135, 25) or Color3.fromRGB(255, 210, 140)
                         local barColor = (currentDoorStyle == "Default") and Color3.fromRGB(205, 135, 25) or Color3.fromRGB(170, 100, 40)
@@ -789,7 +856,6 @@ return function(env)
                                 data.Bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
                                 data.Text.TextColor3 = Color3.fromRGB(255, 255, 255)
                                 data.Text.Text = "100.0%"
-                                data.Highlight.FillColor = DT_COLORS.HL_OPEN
                             end
                         elseif interactionVal > 0.001 then 
                             if data.LastState ~= "Opening" or math.abs(data.LastProgress - interactionVal) > 0.005 then
@@ -799,7 +865,6 @@ return function(env)
                                 data.Bar.BackgroundColor3 = barColor
                                 data.Text.TextColor3 = baseColor
                                 data.Text.Text = string.format("%.1f%%", interactionVal * 100)
-                                data.Highlight.FillColor = Color3.fromRGB(255, 200, 0)
                             end
                         else
                             if data.LastState ~= "Closed" then
@@ -808,7 +873,6 @@ return function(env)
                                 data.Bar.BackgroundColor3 = barColor
                                 data.Text.TextColor3 = baseColor
                                 data.Text.Text = "0.0%"
-                                data.Highlight.FillColor = Color3.fromRGB(255, 0, 0)
                             end
                         end
                     else
@@ -823,14 +887,12 @@ return function(env)
                                 data.LastState = "Open"
                                 data.Text.Text = "OPEN"
                                 data.Text.TextColor3 = COLORS_STYLE2.OPEN
-                                data.Highlight.FillColor = COLORS_STYLE2.OPEN
                                 data.BgBar.Visible = false
                             end
                         elseif interactionVal > 0.05 then 
                             data.LastState = "Opening"
                             data.Text.Text = "OPENING"
                             data.Text.TextColor3 = COLORS_STYLE2.OPENING
-                            data.Highlight.FillColor = COLORS_STYLE2.OPENING
                             data.BgBar.Visible = true
                             data.Bar.Size = UDim2.new(math.clamp(interactionVal, 0, 1), 0, 1, 0)
                         else
@@ -838,14 +900,9 @@ return function(env)
                                 data.LastState = "Closed"
                                 data.Text.Text = "CLOSE"
                                 data.Text.TextColor3 = COLORS_STYLE2.CLOSE
-                                data.Highlight.FillColor = COLORS_STYLE2.CLOSE
                                 data.BgBar.Visible = false
                             end
                         end
-                    end
-                    
-                    if data.Highlight then
-                        data.Highlight.Enabled = doorHighlightEnabled
                     end
                 end
             end)
@@ -853,7 +910,7 @@ return function(env)
             if DoorProgLoop then task.cancel(DoorProgLoop); DoorProgLoop = nil end
             if DoorProgHeartbeat then DoorProgHeartbeat:Disconnect(); DoorProgHeartbeat = nil end
             if doorAddedConn then doorAddedConn:Disconnect(); doorAddedConn = nil end
-            lastMap = nil -- Reseta para permitir remontagem imediata ao ligar
+            lastMap = nil 
             for doorModel, data in pairs(trackedNormalDoors) do
                 if data.Billboard then data.Billboard:Destroy() end
                 if data.Highlight then data.Highlight:Destroy() end
@@ -864,6 +921,7 @@ return function(env)
     
     -- 3. ExitDoor Progress
     Library:CreateToggle(Page, "ExitDoor Progress", false, function(state)
+        exitDoorActive = state
         if state then
             local guiName = "FTF_ExitDoorESP_Premium"
             local targetGuiParent = (pcall(function() return CoreGui end) and CoreGui) or LocalPlayer:WaitForChild("PlayerGui")
@@ -935,13 +993,10 @@ return function(env)
                 local highlight = Instance.new("Highlight")
                 highlight.Name = "ExitDoorHighlight"
                 highlight.Adornee = door
-                highlight.FillColor = Color3.fromRGB(255, 255, 0)
                 highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
-                highlight.FillTransparency = 0.55
                 highlight.OutlineTransparency = 0
                 highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                highlight.Enabled = exitHighlightEnabled
-                highlight.Parent = folder
+                highlight.Enabled = exitHighlightEnabled or exitOutlineEnabled
 
                 local bgui = Instance.new("BillboardGui")
                 bgui.Name = "UI"
@@ -949,9 +1004,8 @@ return function(env)
                 bgui.StudsOffset = Vector3.new(0, 5, 0)
                 bgui.AlwaysOnTop = true
                 bgui.Adornee = mainPart
-                bgui.Parent = folder
                 
-                local txt = Instance.new("TextLabel", bgui)
+                local txt = Instance.new("TextLabel")
                 txt.Name = "Text"
                 txt.Size = UDim2.new(1, 0, 0.6, 0)
                 txt.Position = UDim2.new(0, 0, 0, 0)
@@ -962,32 +1016,41 @@ return function(env)
                 txt.TextSize = 13
                 txt.TextStrokeTransparency = 0 
                 txt.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                txt.Parent = bgui
                 
-                local barBg = Instance.new("Frame", bgui)
+                local barBg = Instance.new("Frame")
                 barBg.Name = "BarBg"
                 barBg.Size = UDim2.new(0.8, 0, 0, 6) 
                 barBg.Position = UDim2.new(0.1, 0, 0.7, 0) 
                 barBg.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
                 barBg.BackgroundTransparency = 0.4
                 barBg.BorderSizePixel = 0
+                barBg.Parent = bgui
                 
-                local bgCorner = Instance.new("UICorner", barBg)
+                local bgCorner = Instance.new("UICorner")
                 bgCorner.CornerRadius = UDim.new(1, 0)
+                bgCorner.Parent = barBg
                 
-                local bgStroke = Instance.new("UIStroke", barBg)
+                local bgStroke = Instance.new("UIStroke")
                 bgStroke.Color = Color3.fromRGB(0, 0, 0)
                 bgStroke.Thickness = 1.2
                 bgStroke.Transparency = 0.2
+                bgStroke.Parent = barBg
                 
-                local fill = Instance.new("Frame", barBg)
+                local fill = Instance.new("Frame")
                 fill.Name = "Fill"
                 fill.Size = UDim2.new(0, 0, 1, 0)
                 fill.BackgroundColor3 = Color3.fromRGB(255, 160, 20) 
                 fill.BorderSizePixel = 0
+                fill.Parent = barBg
                 
-                local fillCorner = Instance.new("UICorner", fill)
+                local fillCorner = Instance.new("UICorner")
                 fillCorner.CornerRadius = UDim.new(1, 0)
+                fillCorner.Parent = fill
                 
+                highlight.Parent = folder
+                bgui.Parent = folder
+
                 trackedExitDoors[door] = {
                     UI = bgui,
                     Highlight = highlight,
@@ -1001,15 +1064,14 @@ return function(env)
                 }
             end
 
-            task.spawn(function()
-                local workspaceDescendants = workspace:GetDescendants()
-                for i = 1, #workspaceDescendants do
-                    local obj = workspaceDescendants[i]
-                    if obj.Name == "ExitDoor" and obj:IsA("Model") then
-                        registerExitDoor(obj)
-                    end
+            -- Busca síncrona sem yield para ativação instantânea
+            local workspaceDescendants = workspace:GetDescendants()
+            for i = 1, #workspaceDescendants do
+                local obj = workspaceDescendants[i]
+                if obj.Name == "ExitDoor" and obj:IsA("Model") then
+                    registerExitDoor(obj)
                 end
-            end)
+            end
 
             ExitDoorAdded = workspace.DescendantAdded:Connect(function(obj)
                 if obj.Name == "ExitDoor" and obj:IsA("Model") then
@@ -1020,12 +1082,11 @@ return function(env)
             end)
 
             ExitDoorConn = task.spawn(function()
-                while state and task.wait(0.1) do
+                while exitDoorActive do 
                     local openingNow = {}
-                    local playersList = Players:GetPlayers()
 
-                    for i = 1, #playersList do
-                        local plr = playersList[i]
+                    for i = 1, #cachedPlayersList do
+                        local plr = cachedPlayersList[i]
                         local char = plr.Character
                         local hrp = char and char:FindFirstChild("HumanoidRootPart")
                         
@@ -1123,22 +1184,36 @@ return function(env)
                             end
                         end
                         
+                        if data.Highlight then
+                            data.Highlight.Enabled = exitHighlightEnabled or exitOutlineEnabled
+                            
+                            if exitOutlineEnabled then
+                                data.Highlight.FillTransparency = 1
+                                data.Highlight.OutlineTransparency = 0
+                                if data.Completed then
+                                    data.Highlight.OutlineColor = Color3.fromRGB(40, 255, 80)
+                                else
+                                    data.Highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
+                                end
+                            else
+                                data.Highlight.FillTransparency = 0.55
+                                data.Highlight.OutlineTransparency = 0
+                                if data.Completed then
+                                    data.Highlight.FillColor = Color3.fromRGB(40, 255, 80)
+                                  else
+                                    data.Highlight.FillColor = Color3.fromRGB(255, 255, 0)
+                                end
+                            end
+                        end
+                        
                         if data.Completed then
                             data.FillElement.Size = UDim2.new(1, 0, 1, 0)
                             data.FillElement.BackgroundColor3 = Color3.fromRGB(40, 255, 80)
                             data.TextElement.Text = "DOOR OPENED!"
                             data.TextElement.TextColor3 = Color3.fromRGB(40, 255, 80)
-                            
-                            if data.Highlight then
-                                data.Highlight.FillColor = Color3.fromRGB(40, 255, 80)
-                            end
                         else
                             data.FillElement.Size = UDim2.new(data.Progress, 0, 1, 0)
                             data.FillElement.BackgroundColor3 = Color3.fromRGB(255, 160, 20)
-                            
-                            if data.Highlight then
-                                data.Highlight.FillColor = Color3.fromRGB(255, 255, 0)
-                            end
                             
                             if data.Progress > 0 then
                                 data.TextElement.Text = "OPENING: " .. math.floor(data.Progress * 100) .. "%"
@@ -1147,11 +1222,8 @@ return function(env)
                             end
                             data.TextElement.TextColor3 = Color3.fromRGB(255, 255, 255)
                         end
-                        
-                        if data.Highlight then
-                            data.Highlight.Enabled = exitHighlightEnabled
-                        end
                     end
+                    task.wait(0.12)
                 end
             end)
         else
@@ -1165,117 +1237,147 @@ return function(env)
         end
     end)
     
-    -- 4. WalkSpeed Detector
+    -- 4. WalkSpeed Detector (Unified Speed Tracker)
     Library:CreateToggle(Page, "WalkSpeed Detector", false, function(state)
+        speedActive = state
         if state then
-            local function createSpeedTag(character, head)
-                local tag = character:FindFirstChild("SpeedTag")
-                local label
-                
-                if not tag then
-                    tag = Instance.new("BillboardGui")
-                    tag.Name = "SpeedTag"
-                    tag.Adornee = head
-                    tag.Size = UDim2.new(0, 60, 0, 20)
-                    tag.StudsOffset = Vector3.new(0, 2.5, 0)
-                    tag.AlwaysOnTop = true
+            if not speedRenderConn then
+                speedRenderConn = RunService.RenderStepped:Connect(function()
+                    if not speedActive then return end
 
-                    label = Instance.new("TextLabel")
-                    label.Name = "SpeedText"
-                    label.Size = UDim2.new(1, 0, 1, 0)
-                    label.BackgroundTransparency = 1
-                    label.TextSize = 18
-                    label.Font = Enum.Font.Code
-                    label.TextStrokeTransparency = 0
-                    label.TextStrokeColor3 = Color3.new(0, 0, 0)
-                    label.TextColor3 = Color3.new(1, 1, 1)
-                    label.Parent = tag
-                    
-                    tag.Parent = character
-                else
-                    label = tag:FindFirstChild("SpeedText")
-                end
-                
-                return label
-            end
-
-            local function setupCharacter(player, character)
-                local humanoid = character:WaitForChild("Humanoid", 5)
-                local root = character:WaitForChild("HumanoidRootPart", 5)
-                local head = character:WaitForChild("Head", 5)
-                
-                if not (humanoid and root and head) then return end
-                
-                local label = createSpeedTag(character, head)
-                if label then
-                    activePlayers[player] = {
-                        root = root,
-                        humanoid = humanoid,
-                        label = label
-                    }
-                end
-            end
-
-            local function onPlayerAdded(player)
-                local connection = player.CharacterAdded:Connect(function(character)
-                    setupCharacter(player, character)
-                end)
-                speedCharConns[player] = connection
-                
-                if player.Character then
-                    setupCharacter(player, player.Character)
-                end
-            end
-
-            speedPlayerAdded = Players.PlayerAdded:Connect(onPlayerAdded)
-            speedPlayerRemoving = Players.PlayerRemoving:Connect(function(player)
-                activePlayers[player] = nil
-                if speedCharConns[player] then
-                    speedCharConns[player]:Disconnect()
-                    speedCharConns[player] = nil
-                end
-            end)
-
-            for _, player in ipairs(Players:GetPlayers()) do
-                onPlayerAdded(player)
-            end
-
-            speedRenderConn = RunService.RenderStepped:Connect(function()
-                for player, data in pairs(activePlayers) do
-                    local root = data.root
-                    local humanoid = data.humanoid
-                    
-                    if root and root.Parent and humanoid and humanoid.Health > 0 then
-                        if humanoid.MoveDirection.Magnitude == 0 then
-                            data.label.Text = "0.0"
-                        else
-                            local vel = root.AssemblyLinearVelocity
-                            local vx = vel.X
-                            local vz = vel.Z
-                            
-                            local speed = math.sqrt(vx * vx + vz * vz)
-                            data.label.Text = string.format("%.1f", speed)
+                    local roundActive = false
+                    for i = 1, #cachedPlayersList do
+                        if cachedPlayersList[i]:FindFirstChild("TempPlayerStatsModule", true) then
+                            roundActive = true
+                            break
                         end
-                    else
-                        activePlayers[player] = nil
                     end
-                end
-            end)
-        else
-            if speedPlayerAdded then speedPlayerAdded:Disconnect(); speedPlayerAdded = nil end
-            if speedPlayerRemoving then speedPlayerRemoving:Disconnect(); speedPlayerRemoving = nil end
-            if speedRenderConn then speedRenderConn:Disconnect(); speedRenderConn = nil end
-            for player, conn in pairs(speedCharConns) do
-                if conn then conn:Disconnect() end
+
+                    if lateralSpeedActive then
+                        if not speedScreenGui then
+                            local targetGuiParent = (pcall(function() return CoreGui end) and CoreGui) or LocalPlayer:WaitForChild("PlayerGui")
+                            speedScreenGui = Instance.new("ScreenGui")
+                            speedScreenGui.Name = "SpeedListGui"
+                            speedScreenGui.ResetOnSpawn = false
+
+                            speedListFrame = Instance.new("Frame")
+                            speedListFrame.Name = "ListFrame"
+                            speedListFrame.BackgroundTransparency = 1
+                            speedListFrame.Position = UDim2.new(0, 25, 0.65, 0)
+                            speedListFrame.Size = UDim2.new(0, 280, 0.3, 0)
+                            speedListFrame.Parent = speedScreenGui
+
+                            local uiListLayout = Instance.new("UIListLayout")
+                            uiListLayout.SortOrder = Enum.SortOrder.Name
+                            uiListLayout.Padding = UDim.new(0, 5)
+                            uiListLayout.Parent = speedListFrame
+                            
+                            speedScreenGui.Parent = targetGuiParent
+                        end
+                        speedScreenGui.Enabled = true
+                    else
+                        if speedScreenGui then
+                            speedScreenGui.Enabled = false
+                        end
+                    end
+
+                    for i = 1, #cachedPlayersList do
+                        local player = cachedPlayersList[i]
+                        local char = player.Character
+                        local root = char and char:FindFirstChild("HumanoidRootPart")
+                        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                        local head = char and char:FindFirstChild("Head")
+
+                        local showThisPlayer = true
+                        if roundActive then
+                            local hasStats = player:FindFirstChild("TempPlayerStatsModule", true)
+                            if not hasStats then
+                                showThisPlayer = false
+                            end
+                        end
+
+                        if showThisPlayer and root and humanoid and humanoid.Health > 0 then
+                            local speedStr = "0.0"
+                            if humanoid.MoveDirection.Magnitude > 0 then
+                                local vel = root.AssemblyLinearVelocity
+                                speedStr = string.format("%.1f", math.sqrt(vel.X * vel.X + vel.Z * vel.Z))
+                            end
+
+                            if lateralSpeedActive then
+                                if char:FindFirstChild("SpeedTag") then
+                                    char.SpeedTag.Enabled = false
+                                end
+
+                                local label = speedLabels2D[player]
+                                if not label or not label.Parent then
+                                    label = Instance.new("TextLabel")
+                                    label.Name = player.Name
+                                    label.Size = UDim2.new(1, 0, 0, 24)
+                                    label.BackgroundTransparency = 1
+                                    label.Font = Enum.Font.GothamBold
+                                    label.TextSize = 16
+                                    label.TextXAlignment = Enum.TextXAlignment.Left
+                                    label.TextStrokeTransparency = 0.65
+                                    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                                    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+                                    label.Parent = speedListFrame
+                                    speedLabels2D[player] = label
+                                end
+                                label.Visible = true
+                                label.Text = player.Name .. ": " .. speedStr
+                            else
+                                if speedLabels2D[player] then
+                                    speedLabels2D[player].Visible = false
+                                end
+
+                                local tag = char:FindFirstChild("SpeedTag")
+                                local label
+                                if not tag then
+                                    tag = Instance.new("BillboardGui")
+                                    tag.Name = "SpeedTag"
+                                    tag.Adornee = head
+                                    tag.Size = UDim2.new(0, 60, 0, 20)
+                                    tag.StudsOffset = Vector3.new(0, 2.5, 0)
+                                    tag.AlwaysOnTop = true
+
+                                    label = Instance.new("TextLabel")
+                                    label.Name = "SpeedText"
+                                    label.Size = UDim2.new(1, 0, 1, 0)
+                                    label.BackgroundTransparency = 1
+                                    label.TextSize = 18
+                                    label.Font = Enum.Font.Code
+                                    label.TextStrokeTransparency = 0
+                                    label.TextStrokeColor3 = Color3.new(0, 0, 0)
+                                    label.TextColor3 = Color3.new(1, 1, 1)
+                                    label.Parent = tag
+                                    
+                                    tag.Parent = char
+                                end
+                                if tag then tag.Enabled = true end
+                                if label then label.Text = speedStr end
+                            end
+                        else
+                            if speedLabels2D[player] then
+                                speedLabels2D[player].Visible = false
+                            end
+                            if char and char:FindFirstChild("SpeedTag") then
+                                char.SpeedTag.Enabled = false
+                            end
+                        end
+                    end
+                end)
             end
-            table.clear(speedCharConns)
-            for _, player in ipairs(Players:GetPlayers()) do
+        else
+            if speedRenderConn then speedRenderConn:Disconnect(); speedRenderConn = nil end
+            if speedScreenGui then speedScreenGui:Destroy(); speedScreenGui = nil end
+            table.clear(speedLabels2D)
+            for i = 1, #cachedPlayersList do
+                local player = cachedPlayersList[i]
                 local char = player.Character
                 if char and char:FindFirstChild("SpeedTag") then
                     char.SpeedTag:Destroy()
                 end
             end
-            table.clear(activePlayers)
         end
     end)
 
@@ -1289,7 +1391,6 @@ return function(env)
             local sg = Instance.new("ScreenGui")
             sg.Name = "WallhopCounterUI"
             sg.DisplayOrder = 1000
-            sg.Parent = CoreGui
 
             local label = Instance.new("TextLabel")
             label.Name = "ComboLabel"
@@ -1328,6 +1429,8 @@ return function(env)
             timerStroke.Thickness = 2
             timerStroke.Transparency = 1
             timerStroke.Parent = timerLabel
+
+            sg.Parent = CoreGui
 
             local uiVisivel = false
 
@@ -1507,35 +1610,41 @@ return function(env)
             getupGui = Instance.new("ScreenGui")
             getupGui.Name = "RagdollCounterGui"
             getupGui.ResetOnSpawn = false
-            getupGui.Parent = uiParent
 
-            getupList = Instance.new("Frame", getupGui)
+            getupList = Instance.new("Frame")
             getupList.Size = UDim2.new(0, 160, 0, 400)
             getupList.Position = UDim2.new(1, -60, 0.32, 0) 
             getupList.AnchorPoint = Vector2.new(1, 0) 
             getupList.BackgroundTransparency = 1
+            getupList.Parent = getupGui
 
-            local layout = Instance.new("UIListLayout", getupList)
+            local layout = Instance.new("UIListLayout")
             layout.VerticalAlignment = Enum.VerticalAlignment.Top
             layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
             layout.Padding = UDim.new(0, 8)
+            layout.Parent = getupList
+
+            getupGui.Parent = uiParent
 
             local function billboard(p, head)
                 if p == LocalPlayer or not head then return nil end 
                 local old = head:FindFirstChild("RC")
                 if old then old:Destroy() end
                 
-                local bb = Instance.new("BillboardGui", head)
+                if hideHeadGetUp then return nil end 
+
+                local bb = Instance.new("BillboardGui")
                 bb.Name = "RC"
                 bb.Size = UDim2.new(5, 0, 3, 0) 
                 bb.StudsOffset = Vector3.new(0, 3, 0) 
                 bb.AlwaysOnTop = true
                 
-                local container = Instance.new("Frame", bb)
+                local container = Instance.new("Frame")
                 container.Size = UDim2.fromScale(1, 1)
                 container.BackgroundTransparency = 1
+                container.Parent = bb
                 
-                local nameLbl = Instance.new("TextLabel", container)
+                local nameLbl = Instance.new("TextLabel")
                 nameLbl.Size = UDim2.new(1, 0, 0.45, 0)
                 nameLbl.Position = UDim2.new(0, 0, 0, 0)
                 nameLbl.BackgroundTransparency = 1
@@ -1544,17 +1653,20 @@ return function(env)
                 nameLbl.TextColor3 = CONFIG_GETUP.NameColor
                 nameLbl.TextStrokeTransparency = 1 
                 nameLbl.Text = p.Name
+                nameLbl.Parent = container
                 applyStroke(nameLbl) 
                 
-                local timeLbl = Instance.new("TextLabel", container)
+                local timeLbl = Instance.new("TextLabel")
                 timeLbl.Size = UDim2.new(1, 0, 0.55, 0)
                 timeLbl.Position = UDim2.new(0, 0, 0.45, 0) 
                 timeLbl.BackgroundTransparency = 1
                 timeLbl.TextScaled = true
                 timeLbl.Font = CONFIG_GETUP.Font
                 timeLbl.TextStrokeTransparency = 1
+                timeLbl.Parent = container
                 applyStroke(timeLbl)
                 
+                bb.Parent = head
                 return timeLbl
             end
 
@@ -1572,14 +1684,17 @@ return function(env)
                 local lastHealth = hum.Health
                 
                 local head = char:FindFirstChild("Head")
-                local headTimer = billboard(p, head)
+                local headTimer = nil
+                if not hideHeadGetUp and head then
+                    headTimer = billboard(p, head)
+                end
                 
-                local playerFrame = Instance.new("Frame", getupList)
+                local playerFrame = Instance.new("Frame")
                 playerFrame.Name = p.Name 
                 playerFrame.Size = UDim2.new(1, 0, 0, 45) 
                 playerFrame.BackgroundTransparency = 1
                 
-                local listName = Instance.new("TextLabel", playerFrame)
+                local listName = Instance.new("TextLabel")
                 listName.Size = UDim2.new(1, 0, 0.45, 0)
                 listName.BackgroundTransparency = 1
                 listName.Font = CONFIG_GETUP.Font
@@ -1588,9 +1703,10 @@ return function(env)
                 listName.TextColor3 = CONFIG_GETUP.NameColor
                 listName.TextStrokeTransparency = 1
                 listName.Text = p.Name
+                listName.Parent = playerFrame
                 applyStroke(listName)
                 
-                local listTimer = Instance.new("TextLabel", playerFrame)
+                local listTimer = Instance.new("TextLabel")
                 listTimer.Size = UDim2.new(1, 0, 0.55, 0)
                 listTimer.Position = UDim2.new(0, 0, 0.45, 0)
                 listTimer.BackgroundTransparency = 1
@@ -1598,8 +1714,11 @@ return function(env)
                 listTimer.TextSize = 24
                 listTimer.TextXAlignment = Enum.TextXAlignment.Right 
                 listTimer.TextStrokeTransparency = 1
+                listTimer.Parent = playerFrame
                 applyStroke(listTimer)
                 
+                playerFrame.Parent = getupList
+
                 local lastUpdate = 0
                 local con
                 
@@ -1626,6 +1745,18 @@ return function(env)
                     if not getupActive or not isRagdoll or isCaptured or isDead or forceExpired then
                         cleanupPlayer(p, con, playerFrame, char)
                         return
+                    end
+                    
+                    if not hideHeadGetUp then
+                        if head and (not headTimer or not headTimer.Parent) then
+                            headTimer = billboard(p, head)
+                        end
+                    else
+                        if headTimer then
+                            local old = head:FindFirstChild("RC")
+                            if old then old:Destroy() end
+                            headTimer = nil
+                        end
                     end
                     
                     if now - lastUpdate >= UI_UPDATE_INTERVAL then
@@ -1655,8 +1786,9 @@ return function(env)
             end
 
             local hb = task.spawn(function()
-                while getupActive and task.wait(0.15) do 
-                    for _, p in ipairs(Players:GetPlayers()) do
+                while getupActive do 
+                    for i = 1, #cachedPlayersList do
+                        local p = cachedPlayersList[i]
                         if p ~= LocalPlayer and not activeGetUp[p] then
                             local char = p.Character
                             local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -1674,6 +1806,7 @@ return function(env)
                             end
                         end
                     end
+                    task.wait(0.1)
                 end
             end)
             table.insert(getupConns, hb)
@@ -1710,7 +1843,8 @@ return function(env)
                 getupGui = nil 
             end
             
-            for _, p in ipairs(Players:GetPlayers()) do
+            for i = 1, #cachedPlayersList do
+                local p = cachedPlayersList[i]
                 local char = p.Character
                 local head = char and char:FindFirstChild("Head")
                 local bb = head and head:FindFirstChild("RC")
@@ -1736,7 +1870,6 @@ return function(env)
             screenGui.Name = "BeastTextHUD"
             screenGui.IgnoreGuiInset = true
             screenGui.ResetOnSpawn = false
-            screenGui.Parent = container
 
             uiFrameBP = Instance.new("Frame")
             uiFrameBP.Name = "MainFrame"
@@ -1764,21 +1897,24 @@ return function(env)
             uiLabelBP.Size = UDim2.new(0, 0, 1, 0) 
             uiLabelBP.AutomaticSize = Enum.AutomaticSize.X
             uiLabelBP.BackgroundTransparency = 1
-            uiLabelBP.Text = "Carregando..."
+            uiLabelBP.Text = "Loading..."
             uiLabelBP.TextColor3 = Color3.fromRGB(255, 255, 255) 
             uiLabelBP.Font = Enum.Font.GothamBold 
             uiLabelBP.TextSize = 18 
             uiLabelBP.TextXAlignment = Enum.TextXAlignment.Center
             uiLabelBP.Parent = uiFrameBP
             
+            screenGui.Parent = container
+
             trackedPowerValue = nil
             lastPercent = 0
             isDraining = false
 
             BeastPowerConnection1 = task.spawn(function()
-                while state and task.wait(1) do
+                while state do
                     local foundValue = nil
-                    for _, player in ipairs(Players:GetPlayers()) do
+                    for i = 1, #cachedPlayersList do
+                        local player = cachedPlayersList[i]
                         local char = player.Character
                         if char then
                             local beastPowers = char:FindFirstChild("BeastPowers")
@@ -1791,6 +1927,7 @@ return function(env)
                         end
                     end
                     trackedPowerValue = foundValue 
+                    task.wait(0.5)
                 end
             end)
 
@@ -1855,7 +1992,7 @@ return function(env)
                         billboard.AlwaysOnTop = true
                         billboard.MaxDistance = math.huge
                         billboard.LightInfluence = 1
-                        billboard.Parent = humanoidRootPart
+                        
                         local label = Instance.new("TextLabel")
                         label.Name = "BeastPowerLabel"
                         label.Size = UDim2.new(1, 0, 1, 0)
@@ -1867,6 +2004,8 @@ return function(env)
                         label.TextColor3 = Color3.new(1, 1, 1)
                         label.TextStrokeColor3 = Color3.new(0, 0, 0)
                         label.Parent = billboard
+                        
+                        billboard.Parent = humanoidRootPart
                     end
                     return billboard.BeastPowerLabel
                 end
@@ -1876,12 +2015,12 @@ return function(env)
         if state then
             BeastPowerLoop2 = task.spawn(function()
                 while state do
-                    task.wait(0.5)
-                    for _, player in ipairs(Players:GetPlayers()) do
+                    for i = 1, #cachedPlayersList do
+                        local player = cachedPlayersList[i]
                         if player ~= LocalPlayer then
                             local label = CreateLabelBP(player)
                             if label then
-                                local beastPowers = player.Character:FindFirstChild("BeastPowers")
+                                local beastPowers = player.Character and player.Character:FindFirstChild("BeastPowers")
                                 if beastPowers then
                                     local numberValue = beastPowers:FindFirstChildOfClass("NumberValue")
                                     if numberValue then
@@ -1896,11 +2035,13 @@ return function(env)
                             end
                         end
                     end
+                    task.wait(0.25)
                 end
             end)
         else
             if BeastPowerLoop2 then task.cancel(BeastPowerLoop2); BeastPowerLoop2 = nil end
-            for _, player in ipairs(Players:GetPlayers()) do
+            for i = 1, #cachedPlayersList do
+                local player = cachedPlayersList[i]
                 if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                     local bb = player.Character.HumanoidRootPart:FindFirstChild("BeastPowerBillboard")
                     if bb then bb:Destroy() end
@@ -1921,7 +2062,6 @@ return function(env)
             local sg = Instance.new("ScreenGui")
             sg.Name = "ElegantBeastTimer"
             sg.DisplayOrder = 999
-            sg.Parent = CoreGui
 
             local label = Instance.new("TextLabel")
             label.Name = "TimerLabel"
@@ -1941,6 +2081,8 @@ return function(env)
             stroke.Thickness = 2
             stroke.Transparency = 1
             stroke.Parent = label
+
+            sg.Parent = CoreGui
 
             local infoSeno = TweenInfo.new(0.8, Enum.EasingStyle.Sine)
             local infoLinear = TweenInfo.new(0.5, Enum.EasingStyle.Linear)
@@ -2045,7 +2187,7 @@ return function(env)
                         estadoAnterior = "PLAYING"
                     end
                     
-                    task.wait(0.2)
+                    task.wait(0.1)
                 end
             end)
         else
@@ -2055,6 +2197,248 @@ return function(env)
             if CoreGui:FindFirstChild("ElegantBeastTimer") then
                 CoreGui.ElegantBeastTimer:Destroy()
             end
+        end
+    end)
+    
+    -- 5. Life Timer
+    Library:CreateToggle(Page, "Life Timer", false, function(state)
+        lifeActive = state
+        
+        if state then
+            local TIMER_COLOR = Color3.fromRGB(0, 170, 255)
+
+            local function isLifeBeast(player)
+                local stats = lifeCachedStats[player]
+                return stats and stats.isBeast and stats.isBeast.Value
+            end
+
+            local function isCharacterWeldedToPod(character)
+                if not character then return false end
+                local root = character:FindFirstChild("HumanoidRootPart")
+                if not root then return false end
+
+                local rootChildren = root:GetChildren()
+                for i = 1, #rootChildren do
+                    local child = rootChildren[i]
+                    if child:IsA("Weld") or child:IsA("Motor6D") then
+                        local part = child.Part1 or child.Part0
+                        if part then
+                            local nameLower = part.Name:lower()
+                            local parentNameLower = part.Parent and part.Parent.Name:lower() or ""
+                            if nameLower == "seat" or nameLower:find("pod") or parentNameLower:find("pod") or parentNameLower:find("capsule") then
+                                return true
+                            end
+                        end
+                    end
+                end
+                return false
+            end
+
+            local function isPlayerCaptured(player)
+                local stats = lifeCachedStats[player]
+                if not stats or not stats.module then 
+                    return isCharacterWeldedToPod(player.Character) 
+                end
+
+                local isCapVal = stats.module:FindFirstChild("IsCaptured") or stats.module:FindFirstChild("Captured")
+                if isCapVal then
+                    return isCapVal.Value == true
+                end
+
+                return isCharacterWeldedToPod(player.Character)
+            end
+
+            local function getLifeTimerTarget(char)
+                if not char then return nil, Vector3.new(0, 0, 0) end
+                if lifeTimerOrigin == "Head" then
+                    local head = char:FindFirstChild("Head")
+                    return head, Vector3.new(0, 0, 0) 
+                elseif lifeTimerOrigin == "Torso" then
+                    local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char:FindFirstChild("HumanoidRootPart")
+                    return torso, Vector3.new(0, 0, 0)
+                else 
+                    local hrp = char:FindFirstChild("HumanoidRootPart")
+                    return hrp, Vector3.new(0, -3.2, 0)
+                end
+            end
+
+            local function cleanupPlayer(player)
+                if lifePlayerConns[player] then
+                    for _, connection in ipairs(lifePlayerConns[player]) do
+                        if connection then connection:Disconnect() end
+                    end
+                    lifePlayerConns[player] = nil
+                end
+
+                local char = player.Character
+                if char then
+                    local existingTag = char:FindFirstChild("CapsuleLifeTag", true)
+                    if existingTag then existingTag:Destroy() end
+                end
+
+                lifeCachedStats[player] = nil
+            end
+
+            local function updatePlayerTag(player)
+                if not lifeActive then return end
+
+                local char = player.Character
+                if not char then return end
+
+                local targetPart, offset = getLifeTimerTarget(char)
+                if not targetPart then return end
+
+                if isLifeBeast(player) then
+                    local tag = char:FindFirstChild("CapsuleLifeTag", true)
+                    if tag then tag:Destroy() end
+                    return
+                end
+
+                local stats = lifeCachedStats[player]
+                local health = stats and stats.health
+
+                if health and health.Value > 0 and isPlayerCaptured(player) then
+                    local tag = char:FindFirstChild("CapsuleLifeTag", true)
+                    
+                    if not tag then
+                        local billboard = Instance.new("BillboardGui")
+                        billboard.Name = "CapsuleLifeTag"
+                        billboard.Size = UDim2.new(0, 90, 0, 30)
+                        billboard.AlwaysOnTop = true
+
+                        local label = Instance.new("TextLabel")
+                        label.Size = UDim2.new(1, 0, 1, 0)
+                        label.BackgroundTransparency = 1
+                        label.Font = Enum.Font.GothamBold
+                        label.TextSize = 20
+                        label.TextStrokeTransparency = 0.5
+                        label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                        label.Parent = billboard
+
+                        billboard.Parent = targetPart
+                        tag = billboard
+                    else
+                        tag.Parent = targetPart
+                    end
+
+                    tag.StudsOffset = offset
+
+                    local label = tag:FindFirstChildOfClass("TextLabel")
+                    if label then
+                        local secondsLeft = health.Value * 0.5
+                        label.Text = string.format("%.1f", secondsLeft) .. "s"
+                        label.TextColor3 = TIMER_COLOR 
+                    end
+                else
+                    local tag = char:FindFirstChild("CapsuleLifeTag", true)
+                    if tag then tag:Destroy() end
+                end
+            end
+
+            local function monitorPlayer(player)
+                cleanupPlayer(player)
+                lifePlayerConns[player] = {}
+
+                local function onStatsLoaded(statsInstance)
+                    local health = statsInstance:WaitForChild("Health", 5)
+                    local isBeastVal = statsInstance:WaitForChild("IsBeast", 5)
+                    local isCapVal = statsInstance:FindFirstChild("IsCaptured") or statsInstance:FindFirstChild("Captured")
+
+                    if health and isBeastVal then
+                        lifeCachedStats[player] = {
+                            health = health,
+                            isBeast = isBeastVal,
+                            module = statsInstance
+                        }
+
+                        local hConn = health:GetPropertyChangedSignal("Value"):Connect(function()
+                            updatePlayerTag(player)
+                        end)
+                        table.insert(lifePlayerConns[player], hConn)
+
+                        local bConn = isBeastVal:GetPropertyChangedSignal("Value"):Connect(function()
+                            updatePlayerTag(player)
+                        end)
+                        table.insert(lifePlayerConns[player], bConn)
+                    end
+
+                    if isCapVal then
+                        local cConn = isCapVal:GetPropertyChangedSignal("Value"):Connect(function()
+                            updatePlayerTag(player)
+                        end)
+                        table.insert(lifePlayerConns[player], cConn)
+                    end
+
+                    updatePlayerTag(player)
+                end
+
+                local stats = player:FindFirstChild("TempPlayerStatsModule", true)
+                if stats then
+                    onStatsLoaded(stats)
+                end
+
+                local childConn = player.ChildAdded:Connect(function(child)
+                    if child.Name == "TempPlayerStatsModule" or child:FindFirstChild("TempPlayerStatsModule", true) then
+                        local freshStats = player:FindFirstChild("TempPlayerStatsModule", true)
+                        if freshStats then
+                            onStatsLoaded(freshStats)
+                        end
+                    end
+                end)
+                table.insert(lifePlayerConns[player], childConn)
+
+                local charConn = player.CharacterAdded:Connect(function()
+                    task.wait(0.1)
+                    updatePlayerTag(player)
+                end)
+                table.insert(lifePlayerConns[player], charConn)
+            end
+
+            for i = 1, #cachedPlayersList do
+                monitorPlayer(cachedPlayersList[i])
+            end
+
+            local playerAddedConn = Players.PlayerAdded:Connect(function(player)
+                monitorPlayer(player)
+            end)
+            table.insert(lifeConns, playerAddedConn)
+
+            local playerRemovingConn = Players.PlayerRemoving:Connect(function(player)
+                cleanupPlayer(player)
+            end)
+            table.insert(lifeConns, playerRemovingConn)
+
+            local loopThread = task.spawn(function()
+                while lifeActive do
+                    for i = 1, #cachedPlayersList do
+                        updatePlayerTag(cachedPlayersList[i])
+                    end
+                    task.wait(1) -- Varredura secundária rápida
+                end
+            end)
+            table.insert(lifeConns, loopThread)
+        else
+            for _, conn in ipairs(lifeConns) do
+                if typeof(conn) == "thread" then
+                    task.cancel(conn)
+                else
+                    conn:Disconnect()
+                end
+            end
+            table.clear(lifeConns)
+
+            for i = 1, #cachedPlayersList do
+                local player = cachedPlayersList[i]
+                local char = player.Character
+                if char then
+                    local tag = char:FindFirstChild("CapsuleLifeTag", true)
+                    if tag then tag:Destroy() end
+                end
+                lifePlayerConns[player] = nil
+                lifeCachedStats[player] = nil
+            end
+            table.clear(lifePlayerConns)
+            table.clear(lifeCachedStats)
         end
     end)
 
@@ -2068,27 +2452,57 @@ return function(env)
         compHighlightEnabled = state
         for _, obj in ipairs(Workspace:GetDescendants()) do
             if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then
-                obj.Enabled = state
+                obj.Enabled = state or compOutlineEnabled
             end
         end
     end)
 
-    -- 2. Door Highlight
+    -- 2. Computer Outline
+    Library:CreateToggle(Page, "Computer Outline", false, function(state)
+        compOutlineEnabled = state
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then
+                obj.Enabled = compHighlightEnabled or state
+            end
+        end
+    end)
+
+    -- 3. Door Highlight
     Library:CreateToggle(Page, "Door Highlight", false, function(state)
         doorHighlightEnabled = state
         for _, data in pairs(trackedNormalDoors) do
             if data.Highlight then
-                data.Highlight.Enabled = state
+                data.Highlight.Enabled = state or doorOutlineEnabled
             end
         end
     end)
 
-    -- 3. ExitDoor Highlight
+    -- 4. Door Outline
+    Library:CreateToggle(Page, "Door Outline", false, function(state)
+        doorOutlineEnabled = state
+        for _, data in pairs(trackedNormalDoors) do
+            if data.Highlight then
+                data.Highlight.Enabled = doorHighlightEnabled or state
+            end
+        end
+    end)
+
+    -- 5. ExitDoor Highlight
     Library:CreateToggle(Page, "ExitDoor Highlight", false, function(state)
         exitHighlightEnabled = state
         for _, data in pairs(trackedExitDoors) do
             if data.Highlight then
-                data.Highlight.Enabled = state
+                data.Highlight.Enabled = state or exitOutlineEnabled
+            end
+        end
+    end)
+
+    -- 6. ExitDoor Outline
+    Library:CreateToggle(Page, "ExitDoor Outline", false, function(state)
+        exitOutlineEnabled = state
+        for _, data in pairs(trackedExitDoors) do
+            if data.Highlight then
+                data.Highlight.Enabled = exitHighlightEnabled or state
             end
         end
     end)
@@ -2101,7 +2515,6 @@ return function(env)
     -- 1. PC Progress Design (Dropdown)
     Library:CreateDropdown(Page, "PC Progress Design", {"Default", "Style 1", "Style 2"}, "Default", function(val)
         currentComputerStyle = val
-        -- Limpa computadores para redesenhar com o estilo selecionado
         for _, obj in ipairs(Workspace:GetDescendants()) do
             if obj.Name == "ProgressBar" and obj:IsA("BillboardGui") then obj:Destroy() end
             if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then obj:Destroy() end
@@ -2112,9 +2525,8 @@ return function(env)
     -- 2. Door Progress Design (Dropdown)
     Library:CreateDropdown(Page, "Door Progress Design", {"Default", "Style 1", "Style 2"}, "Default", function(val)
         currentDoorStyle = val
-        lastMap = nil -- Reseta o rastreador de mapa para forçar varredura instantânea
+        lastMap = nil 
         
-        -- Limpa portas para redesenhar com o estilo selecionado
         if doorAddedConn then doorAddedConn:Disconnect(); doorAddedConn = nil end
         for doorModel, data in pairs(trackedNormalDoors) do
             if data.Billboard then data.Billboard:Destroy() end
@@ -2123,10 +2535,63 @@ return function(env)
         table.clear(trackedNormalDoors)
     end)
 
-    -- 3. Door Progress Distance (Slider)
+    -- 3. Life Timer Origin (Dropdown posicionado em baixo do Door Progress Design)
+    Library:CreateDropdown(Page, "Life Timer Origin", {"Head", "Torso", "Inferior"}, "Head", function(val)
+        lifeTimerOrigin = val
+        if lifeActive then
+            for i = 1, #cachedPlayersList do
+                local player = cachedPlayersList[i]
+                local char = player.Character
+                if char then
+                    local tag = char:FindFirstChild("CapsuleLifeTag", true)
+                    if tag then
+                        local targetPart, offset = nil, Vector3.new(0, 0, 0)
+                        if lifeTimerOrigin == "Head" then
+                            targetPart = char:FindFirstChild("Head")
+                            offset = Vector3.new(0, 0, 0)
+                        elseif lifeTimerOrigin == "Torso" then
+                            targetPart = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char:FindFirstChild("HumanoidRootPart")
+                            offset = Vector3.new(0, 0, 0)
+                        else
+                            targetPart = char:FindFirstChild("HumanoidRootPart")
+                            offset = Vector3.new(0, -3.2, 0)
+                        end
+                        if targetPart then
+                            tag.Parent = targetPart
+                            tag.StudsOffset = offset
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    -- 4. Hide Head GetUp
+    Library:CreateToggle(Page, "Hide Head GetUp", false, function(state)
+        hideHeadGetUp = state
+        if state then
+            for i = 1, #cachedPlayersList do
+                local char = cachedPlayersList[i].Character
+                local head = char and char:FindFirstChild("Head")
+                local bb = head and head:FindFirstChild("RC")
+                if bb then bb:Destroy() end
+            end
+        end
+    end)
+
+    -- 5. WalkSpeed Lateral
+    Library:CreateToggle(Page, "WalkSpeed Lateral", false, function(state)
+        lateralSpeedActive = state
+        
+        if not state then
+            if speedScreenGui then speedScreenGui:Destroy(); speedScreenGui = nil end
+            table.clear(speedLabels2D)
+        end
+    end)
+
+    -- 6. Door Progress Distance (slider posicionado como último elemento)
     Library:CreateSlider(Page, "Door progress distance", 30, 300, 150, function(val)
         doorMaxDistance = val
-        -- Atualiza dinamicamente as portas ativas no mapa
         for _, data in pairs(trackedNormalDoors) do
             if data.Billboard then
                 data.Billboard.MaxDistance = val
