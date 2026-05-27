@@ -21,6 +21,9 @@ return function(env)
     local globalOverlapParams = OverlapParams.new()
     globalOverlapParams.FilterType = Enum.RaycastFilterType.Include
 
+    -- Rastreamento direto na memória para evitar buscas pesadas no Workspace
+    local activeCompHighlights = {}
+
     -- Atualização inteligente do cache de personagens (Evita recriação de tabelas em loops rápidos)
     local function updateCharacterCache()
         table.clear(cachedCharacters)
@@ -42,9 +45,10 @@ return function(env)
         end)
     end))
 
-    table.insert(globalConnections, Players.PlayerRemoving:Connect(function() 
+    table.insert(globalConnections, Players.PlayerRemoving:Connect(function(plr) 
         cachedPlayersList = Players:GetPlayers() 
         updateCharacterCache()
+        if speedCache then speedCache[plr] = nil end
     end))
 
     -- Ativar escuta para os jogadores que já estão no jogo
@@ -301,13 +305,15 @@ return function(env)
 
                 local billboard, bar, text = createProgressBar(tableModel)
                 
-                local highlight = tableModel:FindFirstChildOfClass("Highlight") or Instance.new("Highlight")
+                local highlight = tableModel:FindFirstChild("ComputerHighlight") or Instance.new("Highlight")
                 highlight.Name = "ComputerHighlight"
                 highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                 highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
                 highlight.OutlineTransparency = 0
                 highlight.Enabled = compHighlightEnabled or compOutlineEnabled
                 highlight.Parent = tableModel
+
+                activeCompHighlights[tableModel] = highlight
 
                 local screen = tableModel:FindFirstChild("Screen")
                 local triggers = {}
@@ -319,7 +325,7 @@ return function(env)
 
                 local savedProgress = 0
                 local lastSize = -1
-                local updateInterval = 0.05 -- Frequência ideal para evitar lag
+                local updateInterval = 0.05 
                 local accumulatedTime = 0
 
                 local connection
@@ -376,23 +382,27 @@ return function(env)
                     else
                         local highestTouch = 0
                         
-                        -- Varredura otimizada usando cache global de personagens
+                        -- Varredura segura contra destruição/erros físicos
                         if #cachedCharacters > 0 then
                             for i = 1, #triggers do
                                 local part = triggers[i]
-                                if part and part.Parent then
-                                    local touchingParts = Workspace:GetPartsInPart(part, globalOverlapParams)
-                                    for j = 1, #touchingParts do
-                                        local character = touchingParts[j].Parent
-                                        local plr = Players:GetPlayerFromCharacter(character)
-                                        if plr then
-                                            local tpsm = plr:FindFirstChild("TempPlayerStatsModule")
-                                            if tpsm then
-                                                local ragdoll = tpsm:FindFirstChild("Ragdoll")
-                                                local ap = tpsm:FindFirstChild("ActionProgress")
-                                                if ragdoll and typeof(ragdoll.Value) == "boolean" and not ragdoll.Value then
-                                                    if ap and typeof(ap.Value) == "number" then
-                                                        highestTouch = math.max(highestTouch, ap.Value)
+                                if part and part:IsA("BasePart") and part.Parent then
+                                    local success, touchingParts = pcall(function()
+                                        return Workspace:GetPartsInPart(part, globalOverlapParams)
+                                    end)
+                                    if success and touchingParts then
+                                        for j = 1, #touchingParts do
+                                            local character = touchingParts[j].Parent
+                                            local plr = Players:GetPlayerFromCharacter(character)
+                                            if plr then
+                                                local tpsm = plr:FindFirstChild("TempPlayerStatsModule")
+                                                if tpsm then
+                                                    local ragdoll = tpsm:FindFirstChild("Ragdoll")
+                                                    local ap = tpsm:FindFirstChild("ActionProgress")
+                                                    if ragdoll and typeof(ragdoll.Value) == "boolean" and not ragdoll.Value then
+                                                        if ap and typeof(ap.Value) == "number" then
+                                                            highestTouch = math.max(highestTouch, ap.Value)
+                                                        end
                                                     end
                                                 end
                                             end
@@ -444,7 +454,6 @@ return function(env)
                         end
                     end
 
-                    -- Evita re-desenho desnecessário de interface se as propriedades não mudaram
                     if text.Text ~= textLabelText then text.Text = textLabelText end
                     if text.TextColor3 ~= textLabelColor then text.TextColor3 = textLabelColor end
                     if bar.BackgroundColor3 ~= barColor then bar.BackgroundColor3 = barColor end
@@ -477,6 +486,7 @@ return function(env)
                 if c then c:Disconnect() end 
             end
             table.clear(CompProgConns)
+            table.clear(activeCompHighlights)
             for _, obj in ipairs(Workspace:GetDescendants()) do
                 if obj.Name == "ProgressBar" and obj:IsA("BillboardGui") then obj:Destroy() end
                 if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then obj:Destroy() end
@@ -747,7 +757,7 @@ return function(env)
 
             DoorProgHeartbeat = RunService.Heartbeat:Connect(function(dt)
                 accum = accum + dt
-                if accum < 0.05 then return end -- Sincronia perfeita e rápida
+                if accum < 0.05 then return end 
                 accum = 0
                 
                 table.clear(currentDoorInteractions)
@@ -1107,7 +1117,6 @@ return function(env)
                     end
                 end
                 
-                -- Fallback se as portas de saída estiverem aninhadas
                 local descendants = searchArea:GetDescendants()
                 for i = 1, #descendants do
                     local obj = descendants[i]
@@ -2516,9 +2525,12 @@ return function(env)
     -- 1. Computer Highlight
     Library:CreateToggle(Page, "Computer Highlight", false, function(state)
         compHighlightEnabled = state
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then
-                obj.Enabled = state or compOutlineEnabled
+        local target = state or compOutlineEnabled
+        for tableModel, hl in pairs(activeCompHighlights) do
+            if hl and hl.Parent then
+                hl.Enabled = target
+            else
+                activeCompHighlights[tableModel] = nil
             end
         end
     end)
@@ -2526,9 +2538,12 @@ return function(env)
     -- 2. Computer Outline
     Library:CreateToggle(Page, "Computer Outline", false, function(state)
         compOutlineEnabled = state
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then
-                obj.Enabled = compHighlightEnabled or state
+        local target = compHighlightEnabled or state
+        for tableModel, hl in pairs(activeCompHighlights) do
+            if hl and hl.Parent then
+                hl.Enabled = target
+            else
+                activeCompHighlights[tableModel] = nil
             end
         end
     end)
@@ -2536,9 +2551,10 @@ return function(env)
     -- 3. Door Highlight
     Library:CreateToggle(Page, "Door Highlight", false, function(state)
         doorHighlightEnabled = state
+        local target = state or doorOutlineEnabled
         for _, data in pairs(trackedNormalDoors) do
             if data.Highlight then
-                data.Highlight.Enabled = state or doorOutlineEnabled
+                data.Highlight.Enabled = target
             end
         end
     end)
@@ -2546,9 +2562,10 @@ return function(env)
     -- 4. Door Outline
     Library:CreateToggle(Page, "Door Outline", false, function(state)
         doorOutlineEnabled = state
+        local target = doorHighlightEnabled or state
         for _, data in pairs(trackedNormalDoors) do
             if data.Highlight then
-                data.Highlight.Enabled = doorHighlightEnabled or state
+                data.Highlight.Enabled = target
             end
         end
     end)
@@ -2556,9 +2573,10 @@ return function(env)
     -- 5. ExitDoor Highlight
     Library:CreateToggle(Page, "ExitDoor Highlight", false, function(state)
         exitHighlightEnabled = state
+        local target = state or exitOutlineEnabled
         for _, data in pairs(trackedExitDoors) do
             if data.Highlight then
-                data.Highlight.Enabled = state or exitOutlineEnabled
+                data.Highlight.Enabled = target
             end
         end
     end)
@@ -2566,9 +2584,10 @@ return function(env)
     -- 6. ExitDoor Outline
     Library:CreateToggle(Page, "ExitDoor Outline", false, function(state)
         exitOutlineEnabled = state
+        local target = exitHighlightEnabled or state
         for _, data in pairs(trackedExitDoors) do
             if data.Highlight then
-                data.Highlight.Enabled = exitHighlightEnabled or state
+                data.Highlight.Enabled = target
             end
         end
     end)
@@ -2586,6 +2605,7 @@ return function(env)
             if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then obj:Destroy() end
         end
         table.clear(CompProgConns)
+        table.clear(activeCompHighlights)
     end)
 
     -- 2. Door Progress Design (Dropdown)
