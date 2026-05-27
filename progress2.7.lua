@@ -11,9 +11,6 @@ return function(env)
     local Theme = env.Theme
     local SendNotification = env.SendNotification
 
-    -- =========================================================================
-    -- ESCOPO DE SEGURANÇA E CACHE DE ALTA PERFORMANCE (Evita gargalos de CPU)
-    -- =========================================================================
     local cachedPlayersList = Players:GetPlayers()
     local globalPlayerAdded = Players.PlayerAdded:Connect(function() cachedPlayersList = Players:GetPlayers() end)
     local globalPlayerRemoving = Players.PlayerRemoving:Connect(function() cachedPlayersList = Players:GetPlayers() end)
@@ -21,7 +18,6 @@ return function(env)
     local globalOverlapParams = OverlapParams.new()
     globalOverlapParams.FilterType = Enum.RaycastFilterType.Include
 
-    -- Vars Beast Power
     local BeastPowerConnection1 = nil
     local BeastPowerConnection2 = nil
     local uiFrameBP, uiLabelBP = nil, nil
@@ -30,15 +26,12 @@ return function(env)
     local isDraining = false
     local BeastPowerLoop2 = nil
 
-    -- Vars Computer Progress & Highlight Outlines
     local CompProgLoop = nil
     local CompProgConns = {}
     local compHighlightEnabled = false
     local compOutlineEnabled = false
     local currentComputerStyle = "Default"
-    local trackedComputers = {} -- Tabela de rastreamento direto para evitar GetDescendants()
 
-    -- Vars Door Progress & Highlight Outlines
     local DoorProgLoop = nil
     local DoorProgHeartbeat = nil
     local doorAddedConn = nil
@@ -49,7 +42,6 @@ return function(env)
     local doorMaxDistance = 150
     local lastMap = nil
 
-    -- Vars ExitDoor Progress & Highlight Outlines
     local ExitDoorConn = nil
     local ExitDoorAdded = nil
     local ExitDoorRemoving = nil
@@ -58,7 +50,6 @@ return function(env)
     local exitHighlightEnabled = false
     local exitOutlineEnabled = false
 
-    -- Vars WalkSpeed Detector (Unified Speed Tracker)
     local speedActive = false
     local lateralSpeedActive = false
     local speedRenderConn = nil
@@ -66,12 +57,10 @@ return function(env)
     local speedScreenGui = nil
     local speedListFrame = nil
 
-    -- Vars Wallhop Counter
     local WallhopStateConn = nil
     local WallhopCharConn = nil
     local WallhopTimerConn = nil
 
-    -- Vars GetUp Timer & Hide Setting
     local getupActive = false
     local hideHeadGetUp = false
     local getupConns = {} 
@@ -80,12 +69,10 @@ return function(env)
     local getupList = nil
     local activeGetUp = {}
 
-    -- Vars Beast Spawn Timer
     local BeastSpawnActive = false
     local BeastSpawnLoopThread = nil
     local BeastSpawnRenderConn = nil
 
-    -- Vars Life Timer (New Electric Blue Version)
     local lifeActive = false
     local lifeConns = {}
     local lifePlayerConns = {}
@@ -97,12 +84,8 @@ return function(env)
         IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive", 2)
     end)
 
-    -- =========================================================================
-    -- SECTION: ACTION TIMERS (Coluna Esquerda)
-    -- =========================================================================
     Library:CreateSection(Page, "Action Timers")
     
-    -- 1. Computer Progress
     Library:CreateToggle(Page, "Computer Progress", false, function(state)
         if state then
             local function createProgressBar(parent)
@@ -267,11 +250,6 @@ return function(env)
                 highlight.OutlineTransparency = 0
                 highlight.Enabled = compHighlightEnabled or compOutlineEnabled
                 highlight.Parent = tableModel
-
-                trackedComputers[tableModel] = {
-                    Billboard = billboard,
-                    Highlight = highlight
-                }
 
                 local screen = tableModel:FindFirstChild("Screen")
                 local triggers = {}
@@ -438,15 +416,13 @@ return function(env)
                 if c then c:Disconnect() end 
             end
             table.clear(CompProgConns)
-            for tableModel, data in pairs(trackedComputers) do
-                if data.Billboard then data.Billboard:Destroy() end
-                if data.Highlight then data.Highlight:Destroy() end
+            for _, obj in ipairs(Workspace:GetDescendants()) do
+                if obj.Name == "ProgressBar" and obj:IsA("BillboardGui") then obj:Destroy() end
+                if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then obj:Destroy() end
             end
-            table.clear(trackedComputers)
         end
     end)
     
-    -- 2. Door Progress
     Library:CreateToggle(Page, "Door Progress", false, function(state)
         if state then
             local DT_CONFIG = { 
@@ -916,7 +892,6 @@ return function(env)
         end
     end)
     
-    -- 3. ExitDoor Progress
     Library:CreateToggle(Page, "ExitDoor Progress", false, function(state)
         if state then
             local guiName = "FTF_ExitDoorESP_Premium"
@@ -1135,8 +1110,9 @@ return function(env)
                             local newMain = nil
                             local doorDescendants = door:GetDescendants()
                             for i = 1, #doorDescendants do
-                                if doorDescendants[i]:IsA("BasePart") and doorDescendants[i].Name ~= "Trigger" then
-                                    newMain = doorDescendants[i]
+                                classPart = doorDescendants[i]
+                                if classPart:IsA("BasePart") and classPart.Name ~= "Trigger" then
+                                    newMain = classPart
                                     break
                                 end
                             end
@@ -1226,7 +1202,6 @@ return function(env)
         end
     end)
     
-    -- 4. WalkSpeed Detector (Unified Speed Tracker)
     Library:CreateToggle(Page, "WalkSpeed Detector", false, function(state)
         speedActive = state
         if state then
@@ -1377,7 +1352,6 @@ return function(env)
         end
     end)
 
-    -- 5. Wallhop Counter
     Library:CreateToggle(Page, "Wallhop Counter", false, function(state)
         if state then
             if CoreGui:FindFirstChild("WallhopCounterUI") then
@@ -1539,12 +1513,8 @@ return function(env)
         end
     end)
 
-    -- =========================================================================
-    -- SECTION: BEAST INDICATORS (Coluna Direita)
-    -- =========================================================================
     Library:CreateSection(Page, "Beast Indicators")
     
-    -- 1. GetUp Timer
     Library:CreateToggle(Page, "GetUp Timer", false, function(state)
         if state then
             getupActive = true
@@ -1836,7 +1806,6 @@ return function(env)
         end
     end)
     
-    -- 2. Beast Power Timer
     Library:CreateToggle(Page, "Beast Power Timer", false, function(state)
         if state then
             local function getUIContainer()
@@ -1957,7 +1926,6 @@ return function(env)
         end
     end)
     
-    -- 3. Beast Power Timer V2
     Library:CreateToggle(Page, "Beast Power Timer V2", false, function(state)
         local function CreateLabelBP(player)
             local character = player.Character
@@ -2029,7 +1997,6 @@ return function(env)
         end
     end)
     
-    -- 4. Beast Spawn Timer
     Library:CreateToggle(Page, "Beast Spawn Timer", false, function(state)
         if state then
             BeastSpawnActive = true
@@ -2178,7 +2145,6 @@ return function(env)
         end
     end)
 
-    -- 5. Life Timer
     Library:CreateToggle(Page, "Life Timer", false, function(state)
         lifeActive = state
         
@@ -2420,32 +2386,26 @@ return function(env)
         end
     end)
 
-    -- =========================================================================
-    -- SECTION: HIGHLIGHT SETTINGS (Coluna Esquerda - Abaixo de Action Timers)
-    -- =========================================================================
     Library:CreateSection(Page, "HighLight Settings")
     
-    -- 1. Computer Highlight
     Library:CreateToggle(Page, "Computer Highlight", false, function(state)
         compHighlightEnabled = state
-        for tableModel, data in pairs(trackedComputers) do
-            if data.Highlight then
-                data.Highlight.Enabled = state or compOutlineEnabled
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then
+                obj.Enabled = state or compOutlineEnabled
             end
         end
     end)
 
-    -- 2. Computer Outline
     Library:CreateToggle(Page, "Computer Outline", false, function(state)
         compOutlineEnabled = state
-        for tableModel, data in pairs(trackedComputers) do
-            if data.Highlight then
-                data.Highlight.Enabled = compHighlightEnabled or state
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then
+                obj.Enabled = compHighlightEnabled or state
             end
         end
     end)
 
-    -- 3. Door Highlight
     Library:CreateToggle(Page, "Door Highlight", false, function(state)
         doorHighlightEnabled = state
         for _, data in pairs(trackedNormalDoors) do
@@ -2455,7 +2415,6 @@ return function(env)
         end
     end)
 
-    -- 4. Door Outline
     Library:CreateToggle(Page, "Door Outline", false, function(state)
         doorOutlineEnabled = state
         for _, data in pairs(trackedNormalDoors) do
@@ -2465,7 +2424,6 @@ return function(env)
         end
     end)
 
-    -- 5. ExitDoor Highlight
     Library:CreateToggle(Page, "ExitDoor Highlight", false, function(state)
         exitHighlightEnabled = state
         for _, data in pairs(trackedExitDoors) do
@@ -2475,7 +2433,6 @@ return function(env)
         end
     end)
 
-    -- 6. ExitDoor Outline
     Library:CreateToggle(Page, "ExitDoor Outline", false, function(state)
         exitOutlineEnabled = state
         for _, data in pairs(trackedExitDoors) do
@@ -2485,23 +2442,17 @@ return function(env)
         end
     end)
 
-    -- =========================================================================
-    -- SECTION: PROGRESS SETTINGS (Coluna Direita - Abaixo de Beast Indicators)
-    -- =========================================================================
     Library:CreateSection(Page, "Progress Settings")
     
-    -- 1. PC Progress Design (Dropdown)
     Library:CreateDropdown(Page, "PC Progress Design", {"Default", "Style 1", "Style 2"}, "Default", function(val)
         currentComputerStyle = val
-        for tableModel, data in pairs(trackedComputers) do
-            if data.Billboard then data.Billboard:Destroy() end
-            if data.Highlight then data.Highlight:Destroy() end
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name == "ProgressBar" and obj:IsA("BillboardGui") then obj:Destroy() end
+            if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then obj:Destroy() end
         end
-        table.clear(trackedComputers)
         table.clear(CompProgConns)
     end)
 
-    -- 2. Door Progress Design (Dropdown)
     Library:CreateDropdown(Page, "Door Progress Design", {"Default", "Style 1", "Style 2"}, "Default", function(val)
         currentDoorStyle = val
         lastMap = nil 
@@ -2514,7 +2465,6 @@ return function(env)
         table.clear(trackedNormalDoors)
     end)
 
-    -- 3. Life Timer Origin (Dropdown posicionado diretamente abaixo do Door Progress Design)
     Library:CreateDropdown(Page, "Life Timer Origin", {"Head", "Torso", "Inferior"}, "Head", function(val)
         lifeTimerOrigin = val
         if lifeActive then
@@ -2545,7 +2495,6 @@ return function(env)
         end
     end)
 
-    -- 4. Hide Head GetUp
     Library:CreateToggle(Page, "Hide Head GetUp", false, function(state)
         hideHeadGetUp = state
         if state then
@@ -2558,17 +2507,14 @@ return function(env)
         end
     end)
 
-    -- 5. WalkSpeed Lateral
     Library:CreateToggle(Page, "WalkSpeed Lateral", false, function(state)
         lateralSpeedActive = state
-        
         if not state then
             if speedScreenGui then speedScreenGui:Destroy(); speedScreenGui = nil end
             table.clear(speedLabels2D)
         end
     end)
 
-    -- 6. Door Progress Distance (slider posicionado como último elemento)
     Library:CreateSlider(Page, "Door progress distance", 30, 300, 150, function(val)
         doorMaxDistance = val
         for _, data in pairs(trackedNormalDoors) do
