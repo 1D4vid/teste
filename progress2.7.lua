@@ -11,13 +11,15 @@ return function(env)
     local Theme = env.Theme
     local SendNotification = env.SendNotification
 
-    local cachedPlayersList = Players:GetPlayers()
-    local globalPlayerAdded = Players.PlayerAdded:Connect(function() cachedPlayersList = Players:GetPlayers() end)
-    local globalPlayerRemoving = Players.PlayerRemoving:Connect(function() cachedPlayersList = Players:GetPlayers() end)
-
+    -- =========================================================================
+    -- VARIÁVEIS DE CONTROLE GLOBAL (Módulo)
+    -- =========================================================================
+    
+    -- Instância global de OverlapParams para evitar alocação de memória contínua
     local globalOverlapParams = OverlapParams.new()
     globalOverlapParams.FilterType = Enum.RaycastFilterType.Include
 
+    -- Vars Beast Power
     local BeastPowerConnection1 = nil
     local BeastPowerConnection2 = nil
     local uiFrameBP, uiLabelBP = nil, nil
@@ -26,12 +28,14 @@ return function(env)
     local isDraining = false
     local BeastPowerLoop2 = nil
 
+    -- Vars Computer Progress & Highlight Outlines
     local CompProgLoop = nil
     local CompProgConns = {}
     local compHighlightEnabled = false
     local compOutlineEnabled = false
     local currentComputerStyle = "Default"
 
+    -- Vars Door Progress & Highlight Outlines
     local DoorProgLoop = nil
     local DoorProgHeartbeat = nil
     local doorAddedConn = nil
@@ -42,6 +46,7 @@ return function(env)
     local doorMaxDistance = 150
     local lastMap = nil
 
+    -- Vars ExitDoor Progress & Highlight Outlines
     local ExitDoorConn = nil
     local ExitDoorAdded = nil
     local ExitDoorRemoving = nil
@@ -50,6 +55,7 @@ return function(env)
     local exitHighlightEnabled = false
     local exitOutlineEnabled = false
 
+    -- Vars WalkSpeed Detector (Unified Speed Tracker)
     local speedActive = false
     local lateralSpeedActive = false
     local speedRenderConn = nil
@@ -57,10 +63,12 @@ return function(env)
     local speedScreenGui = nil
     local speedListFrame = nil
 
+    -- Vars Wallhop Counter
     local WallhopStateConn = nil
     local WallhopCharConn = nil
     local WallhopTimerConn = nil
 
+    -- Vars GetUp Timer & Hide Setting
     local getupActive = false
     local hideHeadGetUp = false
     local getupConns = {} 
@@ -69,23 +77,30 @@ return function(env)
     local getupList = nil
     local activeGetUp = {}
 
+    -- Vars Beast Spawn Timer
     local BeastSpawnActive = false
     local BeastSpawnLoopThread = nil
     local BeastSpawnRenderConn = nil
 
+    -- Vars Life Timer (New Electric Blue Version)
     local lifeActive = false
     local lifeConns = {}
     local lifePlayerConns = {}
     local lifeCachedStats = {}
     local lifeTimerOrigin = "Head"
     
+    -- IsGameActive carregado de forma assíncrona para não travar a UI
     local IsGameActive = nil
     task.spawn(function()
         IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive", 2)
     end)
 
+    -- =========================================================================
+    -- SECTION: ACTION TIMERS (Coluna Esquerda)
+    -- =========================================================================
     Library:CreateSection(Page, "Action Timers")
     
+    -- 1. Computer Progress
     Library:CreateToggle(Page, "Computer Progress", false, function(state)
         if state then
             local function createProgressBar(parent)
@@ -314,9 +329,10 @@ return function(env)
                     else
                         local highestTouch = 0
                         local characterParts = {}
+                        local playersList = Players:GetPlayers()
                         
-                        for i = 1, #cachedPlayersList do
-                            local char = cachedPlayersList[i].Character
+                        for i = 1, #playersList do
+                            local char = playersList[i].Character
                             if char then
                                 table.insert(characterParts, char)
                             end
@@ -397,13 +413,10 @@ return function(env)
                         local mapName = tostring(currentMap.Value)
                         local map = Workspace:FindFirstChild(mapName)
                         if map then
-                            local children = map:GetChildren()
-                            for i = 1, #children do
-                                local obj = children[i]
+                            for _, obj in ipairs(map:GetChildren()) do
                                 if obj.Name == "ComputerTable" then
                                     setupComputer(obj)
                                 end
-                                if i % 8 == 0 then task.wait() end
                             end
                         end
                     end
@@ -423,6 +436,7 @@ return function(env)
         end
     end)
     
+    -- 2. Door Progress
     Library:CreateToggle(Page, "Door Progress", false, function(state)
         if state then
             local DT_CONFIG = { 
@@ -657,13 +671,10 @@ return function(env)
 
                         local map = Workspace:FindFirstChild(mapName)
                         if map then
-                            local mapChildren = map:GetChildren()
-                            for i = 1, #mapChildren do
-                                local obj = mapChildren[i]
+                            for _, obj in ipairs(map:GetChildren()) do
                                 if obj:IsA("Model") and DT_CONFIG.DOOR_NAMES[obj.Name] and not DT_CONFIG.BLACKLIST[obj.Name] then 
                                     setupNormalDoor(obj) 
                                 end
-                                if i % 10 == 0 then task.wait() end
                             end
                             
                             doorAddedConn = map.DescendantAdded:Connect(function(obj)
@@ -689,9 +700,10 @@ return function(env)
                 accum = 0
                 
                 table.clear(currentDoorInteractions)
+                local playersList = Players:GetPlayers()
 
-                for i = 1, #cachedPlayersList do
-                    local player = cachedPlayersList[i]
+                for i = 1, #playersList do
+                    local player = playersList[i]
                     local stats = player:FindFirstChild("TempPlayerStatsModule")
                     if stats then
                         local action = stats:FindFirstChild("ActionProgress")
@@ -892,6 +904,7 @@ return function(env)
         end
     end)
     
+    -- 3. ExitDoor Progress
     Library:CreateToggle(Page, "ExitDoor Progress", false, function(state)
         if state then
             local guiName = "FTF_ExitDoorESP_Premium"
@@ -1035,7 +1048,6 @@ return function(env)
                     if obj.Name == "ExitDoor" and obj:IsA("Model") then
                         registerExitDoor(obj)
                     end
-                    if i % 40 == 0 then task.wait() end
                 end
             end)
 
@@ -1050,9 +1062,10 @@ return function(env)
             ExitDoorConn = task.spawn(function()
                 while state and task.wait(0.15) do 
                     local openingNow = {}
+                    local playersList = Players:GetPlayers()
 
-                    for i = 1, #cachedPlayersList do
-                        local plr = cachedPlayersList[i]
+                    for i = 1, #playersList do
+                        local plr = playersList[i]
                         local char = plr.Character
                         local hrp = char and char:FindFirstChild("HumanoidRootPart")
                         
@@ -1110,9 +1123,9 @@ return function(env)
                             local newMain = nil
                             local doorDescendants = door:GetDescendants()
                             for i = 1, #doorDescendants do
-                                classPart = doorDescendants[i]
-                                if classPart:IsA("BasePart") and classPart.Name ~= "Trigger" then
-                                    newMain = classPart
+                                local p = doorDescendants[i]
+                                if p:IsA("BasePart") and p.Name ~= "Trigger" then
+                                    newMain = p
                                     break
                                 end
                             end
@@ -1202,6 +1215,7 @@ return function(env)
         end
     end)
     
+    -- 4. WalkSpeed Detector (Unified Speed Tracker)
     Library:CreateToggle(Page, "WalkSpeed Detector", false, function(state)
         speedActive = state
         if state then
@@ -1216,8 +1230,8 @@ return function(env)
                     speedUpdateAccum = 0
 
                     local roundActive = false
-                    for i = 1, #cachedPlayersList do
-                        if cachedPlayersList[i]:FindFirstChild("TempPlayerStatsModule", true) then
+                    for _, p in ipairs(Players:GetPlayers()) do
+                        if p:FindFirstChild("TempPlayerStatsModule", true) then
                             roundActive = true
                             break
                         end
@@ -1250,8 +1264,7 @@ return function(env)
                         end
                     end
 
-                    for i = 1, #cachedPlayersList do
-                        local player = cachedPlayersList[i]
+                    for _, player in ipairs(Players:GetPlayers()) do
                         local char = player.Character
                         local root = char and char:FindFirstChild("HumanoidRootPart")
                         local humanoid = char and char:FindFirstChildOfClass("Humanoid")
@@ -1342,8 +1355,7 @@ return function(env)
             if speedRenderConn then speedRenderConn:Disconnect(); speedRenderConn = nil end
             if speedScreenGui then speedScreenGui:Destroy(); speedScreenGui = nil end
             table.clear(speedLabels2D)
-            for i = 1, #cachedPlayersList do
-                local player = cachedPlayersList[i]
+            for _, player in ipairs(Players:GetPlayers()) do
                 local char = player.Character
                 if char and char:FindFirstChild("SpeedTag") then
                     char.SpeedTag:Destroy()
@@ -1352,6 +1364,7 @@ return function(env)
         end
     end)
 
+    -- 5. Wallhop Counter
     Library:CreateToggle(Page, "Wallhop Counter", false, function(state)
         if state then
             if CoreGui:FindFirstChild("WallhopCounterUI") then
@@ -1513,8 +1526,12 @@ return function(env)
         end
     end)
 
+    -- =========================================================================
+    -- SECTION: BEAST INDICATORS (Coluna Direita)
+    -- =========================================================================
     Library:CreateSection(Page, "Beast Indicators")
     
+    -- 1. GetUp Timer
     Library:CreateToggle(Page, "GetUp Timer", false, function(state)
         if state then
             getupActive = true
@@ -1741,8 +1758,7 @@ return function(env)
 
             local hb = task.spawn(function()
                 while getupActive and task.wait(0.15) do 
-                    for i = 1, #cachedPlayersList do
-                        local p = cachedPlayersList[i]
+                    for _, p in ipairs(Players:GetPlayers()) do
                         if p ~= LocalPlayer and not activeGetUp[p] then
                             local char = p.Character
                             local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -1796,8 +1812,7 @@ return function(env)
                 getupGui = nil 
             end
             
-            for i = 1, #cachedPlayersList do
-                local p = cachedPlayersList[i]
+            for _, p in ipairs(Players:GetPlayers()) do
                 local char = p.Character
                 local head = char and char:FindFirstChild("Head")
                 local bb = head and head:FindFirstChild("RC")
@@ -1806,6 +1821,7 @@ return function(env)
         end
     end)
     
+    -- 2. Beast Power Timer
     Library:CreateToggle(Page, "Beast Power Timer", false, function(state)
         if state then
             local function getUIContainer()
@@ -1864,8 +1880,7 @@ return function(env)
             BeastPowerConnection1 = task.spawn(function()
                 while state and task.wait(1) do
                     local foundValue = nil
-                    for i = 1, #cachedPlayersList do
-                        local player = cachedPlayersList[i]
+                    for _, player in ipairs(Players:GetPlayers()) do
                         local char = player.Character
                         if char then
                             local beastPowers = char:FindFirstChild("BeastPowers")
@@ -1926,6 +1941,7 @@ return function(env)
         end
     end)
     
+    -- 3. Beast Power Timer V2
     Library:CreateToggle(Page, "Beast Power Timer V2", false, function(state)
         local function CreateLabelBP(player)
             local character = player.Character
@@ -1963,8 +1979,7 @@ return function(env)
             BeastPowerLoop2 = task.spawn(function()
                 while state do
                     task.wait(0.5)
-                    for i = 1, #cachedPlayersList do
-                        local player = cachedPlayersList[i]
+                    for _, player in ipairs(Players:GetPlayers()) do
                         if player ~= LocalPlayer then
                             local label = CreateLabelBP(player)
                             if label then
@@ -1987,8 +2002,7 @@ return function(env)
             end)
         else
             if BeastPowerLoop2 then task.cancel(BeastPowerLoop2); BeastPowerLoop2 = nil end
-            for i = 1, #cachedPlayersList do
-                local player = cachedPlayersList[i]
+            for _, player in ipairs(Players:GetPlayers()) do
                 if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                     local bb = player.Character.HumanoidRootPart:FindFirstChild("BeastPowerBillboard")
                     if bb then bb:Destroy() end
@@ -1997,6 +2011,7 @@ return function(env)
         end
     end)
     
+    -- 4. Beast Spawn Timer
     Library:CreateToggle(Page, "Beast Spawn Timer", false, function(state)
         if state then
             BeastSpawnActive = true
@@ -2145,6 +2160,7 @@ return function(env)
         end
     end)
 
+    -- 5. Life Timer (New logic integration)
     Library:CreateToggle(Page, "Life Timer", false, function(state)
         lifeActive = state
         
@@ -2196,11 +2212,11 @@ return function(env)
                 if not char then return nil, Vector3.new(0, 0, 0) end
                 if lifeTimerOrigin == "Head" then
                     local head = char:FindFirstChild("Head")
-                    return head, Vector3.new(0, 0, 0) 
+                    return head, Vector3.new(0, 0, 0) -- Centralizado na cabeça
                 elseif lifeTimerOrigin == "Torso" then
                     local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char:FindFirstChild("HumanoidRootPart")
                     return torso, Vector3.new(0, 0, 0)
-                else 
+                else -- "Inferior"
                     local hrp = char:FindFirstChild("HumanoidRootPart")
                     return hrp, Vector3.new(0, -3.2, 0)
                 end
@@ -2338,8 +2354,8 @@ return function(env)
                 table.insert(lifePlayerConns[player], charConn)
             end
 
-            for i = 1, #cachedPlayersList do
-                monitorPlayer(cachedPlayersList[i])
+            for _, player in ipairs(Players:GetPlayers()) do
+                monitorPlayer(player)
             end
 
             local playerAddedConn = Players.PlayerAdded:Connect(function(player)
@@ -2354,8 +2370,8 @@ return function(env)
 
             local loopThread = task.spawn(function()
                 while lifeActive do
-                    for i = 1, #cachedPlayersList do
-                        updatePlayerTag(cachedPlayersList[i])
+                    for _, player in ipairs(Players:GetPlayers()) do
+                        updatePlayerTag(player)
                     end
                     task.wait(2)
                 end
@@ -2371,8 +2387,7 @@ return function(env)
             end
             table.clear(lifeConns)
 
-            for i = 1, #cachedPlayersList do
-                local player = cachedPlayersList[i]
+            for _, player in ipairs(Players:GetPlayers()) do
                 local char = player.Character
                 if char then
                     local tag = char:FindFirstChild("CapsuleLifeTag", true)
@@ -2386,8 +2401,12 @@ return function(env)
         end
     end)
 
+    -- =========================================================================
+    -- SECTION: HIGHLIGHT SETTINGS (Coluna Esquerda - Abaixo de Action Timers)
+    -- =========================================================================
     Library:CreateSection(Page, "HighLight Settings")
     
+    -- 1. Computer Highlight
     Library:CreateToggle(Page, "Computer Highlight", false, function(state)
         compHighlightEnabled = state
         for _, obj in ipairs(Workspace:GetDescendants()) do
@@ -2397,6 +2416,7 @@ return function(env)
         end
     end)
 
+    -- 2. Computer Outline
     Library:CreateToggle(Page, "Computer Outline", false, function(state)
         compOutlineEnabled = state
         for _, obj in ipairs(Workspace:GetDescendants()) do
@@ -2406,6 +2426,7 @@ return function(env)
         end
     end)
 
+    -- 3. Door Highlight
     Library:CreateToggle(Page, "Door Highlight", false, function(state)
         doorHighlightEnabled = state
         for _, data in pairs(trackedNormalDoors) do
@@ -2415,6 +2436,7 @@ return function(env)
         end
     end)
 
+    -- 4. Door Outline
     Library:CreateToggle(Page, "Door Outline", false, function(state)
         doorOutlineEnabled = state
         for _, data in pairs(trackedNormalDoors) do
@@ -2424,6 +2446,7 @@ return function(env)
         end
     end)
 
+    -- 5. ExitDoor Highlight
     Library:CreateToggle(Page, "ExitDoor Highlight", false, function(state)
         exitHighlightEnabled = state
         for _, data in pairs(trackedExitDoors) do
@@ -2433,6 +2456,7 @@ return function(env)
         end
     end)
 
+    -- 6. ExitDoor Outline
     Library:CreateToggle(Page, "ExitDoor Outline", false, function(state)
         exitOutlineEnabled = state
         for _, data in pairs(trackedExitDoors) do
@@ -2442,8 +2466,12 @@ return function(env)
         end
     end)
 
+    -- =========================================================================
+    -- SECTION: PROGRESS SETTINGS (Coluna Direita - Abaixo de Beast Indicators)
+    -- =========================================================================
     Library:CreateSection(Page, "Progress Settings")
     
+    -- 1. PC Progress Design (Dropdown)
     Library:CreateDropdown(Page, "PC Progress Design", {"Default", "Style 1", "Style 2"}, "Default", function(val)
         currentComputerStyle = val
         for _, obj in ipairs(Workspace:GetDescendants()) do
@@ -2453,6 +2481,7 @@ return function(env)
         table.clear(CompProgConns)
     end)
 
+    -- 2. Door Progress Design (Dropdown)
     Library:CreateDropdown(Page, "Door Progress Design", {"Default", "Style 1", "Style 2"}, "Default", function(val)
         currentDoorStyle = val
         lastMap = nil 
@@ -2465,11 +2494,35 @@ return function(env)
         table.clear(trackedNormalDoors)
     end)
 
+    -- 3. Hide Head GetUp
+    Library:CreateToggle(Page, "Hide Head GetUp", false, function(state)
+        hideHeadGetUp = state
+        if state then
+            for _, p in ipairs(Players:GetPlayers()) do
+                local char = p.Character
+                local head = char and char:FindFirstChild("Head")
+                local bb = head and head:FindFirstChild("RC")
+                if bb then bb:Destroy() end
+            end
+        end
+    end)
+
+    -- 4. WalkSpeed Lateral
+    Library:CreateToggle(Page, "WalkSpeed Lateral", false, function(state)
+        lateralSpeedActive = state
+        
+        if not state then
+            if speedScreenGui then speedScreenGui:Destroy(); speedScreenGui = nil end
+            table.clear(speedLabels2D)
+        end
+    end)
+
+    -- 5. Life Timer Origin (Novo Dropdown)
     Library:CreateDropdown(Page, "Life Timer Origin", {"Head", "Torso", "Inferior"}, "Head", function(val)
         lifeTimerOrigin = val
+        -- Atualiza dinamicamente as posições dos marcadores ativos se a toggle estiver ligada
         if lifeActive then
-            for i = 1, #cachedPlayersList do
-                local player = cachedPlayersList[i]
+            for _, player in ipairs(Players:GetPlayers()) do
                 local char = player.Character
                 if char then
                     local tag = char:FindFirstChild("CapsuleLifeTag", true)
@@ -2495,26 +2548,7 @@ return function(env)
         end
     end)
 
-    Library:CreateToggle(Page, "Hide Head GetUp", false, function(state)
-        hideHeadGetUp = state
-        if state then
-            for i = 1, #cachedPlayersList do
-                local char = cachedPlayersList[i].Character
-                local head = char and char:FindFirstChild("Head")
-                local bb = head and head:FindFirstChild("RC")
-                if bb then bb:Destroy() end
-            end
-        end
-    end)
-
-    Library:CreateToggle(Page, "WalkSpeed Lateral", false, function(state)
-        lateralSpeedActive = state
-        if not state then
-            if speedScreenGui then speedScreenGui:Destroy(); speedScreenGui = nil end
-            table.clear(speedLabels2D)
-        end
-    end)
-
+    -- 6. Door Progress Distance (slider posicionado como último elemento)
     Library:CreateSlider(Page, "Door progress distance", 30, 300, 150, function(val)
         doorMaxDistance = val
         for _, data in pairs(trackedNormalDoors) do
