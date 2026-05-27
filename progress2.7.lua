@@ -31,9 +31,6 @@ return function(env)
         cachedPlayersList = Players:GetPlayers() 
     end))
 
-    local globalOverlapParams = OverlapParams.new()
-    globalOverlapParams.FilterType = Enum.RaycastFilterType.Include
-
     local compProgressActive = false
     local doorProgressActive = false
     local exitDoorActive = false
@@ -282,7 +279,7 @@ return function(env)
 
                 local savedProgress = 0
                 local lastSize = -1
-                local updateInterval = 0.03
+                local updateInterval = 0.05
                 local accumulatedTime = 0
 
                 local connection
@@ -303,28 +300,26 @@ return function(env)
                         end
                     end
 
-                    highlight.Enabled = compHighlightEnabled or compOutlineEnabled
+                    if highlight.Enabled ~= (compHighlightEnabled or compOutlineEnabled) then
+                        highlight.Enabled = compHighlightEnabled or compOutlineEnabled
+                    end
 
                     if compOutlineEnabled then
-                        highlight.FillTransparency = 1
-                        highlight.OutlineTransparency = 0
-                        if isGreen then
-                            highlight.OutlineColor = Color3.fromRGB(0, 255, 0)
-                        else
-                            if screen then
-                                local color = screen.Color
-                                if color.R > color.G and color.R > color.B then
-                                    highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
-                                else
-                                    highlight.OutlineColor = Color3.fromRGB(0, 180, 255)
-                                end
-                            end
+                        if highlight.FillTransparency ~= 1 then
+                            highlight.FillTransparency = 1
+                            highlight.OutlineTransparency = 0
+                        end
+                        local targetColor = isGreen and Color3.fromRGB(0, 255, 0) or (screen and (screen.Color.R > screen.Color.G and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 180, 255)) or Color3.fromRGB(0, 180, 255))
+                        if highlight.OutlineColor ~= targetColor then
+                            highlight.OutlineColor = targetColor
                         end
                     else
-                        highlight.FillTransparency = 0.5
-                        highlight.OutlineTransparency = 0
-                        highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
-                        if screen then
+                        if highlight.FillTransparency ~= 0.5 then
+                            highlight.FillTransparency = 0.5
+                            highlight.OutlineTransparency = 0
+                            highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
+                        end
+                        if screen and highlight.FillColor ~= screen.Color then
                             highlight.FillColor = screen.Color
                         end
                     end
@@ -333,33 +328,34 @@ return function(env)
                         savedProgress = 1
                     else
                         local highestTouch = 0
-                        local characterParts = {}
-                        
                         for i = 1, #cachedPlayersList do
-                            local char = cachedPlayersList[i].Character
+                            local plr = cachedPlayersList[i]
+                            local char = plr.Character
                             if char then
-                                table.insert(characterParts, char)
-                            end
-                        end
-
-                        if #characterParts > 0 then
-                            globalOverlapParams.FilterDescendantsInstances = characterParts
-                            for i = 1, #triggers do
-                                local part = triggers[i]
-                                if part and part.Parent then
-                                    local touchingParts = Workspace:GetPartsInPart(part, globalOverlapParams)
-                                    for j = 1, #touchingParts do
-                                        local character = touchingParts[j].Parent
-                                        local plr = Players:GetPlayerFromCharacter(character)
-                                        if plr then
-                                            local tpsm = plr:FindFirstChild("TempPlayerStatsModule")
-                                            if tpsm then
-                                                local ragdoll = tpsm:FindFirstChild("Ragdoll")
-                                                local ap = tpsm:FindFirstChild("ActionProgress")
-                                                if ragdoll and typeof(ragdoll.Value) == "boolean" and not ragdoll.Value then
-                                                    if ap and typeof(ap.Value) == "number" then
-                                                        highestTouch = math.max(highestTouch, ap.Value)
+                                local hrp = char:FindFirstChild("HumanoidRootPart")
+                                if hrp then
+                                    local tpsm = plr:FindFirstChild("TempPlayerStatsModule")
+                                    if tpsm then
+                                        local ragdoll = tpsm:FindFirstChild("Ragdoll")
+                                        local ap = tpsm:FindFirstChild("ActionProgress")
+                                        if ragdoll and typeof(ragdoll.Value) == "boolean" and not ragdoll.Value then
+                                            if ap and typeof(ap.Value) == "number" then
+                                                local isClose = false
+                                                local hrpPos = hrp.Position
+                                                for t = 1, #triggers do
+                                                    local trig = triggers[t]
+                                                    if trig and trig.Parent then
+                                                        local dx = trig.Position.X - hrpPos.X
+                                                        local dy = trig.Position.Y - hrpPos.Y
+                                                        local dz = trig.Position.Z - hrpPos.Z
+                                                        if (dx*dx + dy*dy + dz*dz) < 49 then
+                                                            isClose = true
+                                                            break
+                                                        end
                                                     end
+                                                end
+                                                if isClose then
+                                                    highestTouch = math.max(highestTouch, ap.Value)
                                                 end
                                             end
                                         end
@@ -372,37 +368,48 @@ return function(env)
 
                     if savedProgress ~= lastSize then
                         lastSize = savedProgress
-                        local tweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-                        local tween = TweenService:Create(bar, tweenInfo, {Size = UDim2.new(savedProgress, 0, 1, 0)})
-                        tween:Play()
+                        local tweenInfo = TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+                        TweenService:Create(bar, tweenInfo, {Size = UDim2.new(savedProgress, 0, 1, 0)}):Play()
                     end
 
                     if currentComputerStyle == "Default" then
                         if savedProgress >= 1 then
-                            bar.BackgroundColor3 = Color3.fromRGB(0, 255, 140)
-                            text.TextColor3 = Color3.fromRGB(0, 255, 140)
-                            text.Text = "COMPLETED"
+                            if bar.BackgroundColor3 ~= Color3.fromRGB(0, 255, 140) then
+                                bar.BackgroundColor3 = Color3.fromRGB(0, 255, 140)
+                                text.TextColor3 = Color3.fromRGB(0, 255, 140)
+                                text.Text = "COMPLETED"
+                            end
                         else
-                            bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
-                            text.TextColor3 = Color3.fromRGB(255, 255, 255)
+                            if bar.BackgroundColor3 ~= Color3.fromRGB(0, 180, 255) then
+                                bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+                                text.TextColor3 = Color3.fromRGB(255, 255, 255)
+                            end
                             text.Text = string.format("%.1f%%", math.floor(savedProgress * 200 + 0.1) / 2)
                         end
                     elseif currentComputerStyle == "Style 1" then
                         if savedProgress >= 0.99 then
-                            bar.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
-                            text.TextColor3 = Color3.fromRGB(0, 255, 100)
-                            text.Text = "DONE"
+                            if bar.BackgroundColor3 ~= Color3.fromRGB(0, 255, 100) then
+                                bar.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+                                text.TextColor3 = Color3.fromRGB(0, 255, 100)
+                                text.Text = "DONE"
+                            end
                         else
-                            bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                            text.TextColor3 = Color3.fromRGB(255, 255, 255)
+                            if bar.BackgroundColor3 ~= Color3.fromRGB(255, 255, 255) then
+                                bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                                text.TextColor3 = Color3.fromRGB(255, 255, 255)
+                            end
                             text.Text = string.format("%d%%", math.floor(savedProgress * 100))
                         end
                     else
                         if savedProgress >= 1 then
-                            bar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-                            text.Text = "COMPLETED"
+                            if bar.BackgroundColor3 ~= Color3.fromRGB(0, 255, 0) then
+                                bar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+                                text.Text = "COMPLETED"
+                            end
                         else
-                            bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                            if bar.BackgroundColor3 ~= Color3.fromRGB(255, 255, 255) then
+                                bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                            end
                             text.Text = string.format("%.1f%%", math.floor(savedProgress * 200 + 0.1) / 2)
                         end
                     end
@@ -704,7 +711,7 @@ return function(env)
 
             DoorProgHeartbeat = RunService.Heartbeat:Connect(function(dt)
                 accum = accum + dt
-                if accum < 0.03 then return end
+                if accum < 0.05 then return end
                 accum = 0
                 
                 table.clear(currentDoorInteractions)
@@ -761,6 +768,7 @@ return function(env)
                 
                 local cam = Workspace.CurrentCamera
                 local camPos = cam and cam.CFrame.Position or Vector3.new(0, 0, 0)
+                local maxDistSq = doorMaxDistance * doorMaxDistance
 
                 for doorModel, data in pairs(trackedNormalDoors) do
                     if not doorModel.Parent or not data.Anchor or not data.Anchor.Parent then
@@ -775,17 +783,20 @@ return function(env)
                     local dy = anchorPos.Y - camPos.Y
                     local dz = anchorPos.Z - camPos.Z
                     local distSq = dx*dx + dy*dy + dz*dz
-                    local dist = math.sqrt(distSq)
 
-                    if dist > doorMaxDistance then
+                    if distSq > maxDistSq then
                         if data.Billboard.Enabled then
                             data.Billboard.Enabled = false
                             data.Highlight.Enabled = false
                         end
                         continue
                     else
-                        data.Billboard.Enabled = true
-                        data.Highlight.Enabled = doorHighlightEnabled or doorOutlineEnabled
+                        if not data.Billboard.Enabled then
+                            data.Billboard.Enabled = true
+                        end
+                        if data.Highlight.Enabled ~= (doorHighlightEnabled or doorOutlineEnabled) then
+                            data.Highlight.Enabled = doorHighlightEnabled or doorOutlineEnabled
+                        end
                     end
 
                     local currentCF = data.Anchor.CFrame
@@ -815,25 +826,23 @@ return function(env)
                     local interactionVal = currentDoorInteractions[doorModel] or 0
 
                     if doorOutlineEnabled then
-                        data.Highlight.FillTransparency = 1
-                        data.Highlight.OutlineTransparency = 0
-                        if isPhysicallyOpen then
-                            data.Highlight.OutlineColor = Color3.fromRGB(0, 255, 100)
-                        elseif interactionVal > 0.001 then
-                            data.Highlight.OutlineColor = Color3.fromRGB(255, 200, 0)
-                        else
-                            data.Highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+                        if data.Highlight.FillTransparency ~= 1 then
+                            data.Highlight.FillTransparency = 1
+                            data.Highlight.OutlineTransparency = 0
+                        end
+                        local targetOutline = isPhysicallyOpen and Color3.fromRGB(0, 255, 100) or (interactionVal > 0.001 and Color3.fromRGB(255, 200, 0) or Color3.fromRGB(255, 0, 0))
+                        if data.Highlight.OutlineColor ~= targetOutline then
+                            data.Highlight.OutlineColor = targetOutline
                         end
                     else
-                        data.Highlight.FillTransparency = 0.55
-                        data.Highlight.OutlineTransparency = 0
-                        data.Highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
-                        if isPhysicallyOpen then
-                            data.Highlight.FillColor = Color3.fromRGB(0, 255, 100)
-                        elseif interactionVal > 0.001 then
-                            data.Highlight.FillColor = Color3.fromRGB(255, 200, 0)
-                        else
-                            data.Highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                        if data.Highlight.FillTransparency ~= 0.55 then
+                            data.Highlight.FillTransparency = 0.55
+                            data.Highlight.OutlineTransparency = 0
+                            data.Highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
+                        end
+                        local targetFill = isPhysicallyOpen and Color3.fromRGB(0, 255, 100) or (interactionVal > 0.001 and Color3.fromRGB(255, 200, 0) or Color3.fromRGB(255, 0, 0))
+                        if data.Highlight.FillColor ~= targetFill then
+                            data.Highlight.FillColor = targetFill
                         end
                     end
 
@@ -1096,19 +1105,16 @@ return function(env)
                                 if currentProgress > 0 then
                                     local plrPos = hrp.Position
                                     local closestDoor = nil
-                                    local minDist = 5 
+                                    local minDist = 7
                                     
                                     for door, data in pairs(trackedExitDoors) do
                                         if door.Parent then
-                                            local parts = data.DoorParts
-                                            for j = 1, #parts do
-                                                local part = parts[j]
-                                                if part.Parent then
-                                                    local dist = (part.Position - plrPos).Magnitude
-                                                    if dist < minDist then
-                                                        minDist = dist
-                                                        closestDoor = door
-                                                    end
+                                            local part = data.MainPart
+                                            if part and part.Parent then
+                                                local dist = (part.Position - plrPos).Magnitude
+                                                if dist < minDist then
+                                                    minDist = dist
+                                                    closestDoor = door
                                                 end
                                             end
                                         end
@@ -1175,42 +1181,54 @@ return function(env)
                         end
                         
                         if data.Highlight then
-                            data.Highlight.Enabled = exitHighlightEnabled or exitOutlineEnabled
+                            if data.Highlight.Enabled ~= (exitHighlightEnabled or exitOutlineEnabled) then
+                                data.Highlight.Enabled = exitHighlightEnabled or exitOutlineEnabled
+                            end
                             
                             if exitOutlineEnabled then
-                                data.Highlight.FillTransparency = 1
-                                data.Highlight.OutlineTransparency = 0
-                                if data.Completed then
-                                    data.Highlight.OutlineColor = Color3.fromRGB(40, 255, 80)
-                                else
-                                    data.Highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
+                                if data.Highlight.FillTransparency ~= 1 then
+                                    data.Highlight.FillTransparency = 1
+                                    data.Highlight.OutlineTransparency = 0
+                                end
+                                local targetColor = data.Completed and Color3.fromRGB(40, 255, 80) or Color3.fromRGB(255, 255, 0)
+                                if data.Highlight.OutlineColor ~= targetColor then
+                                    data.Highlight.OutlineColor = targetColor
                                 end
                             else
-                                data.Highlight.FillTransparency = 0.55
-                                data.Highlight.OutlineTransparency = 0
-                                if data.Completed then
-                                    data.Highlight.FillColor = Color3.fromRGB(40, 255, 80)
-                                  else
-                                    data.Highlight.FillColor = Color3.fromRGB(255, 255, 0)
+                                if data.Highlight.FillTransparency ~= 0.55 then
+                                    data.Highlight.FillTransparency = 0.55
+                                    data.Highlight.OutlineTransparency = 0
+                                end
+                                local targetColor = data.Completed and Color3.fromRGB(40, 255, 80) or Color3.fromRGB(255, 255, 0)
+                                if data.Highlight.FillColor ~= targetColor then
+                                    data.Highlight.FillColor = targetColor
                                 end
                             end
                         end
                         
                         if data.Completed then
                             data.FillElement.Size = UDim2.new(1, 0, 1, 0)
-                            data.FillElement.BackgroundColor3 = Color3.fromRGB(40, 255, 80)
-                            data.TextElement.Text = "DOOR OPENED!"
-                            data.TextElement.TextColor3 = Color3.fromRGB(40, 255, 80)
+                            if data.FillElement.BackgroundColor3 ~= Color3.fromRGB(40, 255, 80) then
+                                data.FillElement.BackgroundColor3 = Color3.fromRGB(40, 255, 80)
+                                data.TextElement.Text = "DOOR OPENED!"
+                                data.TextElement.TextColor3 = Color3.fromRGB(40, 255, 80)
+                            end
                         else
                             data.FillElement.Size = UDim2.new(data.Progress, 0, 1, 0)
-                            data.FillElement.BackgroundColor3 = Color3.fromRGB(255, 160, 20)
+                            if data.FillElement.BackgroundColor3 ~= Color3.fromRGB(255, 160, 20) then
+                                data.FillElement.BackgroundColor3 = Color3.fromRGB(255, 160, 20)
+                            end
                             
                             if data.Progress > 0 then
                                 data.TextElement.Text = "OPENING: " .. math.floor(data.Progress * 100) .. "%"
                             else
-                                data.TextElement.Text = "EXIT"
+                                if data.TextElement.Text ~= "EXIT" then
+                                    data.TextElement.Text = "EXIT"
+                                end
                             end
-                            data.TextElement.TextColor3 = Color3.fromRGB(255, 255, 255)
+                            if data.TextElement.TextColor3 ~= Color3.fromRGB(255, 255, 255) then
+                                data.TextElement.TextColor3 = Color3.fromRGB(255, 255, 255)
+                            end
                         end
                     end
                     task.wait(0.12)
@@ -1231,8 +1249,13 @@ return function(env)
         speedActive = state
         if state then
             if not speedRenderConn then
+                local lastUpdate = 0
                 speedRenderConn = RunService.RenderStepped:Connect(function()
                     if not speedActive then return end
+                    
+                    local now = os.clock()
+                    if now - lastUpdate < 0.05 then return end
+                    lastUpdate = now
 
                     local roundActive = false
                     for i = 1, #cachedPlayersList do
@@ -1790,7 +1813,7 @@ return function(env)
                             end
                         end
                     end
-                    task.wait(0.1)
+                    task.wait(0.15)
                 end
             end)
             table.insert(getupConns, hb)
@@ -1914,17 +1937,20 @@ return function(env)
                 end
             end)
 
+            local lastRenderedText = ""
+            local lastRenderedColor = Color3.fromRGB(255, 255, 255)
+
             BeastPowerConnection2 = RunService.RenderStepped:Connect(function()
                 if trackedPowerValue and trackedPowerValue.Parent then
-                    uiFrameBP.Visible = true
+                    if not uiFrameBP.Visible then uiFrameBP.Visible = true end
                     
                     local percent = math.clamp(trackedPowerValue.Value, 0, 1)
                     local percentInt = math.floor(percent * 100)
                     
-                    if percentInt >= 100 then
-                        uiLabelBP.Text = "BeastPower is Full"
-                    else
-                        uiLabelBP.Text = "BeastPower Back In: " .. percentInt .. "%"
+                    local targetText = percentInt >= 100 and "BeastPower is Full" or "BeastPower Back In: " .. percentInt .. "%"
+                    if lastRenderedText ~= targetText then
+                        lastRenderedText = targetText
+                        uiLabelBP.Text = targetText
                     end
                     
                     if percent < lastPercent then
@@ -1935,19 +1961,21 @@ return function(env)
                     
                     lastPercent = percent 
                     
-                    if isDraining then
-                        uiLabelBP.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    else
+                    local targetColor = Color3.fromRGB(255, 255, 255)
+                    if not isDraining then
                         if percent >= 0.99 then
-                            uiLabelBP.TextColor3 = Color3.fromRGB(50, 255, 50) 
+                            targetColor = Color3.fromRGB(50, 255, 50) 
                         elseif percent >= 0.80 then
-                            uiLabelBP.TextColor3 = Color3.fromRGB(255, 50, 50) 
-                        else
-                            uiLabelBP.TextColor3 = Color3.fromRGB(255, 255, 255) 
+                            targetColor = Color3.fromRGB(255, 50, 50) 
                         end
                     end
+
+                    if lastRenderedColor ~= targetColor then
+                        lastRenderedColor = targetColor
+                        uiLabelBP.TextColor3 = targetColor
+                    end
                 else
-                    if uiFrameBP then uiFrameBP.Visible = false end
+                    if uiFrameBP.Visible then uiFrameBP.Visible = false end
                     lastPercent = 0 
                     isDraining = false
                 end
@@ -2007,12 +2035,15 @@ return function(env)
                                     local numberValue = beastPowers:FindFirstChildOfClass("NumberValue")
                                     if numberValue then
                                         local roundedValue = math.round(numberValue.Value * 100)
-                                        label.Text = tostring(roundedValue) .. "%"
+                                        local targetText = tostring(roundedValue) .. "%"
+                                        if label.Text ~= targetText then
+                                            label.Text = targetText
+                                        end
                                     else
-                                        label.Text = ""
+                                        if label.Text ~= "" then label.Text = "" end
                                     end
                                 else
-                                    label.Text = ""
+                                    if label.Text ~= "" then label.Text = "" end
                                 end
                             end
                         end
@@ -2168,7 +2199,7 @@ return function(env)
                         estadoAnterior = "PLAYING"
                     end
                     
-                    task.wait(0.1)
+                    task.wait(0.15)
                 end
             end)
         else
@@ -2298,16 +2329,25 @@ return function(env)
                         billboard.Parent = targetPart
                         tag = billboard
                     else
-                        tag.Parent = targetPart
+                        if tag.Parent ~= targetPart then
+                            tag.Parent = targetPart
+                        end
                     end
 
-                    tag.StudsOffset = offset
+                    if tag.StudsOffset ~= offset then
+                        tag.StudsOffset = offset
+                    end
 
                     local label = tag:FindFirstChildOfClass("TextLabel")
                     if label then
                         local secondsLeft = health.Value * 0.5
-                        label.Text = string.format("%.1f", secondsLeft) .. "s"
-                        label.TextColor3 = TIMER_COLOR 
+                        local targetText = string.format("%.1f", secondsLeft) .. "s"
+                        if label.Text ~= targetText then
+                            label.Text = targetText
+                        end
+                        if label.TextColor3 ~= TIMER_COLOR then
+                            label.TextColor3 = TIMER_COLOR
+                        end
                     end
                 else
                     local tag = char:FindFirstChild("CapsuleLifeTag", true)
