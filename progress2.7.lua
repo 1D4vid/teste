@@ -15,17 +15,46 @@ return function(env)
     -- ESCOPO DE SEGURANÇA E CACHE DE ALTA PERFORMANCE (Evita gargalos de CPU)
     -- =========================================================================
     local cachedPlayersList = Players:GetPlayers()
+    local cachedCharacters = {}
     local globalConnections = {}
-
-    table.insert(globalConnections, Players.PlayerAdded:Connect(function() 
-        cachedPlayersList = Players:GetPlayers() 
-    end))
-    table.insert(globalConnections, Players.PlayerRemoving:Connect(function() 
-        cachedPlayersList = Players:GetPlayers() 
-    end))
 
     local globalOverlapParams = OverlapParams.new()
     globalOverlapParams.FilterType = Enum.RaycastFilterType.Include
+
+    -- Atualização inteligente do cache de personagens (Evita recriação de tabelas em loops rápidos)
+    local function updateCharacterCache()
+        table.clear(cachedCharacters)
+        for i = 1, #cachedPlayersList do
+            local char = cachedPlayersList[i].Character
+            if char then
+                table.insert(cachedCharacters, char)
+            end
+        end
+        globalOverlapParams.FilterDescendantsInstances = cachedCharacters
+    end
+
+    table.insert(globalConnections, Players.PlayerAdded:Connect(function(plr) 
+        cachedPlayersList = Players:GetPlayers() 
+        updateCharacterCache()
+        plr.CharacterAdded:Connect(function()
+            task.wait(0.1)
+            updateCharacterCache()
+        end)
+    end))
+
+    table.insert(globalConnections, Players.PlayerRemoving:Connect(function() 
+        cachedPlayersList = Players:GetPlayers() 
+        updateCharacterCache()
+    end))
+
+    -- Ativar escuta para os jogadores que já estão no jogo
+    for _, plr in ipairs(cachedPlayersList) do
+        plr.CharacterAdded:Connect(function()
+            task.wait(0.1)
+            updateCharacterCache()
+        end)
+    end
+    updateCharacterCache()
 
     -- Controle de Estados Ativos (Evita loops órfãos)
     local compProgressActive = false
@@ -75,6 +104,7 @@ return function(env)
     local speedLabels2D = {}
     local speedScreenGui = nil
     local speedListFrame = nil
+    local speedCache = {} -- Cache de instâncias rápidas para o WalkSpeed
 
     -- Vars Wallhop Counter
     local WallhopStateConn = nil
@@ -289,7 +319,7 @@ return function(env)
 
                 local savedProgress = 0
                 local lastSize = -1
-                local updateInterval = 0.03 -- Atualização rápida de interface
+                local updateInterval = 0.05 -- Frequência ideal para evitar lag
                 local accumulatedTime = 0
 
                 local connection
@@ -310,28 +340,33 @@ return function(env)
                         end
                     end
 
-                    highlight.Enabled = compHighlightEnabled or compOutlineEnabled
+                    if highlight.Enabled ~= (compHighlightEnabled or compOutlineEnabled) then
+                        highlight.Enabled = compHighlightEnabled or compOutlineEnabled
+                    end
 
                     if compOutlineEnabled then
-                        highlight.FillTransparency = 1
-                        highlight.OutlineTransparency = 0
+                        if highlight.FillTransparency ~= 1 then highlight.FillTransparency = 1 end
+                        if highlight.OutlineTransparency ~= 0 then highlight.OutlineTransparency = 0 end
                         if isGreen then
-                            highlight.OutlineColor = Color3.fromRGB(0, 255, 0)
+                            if highlight.OutlineColor ~= Color3.fromRGB(0, 255, 0) then
+                                highlight.OutlineColor = Color3.fromRGB(0, 255, 0)
+                            end
                         else
                             if screen then
                                 local color = screen.Color
-                                if color.R > color.G and color.R > color.B then
-                                    highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
-                                else
-                                    highlight.OutlineColor = Color3.fromRGB(0, 180, 255)
+                                local targetColor = (color.R > color.G and color.R > color.B) and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 180, 255)
+                                if highlight.OutlineColor ~= targetColor then
+                                    highlight.OutlineColor = targetColor
                                 end
                             end
                         end
                     else
-                        highlight.FillTransparency = 0.5
-                        highlight.OutlineTransparency = 0
-                        highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
-                        if screen then
+                        if highlight.FillTransparency ~= 0.5 then highlight.FillTransparency = 0.5 end
+                        if highlight.OutlineTransparency ~= 0 then highlight.OutlineTransparency = 0 end
+                        if highlight.OutlineColor ~= Color3.fromRGB(0, 0, 0) then
+                            highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
+                        end
+                        if screen and highlight.FillColor ~= screen.Color then
                             highlight.FillColor = screen.Color
                         end
                     end
@@ -340,17 +375,9 @@ return function(env)
                         savedProgress = 1
                     else
                         local highestTouch = 0
-                        local characterParts = {}
                         
-                        for i = 1, #cachedPlayersList do
-                            local char = cachedPlayersList[i].Character
-                            if char then
-                                table.insert(characterParts, char)
-                            end
-                        end
-
-                        if #characterParts > 0 then
-                            globalOverlapParams.FilterDescendantsInstances = characterParts
+                        -- Varredura otimizada usando cache global de personagens
+                        if #cachedCharacters > 0 then
                             for i = 1, #triggers do
                                 local part = triggers[i]
                                 if part and part.Parent then
@@ -379,40 +406,48 @@ return function(env)
 
                     if savedProgress ~= lastSize then
                         lastSize = savedProgress
-                        local tweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-                        local tween = TweenService:Create(bar, tweenInfo, {Size = UDim2.new(savedProgress, 0, 1, 0)})
-                        tween:Play()
+                        local tweenInfo = TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+                        TweenService:Create(bar, tweenInfo, {Size = UDim2.new(savedProgress, 0, 1, 0)}):Play()
                     end
+
+                    local textLabelText = ""
+                    local textLabelColor = Color3.fromRGB(255, 255, 255)
+                    local barColor = Color3.fromRGB(255, 255, 255)
 
                     if currentComputerStyle == "Default" then
                         if savedProgress >= 1 then
-                            bar.BackgroundColor3 = Color3.fromRGB(0, 255, 140)
-                            text.TextColor3 = Color3.fromRGB(0, 255, 140)
-                            text.Text = "COMPLETED"
+                            barColor = Color3.fromRGB(0, 255, 140)
+                            textLabelColor = Color3.fromRGB(0, 255, 140)
+                            textLabelText = "COMPLETED"
                         else
-                            bar.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
-                            text.TextColor3 = Color3.fromRGB(255, 255, 255)
-                            text.Text = string.format("%.1f%%", math.floor(savedProgress * 200 + 0.1) / 2)
+                            barColor = Color3.fromRGB(0, 180, 255)
+                            textLabelColor = Color3.fromRGB(255, 255, 255)
+                            textLabelText = string.format("%.1f%%", math.floor(savedProgress * 200 + 0.1) / 2)
                         end
                     elseif currentComputerStyle == "Style 1" then
                         if savedProgress >= 0.99 then
-                            bar.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
-                            text.TextColor3 = Color3.fromRGB(0, 255, 100)
-                            text.Text = "DONE"
+                            barColor = Color3.fromRGB(0, 255, 100)
+                            textLabelColor = Color3.fromRGB(0, 255, 100)
+                            textLabelText = "DONE"
                         else
-                            bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                            text.TextColor3 = Color3.fromRGB(255, 255, 255)
-                            text.Text = string.format("%d%%", math.floor(savedProgress * 100))
+                            barColor = Color3.fromRGB(255, 255, 255)
+                            textLabelColor = Color3.fromRGB(255, 255, 255)
+                            textLabelText = string.format("%d%%", math.floor(savedProgress * 100))
                         end
                     else
                         if savedProgress >= 1 then
-                            bar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-                            text.Text = "COMPLETED"
+                            barColor = Color3.fromRGB(0, 255, 0)
+                            textLabelText = "COMPLETED"
                         else
-                            bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                            text.Text = string.format("%.1f%%", math.floor(savedProgress * 200 + 0.1) / 2)
+                            barColor = Color3.fromRGB(255, 255, 255)
+                            textLabelText = string.format("%.1f%%", math.floor(savedProgress * 200 + 0.1) / 2)
                         end
                     end
+
+                    -- Evita re-desenho desnecessário de interface se as propriedades não mudaram
+                    if text.Text ~= textLabelText then text.Text = textLabelText end
+                    if text.TextColor3 ~= textLabelColor then text.TextColor3 = textLabelColor end
+                    if bar.BackgroundColor3 ~= barColor then bar.BackgroundColor3 = barColor end
                 end)
                 table.insert(CompProgConns, connection)
             end
@@ -712,7 +747,7 @@ return function(env)
 
             DoorProgHeartbeat = RunService.Heartbeat:Connect(function(dt)
                 accum = accum + dt
-                if accum < 0.03 then return end -- Frequência de atualização mais rápida
+                if accum < 0.05 then return end -- Sincronia perfeita e rápida
                 accum = 0
                 
                 table.clear(currentDoorInteractions)
@@ -792,8 +827,11 @@ return function(env)
                         end
                         continue
                     else
-                        data.Billboard.Enabled = true
-                        data.Highlight.Enabled = doorHighlightEnabled or doorOutlineEnabled
+                        if not data.Billboard.Enabled then data.Billboard.Enabled = true end
+                        local targetHighlightState = doorHighlightEnabled or doorOutlineEnabled
+                        if data.Highlight.Enabled ~= targetHighlightState then
+                            data.Highlight.Enabled = targetHighlightState
+                        end
                     end
 
                     local currentCF = data.Anchor.CFrame
@@ -823,26 +861,16 @@ return function(env)
                     local interactionVal = currentDoorInteractions[doorModel] or 0
 
                     if doorOutlineEnabled then
-                        data.Highlight.FillTransparency = 1
-                        data.Highlight.OutlineTransparency = 0
-                        if isPhysicallyOpen then
-                            data.Highlight.OutlineColor = Color3.fromRGB(0, 255, 100)
-                        elseif interactionVal > 0.001 then
-                            data.Highlight.OutlineColor = Color3.fromRGB(255, 200, 0)
-                        else
-                            data.Highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
-                        end
+                        if data.Highlight.FillTransparency ~= 1 then data.Highlight.FillTransparency = 1 end
+                        if data.Highlight.OutlineTransparency ~= 0 then data.Highlight.OutlineTransparency = 0 end
+                        local targetColor = isPhysicallyOpen and Color3.fromRGB(0, 255, 100) or (interactionVal > 0.001 and Color3.fromRGB(255, 200, 0) or Color3.fromRGB(255, 0, 0))
+                        if data.Highlight.OutlineColor ~= targetColor then data.Highlight.OutlineColor = targetColor end
                     else
-                        data.Highlight.FillTransparency = 0.55
-                        data.Highlight.OutlineTransparency = 0
-                        data.Highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
-                        if isPhysicallyOpen then
-                            data.Highlight.FillColor = Color3.fromRGB(0, 255, 100)
-                        elseif interactionVal > 0.001 then
-                            data.Highlight.FillColor = Color3.fromRGB(255, 200, 0)
-                        else
-                            data.Highlight.FillColor = Color3.fromRGB(255, 0, 0)
-                        end
+                        if data.Highlight.FillTransparency ~= 0.55 then data.Highlight.FillTransparency = 0.55 end
+                        if data.Highlight.OutlineTransparency ~= 0 then data.Highlight.OutlineTransparency = 0 end
+                        if data.Highlight.OutlineColor ~= Color3.fromRGB(0, 0, 0) then data.Highlight.OutlineColor = Color3.fromRGB(0, 0, 0) end
+                        local targetColor = isPhysicallyOpen and Color3.fromRGB(0, 255, 100) or (interactionVal > 0.001 and Color3.fromRGB(255, 200, 0) or Color3.fromRGB(255, 0, 0))
+                        if data.Highlight.FillColor ~= targetColor then data.Highlight.FillColor = targetColor end
                     end
 
                     if currentDoorStyle == "Default" or currentDoorStyle == "Style 1" then
@@ -853,26 +881,27 @@ return function(env)
                             if data.LastState ~= "Open" then
                                 data.LastState = "Open"
                                 data.Bar.Size = UDim2.new(1, 0, 1, 0)
-                                data.Bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                                data.Text.TextColor3 = Color3.fromRGB(255, 255, 255)
-                                data.Text.Text = "100.0%"
+                                if data.Bar.BackgroundColor3 ~= Color3.fromRGB(255, 255, 255) then data.Bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255) end
+                                if data.Text.TextColor3 ~= Color3.fromRGB(255, 255, 255) then data.Text.TextColor3 = Color3.fromRGB(255, 255, 255) end
+                                if data.Text.Text ~= "100.0%" then data.Text.Text = "100.0%" end
                             end
                         elseif interactionVal > 0.001 then 
                             if data.LastState ~= "Opening" or math.abs(data.LastProgress - interactionVal) > 0.005 then
                                 data.LastState = "Opening"
                                 data.LastProgress = interactionVal
                                 data.Bar.Size = UDim2.new(math.clamp(interactionVal, 0, 1), 0, 1, 0)
-                                data.Bar.BackgroundColor3 = barColor
-                                data.Text.TextColor3 = baseColor
-                                data.Text.Text = string.format("%.1f%%", interactionVal * 100)
+                                if data.Bar.BackgroundColor3 ~= barColor then data.Bar.BackgroundColor3 = barColor end
+                                if data.Text.TextColor3 ~= baseColor then data.Text.TextColor3 = baseColor end
+                                local targetStr = string.format("%.1f%%", interactionVal * 100)
+                                if data.Text.Text ~= targetStr then data.Text.Text = targetStr end
                             end
                         else
                             if data.LastState ~= "Closed" then
                                 data.LastState = "Closed"
                                 data.Bar.Size = UDim2.new(0, 0, 1, 0)
-                                data.Bar.BackgroundColor3 = barColor
-                                data.Text.TextColor3 = baseColor
-                                data.Text.Text = "0.0%"
+                                if data.Bar.BackgroundColor3 ~= barColor then data.Bar.BackgroundColor3 = barColor end
+                                if data.Text.TextColor3 ~= baseColor then data.Text.TextColor3 = baseColor end
+                                if data.Text.Text ~= "0.0%" then data.Text.Text = "0.0%" end
                             end
                         end
                     else
@@ -885,22 +914,22 @@ return function(env)
                         if isPhysicallyOpen then
                             if data.LastState ~= "Open" then
                                 data.LastState = "Open"
-                                data.Text.Text = "OPEN"
-                                data.Text.TextColor3 = COLORS_STYLE2.OPEN
-                                data.BgBar.Visible = false
+                                if data.Text.Text ~= "OPEN" then data.Text.Text = "OPEN" end
+                                if data.Text.TextColor3 ~= COLORS_STYLE2.OPEN then data.Text.TextColor3 = COLORS_STYLE2.OPEN end
+                                if data.BgBar.Visible ~= false then data.BgBar.Visible = false end
                             end
                         elseif interactionVal > 0.05 then 
                             data.LastState = "Opening"
-                            data.Text.Text = "OPENING"
-                            data.Text.TextColor3 = COLORS_STYLE2.OPENING
-                            data.BgBar.Visible = true
+                            if data.Text.Text ~= "OPENING" then data.Text.Text = "OPENING" end
+                            if data.Text.TextColor3 ~= COLORS_STYLE2.OPENING then data.Text.TextColor3 = COLORS_STYLE2.OPENING end
+                            if data.BgBar.Visible ~= true then data.BgBar.Visible = true end
                             data.Bar.Size = UDim2.new(math.clamp(interactionVal, 0, 1), 0, 1, 0)
                         else
                             if data.LastState ~= "Closed" then
                                 data.LastState = "Closed"
-                                data.Text.Text = "CLOSE"
-                                data.Text.TextColor3 = COLORS_STYLE2.CLOSE
-                                data.BgBar.Visible = false
+                                if data.Text.Text ~= "CLOSE" then data.Text.Text = "CLOSE" end
+                                if data.Text.TextColor3 ~= COLORS_STYLE2.CLOSE then data.Text.TextColor3 = COLORS_STYLE2.CLOSE end
+                                if data.BgBar.Visible ~= false then data.BgBar.Visible = false end
                             end
                         end
                     end
@@ -1064,14 +1093,31 @@ return function(env)
                 }
             end
 
-            -- Busca síncrona sem yield para ativação instantânea
-            local workspaceDescendants = workspace:GetDescendants()
-            for i = 1, #workspaceDescendants do
-                local obj = workspaceDescendants[i]
-                if obj.Name == "ExitDoor" and obj:IsA("Model") then
-                    registerExitDoor(obj)
+            -- Varredura síncrona altamente otimizada focada na pasta do mapa atual
+            local function scanForExitDoors()
+                local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
+                local activeMap = currentMap and Workspace:FindFirstChild(tostring(currentMap.Value))
+                local searchArea = activeMap or Workspace
+                
+                local children = searchArea:GetChildren()
+                for i = 1, #children do
+                    local obj = children[i]
+                    if obj.Name == "ExitDoor" and obj:IsA("Model") then
+                        registerExitDoor(obj)
+                    end
+                end
+                
+                -- Fallback se as portas de saída estiverem aninhadas
+                local descendants = searchArea:GetDescendants()
+                for i = 1, #descendants do
+                    local obj = descendants[i]
+                    if obj.Name == "ExitDoor" and obj:IsA("Model") then
+                        registerExitDoor(obj)
+                    end
                 end
             end
+            
+            scanForExitDoors()
 
             ExitDoorAdded = workspace.DescendantAdded:Connect(function(obj)
                 if obj.Name == "ExitDoor" and obj:IsA("Model") then
@@ -1185,42 +1231,36 @@ return function(env)
                         end
                         
                         if data.Highlight then
-                            data.Highlight.Enabled = exitHighlightEnabled or exitOutlineEnabled
+                            local targetHighlightState = exitHighlightEnabled or exitOutlineEnabled
+                            if data.Highlight.Enabled ~= targetHighlightState then
+                                data.Highlight.Enabled = targetHighlightState
+                            end
                             
                             if exitOutlineEnabled then
-                                data.Highlight.FillTransparency = 1
-                                data.Highlight.OutlineTransparency = 0
-                                if data.Completed then
-                                    data.Highlight.OutlineColor = Color3.fromRGB(40, 255, 80)
-                                else
-                                    data.Highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
-                                end
+                                if data.Highlight.FillTransparency ~= 1 then data.Highlight.FillTransparency = 1 end
+                                if data.Highlight.OutlineTransparency ~= 0 then data.Highlight.OutlineTransparency = 0 end
+                                local targetColor = data.Completed and Color3.fromRGB(40, 255, 80) or Color3.fromRGB(255, 255, 0)
+                                if data.Highlight.OutlineColor ~= targetColor then data.Highlight.OutlineColor = targetColor end
                             else
-                                data.Highlight.FillTransparency = 0.55
-                                data.Highlight.OutlineTransparency = 0
-                                if data.Completed then
-                                    data.Highlight.FillColor = Color3.fromRGB(40, 255, 80)
-                                  else
-                                    data.Highlight.FillColor = Color3.fromRGB(255, 255, 0)
-                                end
+                                if data.Highlight.FillTransparency ~= 0.55 then data.Highlight.FillTransparency = 0.55 end
+                                if data.Highlight.OutlineTransparency ~= 0 then data.Highlight.OutlineTransparency = 0 end
+                                local targetColor = data.Completed and Color3.fromRGB(40, 255, 80) or Color3.fromRGB(255, 255, 0)
+                                if data.Highlight.FillColor ~= targetColor then data.Highlight.FillColor = targetColor end
                             end
                         end
                         
                         if data.Completed then
                             data.FillElement.Size = UDim2.new(1, 0, 1, 0)
-                            data.FillElement.BackgroundColor3 = Color3.fromRGB(40, 255, 80)
-                            data.TextElement.Text = "DOOR OPENED!"
-                            data.TextElement.TextColor3 = Color3.fromRGB(40, 255, 80)
+                            if data.FillElement.BackgroundColor3 ~= Color3.fromRGB(40, 255, 80) then data.FillElement.BackgroundColor3 = Color3.fromRGB(40, 255, 80) end
+                            if data.TextElement.Text ~= "DOOR OPENED!" then data.TextElement.Text = "DOOR OPENED!" end
+                            if data.TextElement.TextColor3 ~= Color3.fromRGB(40, 255, 80) then data.TextElement.TextColor3 = Color3.fromRGB(40, 255, 80) end
                         else
                             data.FillElement.Size = UDim2.new(data.Progress, 0, 1, 0)
-                            data.FillElement.BackgroundColor3 = Color3.fromRGB(255, 160, 20)
+                            if data.FillElement.BackgroundColor3 ~= Color3.fromRGB(255, 160, 20) then data.FillElement.BackgroundColor3 = Color3.fromRGB(255, 160, 20) end
                             
-                            if data.Progress > 0 then
-                                data.TextElement.Text = "OPENING: " .. math.floor(data.Progress * 100) .. "%"
-                            else
-                                data.TextElement.Text = "EXIT"
-                            end
-                            data.TextElement.TextColor3 = Color3.fromRGB(255, 255, 255)
+                            local targetStr = (data.Progress > 0) and ("OPENING: " .. math.floor(data.Progress * 100) .. "%") or "EXIT"
+                            if data.TextElement.Text ~= targetStr then data.TextElement.Text = targetStr end
+                            if data.TextElement.TextColor3 ~= Color3.fromRGB(255, 255, 255) then data.TextElement.TextColor3 = Color3.fromRGB(255, 255, 255) end
                         end
                     end
                     task.wait(0.12)
@@ -1274,9 +1314,9 @@ return function(env)
                             
                             speedScreenGui.Parent = targetGuiParent
                         end
-                        speedScreenGui.Enabled = true
+                        if not speedScreenGui.Enabled then speedScreenGui.Enabled = true end
                     else
-                        if speedScreenGui then
+                        if speedScreenGui and speedScreenGui.Enabled then
                             speedScreenGui.Enabled = false
                         end
                     end
@@ -1284,9 +1324,20 @@ return function(env)
                     for i = 1, #cachedPlayersList do
                         local player = cachedPlayersList[i]
                         local char = player.Character
-                        local root = char and char:FindFirstChild("HumanoidRootPart")
-                        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-                        local head = char and char:FindFirstChild("Head")
+                        
+                        -- Sistema de Cache de referências rápidas de personagens
+                        local cache = speedCache[player]
+                        if not cache or cache.Char ~= char then
+                            local root = char and char:FindFirstChild("HumanoidRootPart")
+                            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                            local head = char and char:FindFirstChild("Head")
+                            cache = {Char = char, Root = root, Humanoid = humanoid, Head = head}
+                            speedCache[player] = cache
+                        end
+
+                        local root = cache.Root
+                        local humanoid = cache.Humanoid
+                        local head = cache.Head
 
                         local showThisPlayer = true
                         if roundActive then
@@ -1304,8 +1355,9 @@ return function(env)
                             end
 
                             if lateralSpeedActive then
-                                if char:FindFirstChild("SpeedTag") then
-                                    char.SpeedTag.Enabled = false
+                                local speedTag = char:FindFirstChild("SpeedTag")
+                                if speedTag and speedTag.Enabled then
+                                    speedTag.Enabled = false
                                 end
 
                                 local label = speedLabels2D[player]
@@ -1323,10 +1375,11 @@ return function(env)
                                     label.Parent = speedListFrame
                                     speedLabels2D[player] = label
                                 end
-                                label.Visible = true
-                                label.Text = player.Name .. ": " .. speedStr
+                                if not label.Visible then label.Visible = true end
+                                local targetText = player.Name .. ": " .. speedStr
+                                if label.Text ~= targetText then label.Text = targetText end
                             else
-                                if speedLabels2D[player] then
+                                if speedLabels2D[player] and speedLabels2D[player].Visible then
                                     speedLabels2D[player].Visible = false
                                 end
 
@@ -1352,16 +1405,19 @@ return function(env)
                                     label.Parent = tag
                                     
                                     tag.Parent = char
+                                else
+                                    label = tag:FindFirstChild("SpeedText")
                                 end
-                                if tag then tag.Enabled = true end
-                                if label then label.Text = speedStr end
+                                if tag and not tag.Enabled then tag.Enabled = true end
+                                if label and label.Text ~= speedStr then label.Text = speedStr end
                             end
                         else
-                            if speedLabels2D[player] then
+                            if speedLabels2D[player] and speedLabels2D[player].Visible then
                                 speedLabels2D[player].Visible = false
                             end
-                            if char and char:FindFirstChild("SpeedTag") then
-                                char.SpeedTag.Enabled = false
+                            local speedTag = char and char:FindFirstChild("SpeedTag")
+                            if speedTag and speedTag.Enabled then
+                                speedTag.Enabled = false
                             end
                         end
                     end
@@ -1371,6 +1427,7 @@ return function(env)
             if speedRenderConn then speedRenderConn:Disconnect(); speedRenderConn = nil end
             if speedScreenGui then speedScreenGui:Destroy(); speedScreenGui = nil end
             table.clear(speedLabels2D)
+            table.clear(speedCache)
             for i = 1, #cachedPlayersList do
                 local player = cachedPlayersList[i]
                 local char = player.Character
@@ -1767,15 +1824,15 @@ return function(env)
                         local timeString = string.format("%.2f", r)
                         
                         if headTimer and headTimer.Parent then
-                            headTimer.Text = timeString
-                            headTimer.TextColor3 = c
+                            if headTimer.Text ~= timeString then headTimer.Text = timeString end
+                            if headTimer.TextColor3 ~= c then headTimer.TextColor3 = c end
                         end
-                        listTimer.Text = timeString
-                        listTimer.TextColor3 = c
+                        if listTimer.Text ~= timeString then listTimer.Text = timeString end
+                        if listTimer.TextColor3 ~= c then listTimer.TextColor3 = c end
                         
                         if r <= 0 then
-                            listTimer.Text = "0.00"
-                            if headTimer and headTimer.Parent then 
+                            if listTimer.Text ~= "0.00" then listTimer.Text = "0.00" end
+                            if headTimer and headTimer.Parent and headTimer.Text ~= "0.00" then 
                                 headTimer.Text = "0.00" 
                             end
                         end
@@ -1933,15 +1990,17 @@ return function(env)
 
             BeastPowerConnection2 = RunService.RenderStepped:Connect(function()
                 if trackedPowerValue and trackedPowerValue.Parent then
-                    uiFrameBP.Visible = true
+                    if not uiFrameBP.Visible then uiFrameBP.Visible = true end
                     
                     local percent = math.clamp(trackedPowerValue.Value, 0, 1)
                     local percentInt = math.floor(percent * 100)
-                    
+                    local textStr = ""
+                    local textColor = Color3.fromRGB(255, 255, 255)
+
                     if percentInt >= 100 then
-                        uiLabelBP.Text = "BeastPower is Full"
+                        textStr = "BeastPower is Full"
                     else
-                        uiLabelBP.Text = "BeastPower Back In: " .. percentInt .. "%"
+                        textStr = "BeastPower Back In: " .. percentInt .. "%"
                     end
                     
                     if percent < lastPercent then
@@ -1953,18 +2012,21 @@ return function(env)
                     lastPercent = percent 
                     
                     if isDraining then
-                        uiLabelBP.TextColor3 = Color3.fromRGB(255, 255, 255)
+                        textColor = Color3.fromRGB(255, 255, 255)
                     else
                         if percent >= 0.99 then
-                            uiLabelBP.TextColor3 = Color3.fromRGB(50, 255, 50) 
+                            textColor = Color3.fromRGB(50, 255, 50) 
                         elseif percent >= 0.80 then
-                            uiLabelBP.TextColor3 = Color3.fromRGB(255, 50, 50) 
+                            textColor = Color3.fromRGB(255, 50, 50) 
                         else
-                            uiLabelBP.TextColor3 = Color3.fromRGB(255, 255, 255) 
+                            textColor = Color3.fromRGB(255, 255, 255) 
                         end
                     end
+
+                    if uiLabelBP.Text ~= textStr then uiLabelBP.Text = textStr end
+                    if uiLabelBP.TextColor3 ~= textColor then uiLabelBP.TextColor3 = textColor end
                 else
-                    if uiFrameBP then uiFrameBP.Visible = false end
+                    if uiFrameBP and uiFrameBP.Visible then uiFrameBP.Visible = false end
                     lastPercent = 0 
                     isDraining = false
                 end
@@ -2025,12 +2087,13 @@ return function(env)
                                     local numberValue = beastPowers:FindFirstChildOfClass("NumberValue")
                                     if numberValue then
                                         local roundedValue = math.round(numberValue.Value * 100)
-                                        label.Text = tostring(roundedValue) .. "%"
+                                        local targetStr = tostring(roundedValue) .. "%"
+                                        if label.Text ~= targetStr then label.Text = targetStr end
                                     else
-                                        label.Text = ""
+                                        if label.Text ~= "" then label.Text = "" end
                                     end
                                 else
-                                    label.Text = ""
+                                    if label.Text ~= "" then label.Text = "" end
                                 end
                             end
                         end
@@ -2142,7 +2205,8 @@ return function(env)
 
                     if IsGameActive and IsGameActive.Value == true then
                         conexao:Disconnect()
-                        label.Text = "The Beast has been released!"
+                        local targetSuccessText = "The Beast has been released!"
+                        if label.Text ~= targetSuccessText then label.Text = targetSuccessText end
                         TweenColor(Color3.fromRGB(255, 255, 255))
                         task.delay(3, FadeOut)
                         return
@@ -2151,9 +2215,10 @@ return function(env)
                     local tempoRestante = 15 - (os.clock() - tempoInicio)
 
                     if tempoRestante <= 0 then
-                        label.Text = "Beast Spawns In: 0.0"
+                        if label.Text ~= "Beast Spawns In: 0.0" then label.Text = "Beast Spawns In: 0.0" end
                     else
-                        label.Text = string.format("Beast Spawns In: %.1f", tempoRestante)
+                        local targetTimerText = string.format("Beast Spawns In: %.1f", tempoRestante)
+                        if label.Text ~= targetTimerText then label.Text = targetTimerText end
                         
                         if tempoRestante <= 5 and not isRed then
                             isRed = true
@@ -2326,8 +2391,9 @@ return function(env)
                     local label = tag:FindFirstChildOfClass("TextLabel")
                     if label then
                         local secondsLeft = health.Value * 0.5
-                        label.Text = string.format("%.1f", secondsLeft) .. "s"
-                        label.TextColor3 = TIMER_COLOR 
+                        local timeStr = string.format("%.1f", secondsLeft) .. "s"
+                        if label.Text ~= timeStr then label.Text = timeStr end
+                        if label.TextColor3 ~= TIMER_COLOR then label.TextColor3 = TIMER_COLOR end
                     end
                 else
                     local tag = char:FindFirstChild("CapsuleLifeTag", true)
@@ -2413,7 +2479,7 @@ return function(env)
                     for i = 1, #cachedPlayersList do
                         updatePlayerTag(cachedPlayersList[i])
                     end
-                    task.wait(1) -- Varredura secundária rápida
+                    task.wait(1) 
                 end
             end)
             table.insert(lifeConns, loopThread)
