@@ -32,11 +32,14 @@ return function(env)
     MusicSound.Volume = 0.5
     MusicSound.Parent = SoundService
 
-    -- Lista de faixas pré-selecionadas solicitadas
+    -- Lista de faixas pré-selecionadas atualizada
     local SongsList = {
         {Name = "six seven", ID = "139780631670217"},
         {Name = "low cortisol", ID = "110919391228823"},
-        {Name = "Dor funk", ID = "13748697311453"},
+        {Name = "His Love", ID = "140684861805080"},
+        {Name = "7 years of trying", ID = "90964788762820"},
+        {Name = "7 years", ID = "115598617339786"},
+        {Name = "Never Alone", ID = "86404842974521"},
         {Name = "ballerina cappucina", ID = "140675348569592"},
         {Name = "its you", ID = "139010646759693"},
         {Name = "funk brazil", ID = "131443412031360"},
