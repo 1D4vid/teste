@@ -274,33 +274,14 @@ return function(env)
     sLayout.Padding = UDim.new(0, 12)
     sLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
-    local MuteBlock = Instance.new("Frame")
-    MuteBlock.Size = UDim2.new(0.5, -6, 0, 0)
-    MuteBlock.AutomaticSize = Enum.AutomaticSize.Y
-    MuteBlock.BackgroundColor3 = Color3.new(0, 0, 0)
-    MuteBlock.BackgroundTransparency = 0.45
-    MuteBlock.BorderSizePixel = 0
-    MuteBlock.Parent = SettingsContainer
-    Instance.new("UICorner", MuteBlock).CornerRadius = UDim.new(0, 6)
-    local mStroke = Instance.new("UIStroke", MuteBlock)
-    mStroke.Color = Color3.fromRGB(40, 40, 40)
-    mStroke.Thickness = 1
-
-    local mLayout = Instance.new("UIListLayout", MuteBlock)
-    mLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    mLayout.Padding = UDim.new(0, 4)
-    local mPadding = Instance.new("UIPadding", MuteBlock)
-    mPadding.PaddingTop = UDim.new(0, 8)
-    mPadding.PaddingBottom = UDim.new(0, 8)
-    mPadding.PaddingLeft = UDim.new(0, 10)
-    mPadding.PaddingRight = UDim.new(0, 10)
-
+    -- Volume Settings no Lado Esquerdo (LayoutOrder = 1)
     local VolumeBlock = Instance.new("Frame")
     VolumeBlock.Size = UDim2.new(0.5, -6, 0, 0)
     VolumeBlock.AutomaticSize = Enum.AutomaticSize.Y
     VolumeBlock.BackgroundColor3 = Color3.new(0, 0, 0)
     VolumeBlock.BackgroundTransparency = 0.45
     VolumeBlock.BorderSizePixel = 0
+    VolumeBlock.LayoutOrder = 1
     VolumeBlock.Parent = SettingsContainer
     Instance.new("UICorner", VolumeBlock).CornerRadius = UDim.new(0, 6)
     local vStroke = Instance.new("UIStroke", VolumeBlock)
@@ -315,6 +296,29 @@ return function(env)
     vPadding.PaddingBottom = UDim.new(0, 8)
     vPadding.PaddingLeft = UDim.new(0, 10)
     vPadding.PaddingRight = UDim.new(0, 10)
+
+    -- Mute Settings no Lado Direito (LayoutOrder = 2)
+    local MuteBlock = Instance.new("Frame")
+    MuteBlock.Size = UDim2.new(0.5, -6, 0, 0)
+    MuteBlock.AutomaticSize = Enum.AutomaticSize.Y
+    MuteBlock.BackgroundColor3 = Color3.new(0, 0, 0)
+    MuteBlock.BackgroundTransparency = 0.45
+    MuteBlock.BorderSizePixel = 0
+    MuteBlock.LayoutOrder = 2
+    MuteBlock.Parent = SettingsContainer
+    Instance.new("UICorner", MuteBlock).CornerRadius = UDim.new(0, 6)
+    local mStroke = Instance.new("UIStroke", MuteBlock)
+    mStroke.Color = Color3.fromRGB(40, 40, 40)
+    mStroke.Thickness = 1
+
+    local mLayout = Instance.new("UIListLayout", MuteBlock)
+    mLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    mLayout.Padding = UDim.new(0, 4)
+    local mPadding = Instance.new("UIPadding", MuteBlock)
+    mPadding.PaddingTop = UDim.new(0, 8)
+    mPadding.PaddingBottom = UDim.new(0, 8)
+    mPadding.PaddingLeft = UDim.new(0, 10)
+    mPadding.PaddingRight = UDim.new(0, 10)
 
     -- Componentes Compactos da UI com Réplica de Fidelidade 100% ao Hub Original
     local function CreateCompactToggle(parent, text, defaultVal, callback)
@@ -506,7 +510,50 @@ return function(env)
         return BtnFrame
     end
 
-    -- Criando e Populando o Header Mute Settings (Esquerda)
+    -- Criando e Populando o Header Volume Settings (Esquerda)
+    local VolHeader = Instance.new("Frame")
+    VolHeader.Name = "HeaderContainer"
+    VolHeader.Size = UDim2.new(1, 0, 0, 20)
+    VolHeader.BackgroundTransparency = 1
+    VolHeader.Parent = VolumeBlock
+    
+    local VolTitle = Instance.new("TextLabel")
+    VolTitle.Size = UDim2.new(1, 0, 1, 0)
+    VolTitle.BackgroundTransparency = 1
+    VolTitle.Text = "Volume Settings"
+    VolTitle.Font = Theme.Font
+    VolTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    VolTitle.TextSize = 12
+    VolTitle.TextXAlignment = Enum.TextXAlignment.Left
+    VolTitle.Parent = VolHeader
+
+    CreateCompactToggle(VolumeBlock, "Enable Volume Modifier", VolumesEnabled, function(state)
+        VolumesEnabled = state
+        UserConfigs["Vol_Enabled"] = state
+    end)
+    
+    local FootstepsSlider = CreateCompactSlider(VolumeBlock, "FootSteps Volume", 0, 10, FootstepsVolMultiplier, function(val)
+        FootstepsVolMultiplier = val
+        UserConfigs["Vol_FootstepsMultiplier"] = val
+    end)
+    
+    local JumpSlider = CreateCompactSlider(VolumeBlock, "Jump Volume", 0, 10, JumpVolMultiplier, function(val)
+        JumpVolMultiplier = val
+        UserConfigs["Vol_JumpMultiplier"] = val
+    end)
+    
+    local FallSlider = CreateCompactSlider(VolumeBlock, "Fall Volume", 0, 10, FallVolMultiplier, function(val)
+        FallVolMultiplier = val
+        UserConfigs["Vol_FallMultiplier"] = val
+    end)
+
+    CreateCompactButton(VolumeBlock, "Reset Volumes", function()
+        FootstepsSlider.Set(1)
+        JumpSlider.Set(1)
+        FallSlider.Set(1)
+    end)
+
+    -- Criando e Populando o Header Mute Settings (Direita)
     local MuteHeader = Instance.new("Frame")
     MuteHeader.Name = "HeaderContainer"
     MuteHeader.Size = UDim2.new(1, 0, 0, 20)
@@ -560,7 +607,7 @@ return function(env)
                 end)
             end
             for _, player in ipairs(Players:GetPlayers()) do
-                if player.Character then monitorCharacter(character) end
+                if player.Character then monitorCharacter(player.Character) end
                 player.CharacterAdded:Connect(function(c) if noHitSoundEnabled then monitorCharacter(c) end end)
             end
             for _, sound in ipairs(game:GetService("SoundService"):GetDescendants()) do muteIfHitSound(sound) end
@@ -575,49 +622,6 @@ return function(env)
             end
             noHitSoundSignals = {}
         end
-    end)
-
-    -- Criando e Populando o Header Volume Settings (Direita)
-    local VolHeader = Instance.new("Frame")
-    VolHeader.Name = "HeaderContainer"
-    VolHeader.Size = UDim2.new(1, 0, 0, 20)
-    VolHeader.BackgroundTransparency = 1
-    VolHeader.Parent = VolumeBlock
-    
-    local VolTitle = Instance.new("TextLabel")
-    VolTitle.Size = UDim2.new(1, 0, 1, 0)
-    VolTitle.BackgroundTransparency = 1
-    VolTitle.Text = "Volume Settings"
-    VolTitle.Font = Theme.Font
-    VolTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    VolTitle.TextSize = 12
-    VolTitle.TextXAlignment = Enum.TextXAlignment.Left
-    VolTitle.Parent = VolHeader
-
-    CreateCompactToggle(VolumeBlock, "Enable Volume Modifier", VolumesEnabled, function(state)
-        VolumesEnabled = state
-        UserConfigs["Vol_Enabled"] = state
-    end)
-    
-    local FootstepsSlider = CreateCompactSlider(VolumeBlock, "FootSteps Volume", 0, 10, FootstepsVolMultiplier, function(val)
-        FootstepsVolMultiplier = val
-        UserConfigs["Vol_FootstepsMultiplier"] = val
-    end)
-    
-    local JumpSlider = CreateCompactSlider(VolumeBlock, "Jump Volume", 0, 10, JumpVolMultiplier, function(val)
-        JumpVolMultiplier = val
-        UserConfigs["Vol_JumpMultiplier"] = val
-    end)
-    
-    local FallSlider = CreateCompactSlider(VolumeBlock, "Fall Volume", 0, 10, FallVolMultiplier, function(val)
-        FallVolMultiplier = val
-        UserConfigs["Vol_FallMultiplier"] = val
-    end)
-
-    CreateCompactButton(VolumeBlock, "Reset Volumes", function()
-        FootstepsSlider.Set(1)
-        JumpSlider.Set(1)
-        FallSlider.Set(1)
     end)
 
     -- =========================================================================
@@ -748,16 +752,25 @@ return function(env)
     ResetBtnFrame.BackgroundColor3 = Color3.new(0, 0, 0)
     ResetBtnFrame.BackgroundTransparency = 0.45
     ResetBtnFrame.Text = "Default Sounds (Reset All)"
-    ResetBtnFrame.TextColor3 = Theme.CloseRed
+    ResetBtnFrame.TextColor3 = Color3.fromRGB(150, 150, 150) -- Cor cinza padrão legível
     ResetBtnFrame.Font = Enum.Font.GothamBold
     ResetBtnFrame.TextSize = 11
     ResetBtnFrame.Parent = Page
     Instance.new("UICorner", ResetBtnFrame).CornerRadius = UDim.new(0, 6)
+    
     local rbsStr = Instance.new("UIStroke", ResetBtnFrame)
-    rbsStr.Color = Color3.fromRGB(40,40,40)
+    rbsStr.Color = Color3.fromRGB(40, 40, 40)
+    rbsStr.Thickness = 1
 
-    ResetBtnFrame.MouseEnter:Connect(function() TweenService:Create(rbsStr, TweenInfo.new(0.3), {Color = Theme.CloseRed}):Play() end)
-    ResetBtnFrame.MouseLeave:Connect(function() TweenService:Create(rbsStr, TweenInfo.new(0.3), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
+    -- Efeitos de hover extremamente legíveis e destacados
+    ResetBtnFrame.MouseEnter:Connect(function() 
+        TweenService:Create(ResetBtnFrame, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(255, 100, 100)}):Play()
+        TweenService:Create(rbsStr, TweenInfo.new(0.2), {Color = Color3.fromRGB(220, 80, 80)}):Play() 
+    end)
+    ResetBtnFrame.MouseLeave:Connect(function() 
+        TweenService:Create(ResetBtnFrame, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(150, 150, 150)}):Play()
+        TweenService:Create(rbsStr, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play() 
+    end)
     
     ResetBtnFrame.MouseButton1Click:Connect(function()
         CurrentSoundIDs.Running = "0"
@@ -772,11 +785,11 @@ return function(env)
         RefreshAllSounds()
     end)
 
-    -- Inserindo a nova categoria solicitada no topo
+    -- Inserindo a categoria de som "NorthDxv1Ces" com os botões normalizados (Walk, Jump, Fall)
     CreateSoundCard(Page, "NorthDxv1Ces", {
-        {Name = "North Passos", ID = "119933956036500", Type = "Walk"},
-        {Name = "North Jump", ID = "87683560682449", Type = "Jump"},
-        {Name = "North Queda", ID = "73586375325988", Type = "fall"}
+        {Name = "Walk", ID = "119933956036500", Type = "Walk"},
+        {Name = "Jump", ID = "87683560682449", Type = "Jump"},
+        {Name = "Fall", ID = "73586375325988", Type = "Fall"}
     })
 
     CreateSoundCard(Page, "michawell", {
