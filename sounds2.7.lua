@@ -34,8 +34,8 @@ return function(env)
 
     -- Lista de faixas pré-selecionadas solicitadas
     local SongsList = {
-        {Name = "low cortisol", ID = "110919391228823"},
         {Name = "six seven", ID = "139780631670217"},
+        {Name = "low cortisol", ID = "110919391228823"},
         {Name = "Dor funk", ID = "13748697311453"},
         {Name = "ballerina cappucina", ID = "140675348569592"},
         {Name = "its you", ID = "139010646759693"},
@@ -286,6 +286,7 @@ return function(env)
     SettingsContainer.Size = UDim2.new(1, -2, 0, 0)
     SettingsContainer.AutomaticSize = Enum.AutomaticSize.Y
     SettingsContainer.BackgroundTransparency = 1
+    SettingsContainer.ZIndex = 10
     SettingsContainer.Parent = Page
 
     local sLayout = Instance.new("UIListLayout", SettingsContainer)
@@ -301,6 +302,7 @@ return function(env)
     VolumeBlock.BackgroundTransparency = 0.45
     VolumeBlock.BorderSizePixel = 0
     VolumeBlock.LayoutOrder = 1
+    VolumeBlock.ZIndex = 11
     VolumeBlock.Parent = SettingsContainer
     Instance.new("UICorner", VolumeBlock).CornerRadius = UDim.new(0, 6)
     local vStroke = Instance.new("UIStroke", VolumeBlock)
@@ -324,6 +326,7 @@ return function(env)
     MuteBlock.BackgroundTransparency = 0.45
     MuteBlock.BorderSizePixel = 0
     MuteBlock.LayoutOrder = 2
+    MuteBlock.ZIndex = 11
     MuteBlock.Parent = SettingsContainer
     Instance.new("UICorner", MuteBlock).CornerRadius = UDim.new(0, 6)
     local mStroke = Instance.new("UIStroke", MuteBlock)
@@ -345,6 +348,7 @@ return function(env)
         Tgl.Size = UDim2.new(1, 0, 0, 30)
         Tgl.BackgroundTransparency = 1
         Tgl.Text = ""
+        Tgl.ZIndex = parent.ZIndex + 1
         Tgl.Parent = parent
 
         local Label = Instance.new("TextLabel")
@@ -359,12 +363,14 @@ return function(env)
         tConst.MinTextSize = 7
         tConst.MaxTextSize = 11
         Label.TextColor3 = Theme.TextDark
+        Label.ZIndex = Tgl.ZIndex + 1
         Label.Parent = Tgl
         
         local Bg = Instance.new("Frame")
         Bg.Size = UDim2.new(0, 30, 0, 14)
         Bg.Position = UDim2.new(1, -30, 0.5, -7)
         Bg.BackgroundColor3 = Theme.SwitchOff
+        Bg.ZIndex = Tgl.ZIndex + 1
         Bg.Parent = Tgl
         Instance.new("UICorner", Bg).CornerRadius = UDim.new(1, 0)
         local BgGrad = ApplyGradient(Bg, Theme.SwitchOff, Theme.SwitchOff, 90)
@@ -373,6 +379,7 @@ return function(env)
         Cir.Size = UDim2.new(0, 12, 0, 12)
         Cir.Position = UDim2.new(0, 1, 0.5, -6)
         Cir.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+        Cir.ZIndex = Tgl.ZIndex + 2
         Cir.Parent = Bg
         Instance.new("UICorner", Cir).CornerRadius = UDim.new(1, 0)
         
@@ -409,6 +416,7 @@ return function(env)
         local Frame = Instance.new("Frame")
         Frame.Size = UDim2.new(1, 0, 0, 35)
         Frame.BackgroundTransparency = 1
+        Frame.ZIndex = parent.ZIndex + 1
         Frame.Parent = parent
 
         local Label = Instance.new("TextLabel")
@@ -423,6 +431,7 @@ return function(env)
         lConst.MinTextSize = 7
         lConst.MaxTextSize = 11
         Label.TextColor3 = Theme.TextDark
+        Label.ZIndex = Frame.ZIndex + 1
         Label.Parent = Frame
         
         local ValueLabel = Instance.new("TextLabel")
@@ -435,6 +444,7 @@ return function(env)
         ValueLabel.TextSize = 11
         ValueLabel.TextXAlignment = Enum.TextXAlignment.Right
         ValueLabel.TextColor3 = Theme.Text
+        ValueLabel.ZIndex = Frame.ZIndex + 1
         ValueLabel.Parent = Frame
         
         local SliderBar = Instance.new("Frame")
@@ -442,6 +452,7 @@ return function(env)
         SliderBar.Position = UDim2.new(0, 5, 0, 25)
         SliderBar.BackgroundColor3 = Theme.SwitchOff
         SliderBar.BorderSizePixel = 0
+        SliderBar.ZIndex = Frame.ZIndex + 1
         SliderBar.Parent = Frame
         Instance.new("UICorner", SliderBar).CornerRadius = UDim.new(1, 0)
         
@@ -449,6 +460,7 @@ return function(env)
         Fill.Size = UDim2.new((defaultVal - min) / (max - min), 0, 1, 0)
         Fill.BackgroundColor3 = Theme.Accent
         Fill.BorderSizePixel = 0
+        Fill.ZIndex = Frame.ZIndex + 2
         Fill.Parent = SliderBar
         Instance.new("UICorner", Fill).CornerRadius = UDim.new(1, 0)
         ApplyGradient(Fill, Theme.Accent, Theme.AccentDark, 0)
@@ -457,6 +469,7 @@ return function(env)
         Trigger.Size = UDim2.new(1, 0, 1, 0)
         Trigger.BackgroundTransparency = 1
         Trigger.Text = ""
+        Trigger.ZIndex = Frame.ZIndex + 3
         Trigger.Parent = SliderBar
         
         local currentVal = defaultVal
@@ -506,6 +519,7 @@ return function(env)
         BtnFrame.Size = UDim2.new(1, 0, 0, 30)
         BtnFrame.BackgroundTransparency = 1
         BtnFrame.Text = ""
+        BtnFrame.ZIndex = parent.ZIndex + 1
         BtnFrame.Parent = parent
         
         local Label = Instance.new("TextLabel")
@@ -521,6 +535,7 @@ return function(env)
         tConst.MinTextSize = 7
         tConst.MaxTextSize = 11
         Label.TextColor3 = Theme.TextDark
+        Label.ZIndex = BtnFrame.ZIndex + 1
         Label.Parent = BtnFrame
 
         BtnFrame.MouseEnter:Connect(function() TweenService:Create(Label, TweenInfo.new(0.2), {TextColor3 = Theme.Accent}):Play() end)
@@ -534,6 +549,7 @@ return function(env)
     VolHeader.Name = "HeaderContainer"
     VolHeader.Size = UDim2.new(1, 0, 0, 20)
     VolHeader.BackgroundTransparency = 1
+    VolHeader.ZIndex = VolumeBlock.ZIndex + 1
     VolHeader.Parent = VolumeBlock
     
     local VolTitle = Instance.new("TextLabel")
@@ -544,6 +560,7 @@ return function(env)
     VolTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
     VolTitle.TextSize = 12
     VolTitle.TextXAlignment = Enum.TextXAlignment.Left
+    VolTitle.ZIndex = VolHeader.ZIndex + 1
     VolTitle.Parent = VolHeader
 
     CreateCompactToggle(VolumeBlock, "Enable Volume Modifier", VolumesEnabled, function(state)
@@ -577,6 +594,7 @@ return function(env)
     MuteHeader.Name = "HeaderContainer"
     MuteHeader.Size = UDim2.new(1, 0, 0, 20)
     MuteHeader.BackgroundTransparency = 1
+    MuteHeader.ZIndex = MuteBlock.ZIndex + 1
     MuteHeader.Parent = MuteBlock
     
     local MuteTitle = Instance.new("TextLabel")
@@ -587,6 +605,7 @@ return function(env)
     MuteTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
     MuteTitle.TextSize = 12
     MuteTitle.TextXAlignment = Enum.TextXAlignment.Left
+    MuteTitle.ZIndex = MuteHeader.ZIndex + 1
     MuteTitle.Parent = MuteHeader
 
     CreateCompactToggle(MuteBlock, "Remove Your Steps", false, function(state) 
@@ -644,14 +663,15 @@ return function(env)
     end)
 
     -- =========================================================================
-    -- MUSIC PLAYER (Design Elegante, Compacto com Dropdown Flutuante)
+    -- MUSIC PLAYER (Design Otimizado de Alta Performance e Prevenção de Sobreposição)
     -- =========================================================================
     local MusicBlock = Instance.new("Frame")
-    MusicBlock.Size = UDim2.new(1, -2, 0, 85)
+    MusicBlock.Size = UDim2.new(1, -2, 0, 95) -- Tamanho aumentado para 95px de segurança total contra colisões
     MusicBlock.BackgroundColor3 = Color3.new(0, 0, 0)
     MusicBlock.BackgroundTransparency = 0.45
     MusicBlock.BorderSizePixel = 0
-    MusicBlock.ClipsDescendants = false -- Permite que a lista flutue livremente sobre outros elementos
+    MusicBlock.ClipsDescendants = false -- Permite que a lista flutue perfeitamente sobre os cards
+    MusicBlock.ZIndex = 100 -- ZIndex muito alto para priorizar todos os herdeiros
     MusicBlock.Parent = Page
     
     local muStroke = Instance.new("UIStroke", MusicBlock)
@@ -665,19 +685,20 @@ return function(env)
     muPadding.PaddingRight = UDim.new(0, 12)
 
     local MusicTitle = Instance.new("TextLabel")
-    MusicTitle.Size = UDim2.new(1, 0, 0, 16)
+    MusicTitle.Size = UDim2.new(0.4, 0, 0, 16)
     MusicTitle.BackgroundTransparency = 1
     MusicTitle.Text = "Music Player"
     MusicTitle.Font = Theme.Font
     MusicTitle.TextColor3 = Theme.Text
     MusicTitle.TextSize = 12
     MusicTitle.TextXAlignment = Enum.TextXAlignment.Left
+    MusicTitle.ZIndex = 101
     MusicTitle.Parent = MusicBlock
 
     -- Entrada Customizada de ID
     local textBox = Instance.new("TextBox")
     textBox.Size = UDim2.new(0.32, -6, 0, 28)
-    textBox.Position = UDim2.new(0, 0, 0, 24)
+    textBox.Position = UDim2.new(0, 0, 0, 42) -- Alinhado perfeitamente na parte inferior
     textBox.PlaceholderText = "Insert ID..."
     textBox.Text = ""
     textBox.BackgroundColor3 = Theme.SwitchOff
@@ -686,6 +707,7 @@ return function(env)
     textBox.Font = Theme.Font
     textBox.TextSize = 10
     textBox.ClearTextOnFocus = true
+    textBox.ZIndex = 101
     textBox.Parent = MusicBlock
     Instance.new("UICorner", textBox).CornerRadius = UDim.new(0, 4)
     local tbStroke = Instance.new("UIStroke", textBox)
@@ -694,12 +716,13 @@ return function(env)
     -- Botão Seletor de Faixas (Pre-seleções)
     local songDropdown = Instance.new("TextButton")
     songDropdown.Size = UDim2.new(0.32, -6, 0, 28)
-    songDropdown.Position = UDim2.new(0.32, 6, 0, 24)
+    songDropdown.Position = UDim2.new(0.32, 6, 0, 42) -- Alinhado no centro inferior
     songDropdown.BackgroundColor3 = Theme.SwitchOff
     songDropdown.Text = "Select Song"
     songDropdown.Font = Theme.Font
     songDropdown.TextSize = 10
     songDropdown.TextColor3 = Theme.TextDark
+    songDropdown.ZIndex = 102
     songDropdown.Parent = MusicBlock
     Instance.new("UICorner", songDropdown).CornerRadius = UDim.new(0, 4)
     local sdStroke = Instance.new("UIStroke", songDropdown)
@@ -713,16 +736,18 @@ return function(env)
     sdArrow.Font = Enum.Font.Gotham
     sdArrow.TextColor3 = Theme.TextDark
     sdArrow.TextSize = 8
+    sdArrow.ZIndex = 103
     sdArrow.Parent = songDropdown
 
-    -- Container Flutuante do Menu de Músicas
+    -- Container Flutuante do Menu de Músicas com Opacidade Total (ZIndex = 200)
     local SongMenu = Instance.new("Frame")
     SongMenu.Size = UDim2.new(1, 0, 0, 134)
     SongMenu.Position = UDim2.new(0, 0, 1, 4)
     SongMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    SongMenu.BackgroundTransparency = 0 -- OPACO para não deixar os elementos de trás visíveis
     SongMenu.BorderSizePixel = 0
     SongMenu.Visible = false
-    SongMenu.ZIndex = 1000
+    SongMenu.ZIndex = 200
     SongMenu.Parent = songDropdown
     Instance.new("UICorner", SongMenu).CornerRadius = UDim.new(0, 4)
     local smStroke = Instance.new("UIStroke", SongMenu)
@@ -736,7 +761,7 @@ return function(env)
     smScroll.ScrollBarThickness = 2
     smScroll.ScrollBarImageColor3 = Theme.Accent
     smScroll.CanvasSize = UDim2.new(0, 0, 0, #SongsList * 22)
-    smScroll.ZIndex = 1001
+    smScroll.ZIndex = 201
     
     local smLayout = Instance.new("UIListLayout", smScroll)
     smLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -744,12 +769,13 @@ return function(env)
     for _, song in ipairs(SongsList) do
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(1, 0, 0, 22)
+        btn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
         btn.BackgroundTransparency = 1
         btn.Text = song.Name
         btn.Font = Enum.Font.Gotham
         btn.TextSize = 9
         btn.TextColor3 = Theme.TextDark
-        btn.ZIndex = 1002
+        btn.ZIndex = 202
         btn.Parent = smScroll
         
         local sep = Instance.new("Frame")
@@ -757,14 +783,14 @@ return function(env)
         sep.Position = UDim2.new(0, 5, 1, -1)
         sep.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
         sep.BorderSizePixel = 0
-        sep.ZIndex = 1003
+        sep.ZIndex = 203
         sep.Parent = btn
         
         btn.MouseEnter:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.15), {TextColor3 = Theme.Text}):Play()
+            TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0, BackgroundColor3 = Color3.fromRGB(35, 35, 35), TextColor3 = Theme.Text}):Play()
         end)
         btn.MouseLeave:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.15), {TextColor3 = Theme.TextDark}):Play()
+            TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 1, TextColor3 = Theme.TextDark}):Play()
         end)
         
         btn.MouseButton1Click:Connect(function()
@@ -796,16 +822,17 @@ return function(env)
         end
     end)
 
-    -- Botão Play/Stop
+    -- Botão Play/Stop de Canto Inferior Direito sem colisão de Y
     local playBtn = Instance.new("TextButton")
-    playBtn.Size = UDim2.new(0.32, -6, 0, 28)
-    playBtn.Position = UDim2.new(0.68, 6, 0, 24)
+    playBtn.Size = UDim2.new(0.34, -12, 0, 28)
+    playBtn.Position = UDim2.new(0.66, 12, 0, 42) -- Alinhado à direita inferior (Sem colisão com o slider que fica em Y = -4)
     playBtn.BackgroundColor3 = Color3.new(0, 0, 0)
     playBtn.BackgroundTransparency = 0.45
     playBtn.Text = "Play"
     playBtn.Font = Theme.Font
     playBtn.TextSize = 10
     playBtn.TextColor3 = Theme.TextDark
+    playBtn.ZIndex = 101
     playBtn.Parent = MusicBlock
     Instance.new("UICorner", playBtn).CornerRadius = UDim.new(0, 4)
     local pbStroke = Instance.new("UIStroke", playBtn)
@@ -848,11 +875,12 @@ return function(env)
         end
     end)
 
-    -- Slider de Volume da Música
+    -- Slider de Volume da Música (Y = -4 para espaçamento de folga)
     local sliderFrame = Instance.new("Frame")
-    sliderFrame.Size = UDim2.new(0.35, -12, 0, 35)
-    sliderFrame.Position = UDim2.new(0.65, 12, 0, 19)
+    sliderFrame.Size = UDim2.new(0.4, 0, 0, 35)
+    sliderFrame.Position = UDim2.new(0.6, 0, 0, -4) -- Posicionado no topo direito do bloco
     sliderFrame.BackgroundTransparency = 1
+    sliderFrame.ZIndex = 101
     sliderFrame.Parent = MusicBlock
 
     local sliderLabel = Instance.new("TextLabel")
@@ -863,6 +891,7 @@ return function(env)
     sliderLabel.TextColor3 = Theme.TextDark
     sliderLabel.TextSize = 10
     sliderLabel.TextXAlignment = Enum.TextXAlignment.Left
+    sliderLabel.ZIndex = 102
     sliderLabel.Parent = sliderFrame
 
     local sliderVal = Instance.new("TextLabel")
@@ -874,6 +903,7 @@ return function(env)
     sliderVal.TextColor3 = Theme.Text
     sliderVal.TextSize = 10
     sliderVal.TextXAlignment = Enum.TextXAlignment.Right
+    sliderVal.ZIndex = 102
     sliderVal.Parent = sliderFrame
 
     local sliderBar = Instance.new("Frame")
@@ -881,6 +911,7 @@ return function(env)
     sliderBar.Position = UDim2.new(0, 0, 0, 20)
     sliderBar.BackgroundColor3 = Theme.SwitchOff
     sliderBar.BorderSizePixel = 0
+    sliderBar.ZIndex = 102
     sliderBar.Parent = sliderFrame
     Instance.new("UICorner", sliderBar).CornerRadius = UDim.new(1, 0)
 
@@ -888,6 +919,7 @@ return function(env)
     sliderFill.Size = UDim2.new(0.5, 0, 1, 0) -- default 50%
     sliderFill.BackgroundColor3 = Theme.Accent
     sliderFill.BorderSizePixel = 0
+    sliderFill.ZIndex = 103
     sliderFill.Parent = sliderBar
     Instance.new("UICorner", sliderFill).CornerRadius = UDim.new(1, 0)
     ApplyGradient(sliderFill, Theme.Accent, Theme.AccentDark, 0)
@@ -896,6 +928,7 @@ return function(env)
     sliderTrigger.Size = UDim2.new(1, 0, 1, 0)
     sliderTrigger.BackgroundTransparency = 1
     sliderTrigger.Text = ""
+    sliderTrigger.ZIndex = 104
     sliderTrigger.Parent = sliderBar
 
     local mDragging = false
@@ -960,8 +993,8 @@ return function(env)
         Card.BackgroundColor3 = Color3.new(0, 0, 0)
         Card.BackgroundTransparency = 0.45 
         Card.BorderSizePixel = 0
+        Card.ZIndex = 1 -- Definido como baixo para não competir com a lista de música
         Card.Parent = Parent
-        Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 6)
         
         local cardStroke = Instance.new("UIStroke", Card)
         cardStroke.Color = Color3.fromRGB(40, 40, 40)
@@ -1055,6 +1088,7 @@ return function(env)
     ResetBtnFrame.TextColor3 = Color3.fromRGB(150, 150, 150) -- Cor cinza padrão legível
     ResetBtnFrame.Font = Enum.Font.GothamBold
     ResetBtnFrame.TextSize = 11
+    ResetBtnFrame.ZIndex = 1 -- Baixo ZIndex de segurança
     ResetBtnFrame.Parent = Page
     Instance.new("UICorner", ResetBtnFrame).CornerRadius = UDim.new(0, 6)
     
