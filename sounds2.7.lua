@@ -11,67 +11,18 @@ return function(env)
     local GetParentTarget = env.GetParentTarget
     local UserInputService = game:GetService("UserInputService")
 
-    -- =========================================================================
-    -- CONVERSÃO DINÂMICA PARA O DESIGN MODERNO (LeftCol / RightCol)
-    -- =========================================================================
-    if Page:GetAttribute("OldStyle") == true then
-        Page:SetAttribute("OldStyle", false)
-        
-        local oldLayout = Page:FindFirstChildOfClass("UIListLayout")
-        if oldLayout then oldLayout:Destroy() end
-        local oldPadding = Page:FindFirstChildOfClass("UIPadding")
-        if oldPadding then oldPadding:Destroy() end
-
-        local PageLayout = Instance.new("UIListLayout")
-        PageLayout.FillDirection = Enum.FillDirection.Horizontal
-        PageLayout.Padding = UDim.new(0, 12) 
-        PageLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        PageLayout.Parent = Page
-
-        local PP = Instance.new("UIPadding")
-        PP.PaddingBottom = UDim.new(0, 10)
-        PP.Parent = Page
-
-        local LeftCol = Instance.new("Frame")
-        LeftCol.Name = "LeftCol"
-        LeftCol.Size = UDim2.new(0.5, -6, 0, 0)
-        LeftCol.AutomaticSize = Enum.AutomaticSize.Y
-        LeftCol.BackgroundTransparency = 1
-        LeftCol.Parent = Page
-        local LL = Instance.new("UIListLayout")
-        LL.Padding = UDim.new(0, 10)
-        LL.SortOrder = Enum.SortOrder.LayoutOrder
-        LL.Parent = LeftCol
-
-        local RightCol = Instance.new("Frame")
-        RightCol.Name = "RightCol"
-        RightCol.Size = UDim2.new(0.5, -6, 0, 0)
-        RightCol.AutomaticSize = Enum.AutomaticSize.Y
-        RightCol.BackgroundTransparency = 1
-        RightCol.Parent = Page
-        local RL = Instance.new("UIListLayout")
-        RL.Padding = UDim.new(0, 10)
-        RL.SortOrder = Enum.SortOrder.LayoutOrder
-        RL.Parent = RightCol
-
-        local SectionCount = Instance.new("IntValue")
-        SectionCount.Name = "SectionCount"
-        SectionCount.Value = 0
-        SectionCount.Parent = Page
-    end
-
     -- Variaveis de Lógica e Backup do Antigo Script
     local LegitSettings = {MuteSteps = false, MuteJumps = false, MuteHack = false}
     local CurrentSoundIDs = {Running = 0, Jumping = 0, Landing = 0}
     local OriginalSoundBackups = setmetatable({}, {__mode = "k"})
 
     -- Carregando estados salvos do Bloco de Volumes (Inicia desligado por padrão)
-    local VolumesEnabled = UserConfigs["SoundPage_Enable Volume Modifier"]
+    local VolumesEnabled = UserConfigs["Vol_Enabled"]
     if VolumesEnabled == nil then VolumesEnabled = false end
 
-    local FootstepsVolMultiplier = UserConfigs["SoundPage_FootSteps Volume"] or 1
-    local JumpVolMultiplier = UserConfigs["SoundPage_Jump Volume"] or 1
-    local FallVolMultiplier = UserConfigs["SoundPage_Fall Volume"] or 1
+    local FootstepsVolMultiplier = UserConfigs["Vol_FootstepsMultiplier"] or 1
+    local JumpVolMultiplier = UserConfigs["Vol_JumpMultiplier"] or 1
+    local FallVolMultiplier = UserConfigs["Vol_FallMultiplier"] or 1
 
     local function formatID(id)
         if type(id) == "number" and id > 0 then return "rbxassetid://" .. id
@@ -128,7 +79,7 @@ return function(env)
     for _, player in ipairs(Players:GetPlayers()) do setupPlayerSoundEvents(player) end
     Players.PlayerAdded:Connect(setupPlayerSoundEvents)
 
-    -- Sincronização e monitoramento de volumes
+    -- Sincronização original de Mute local
     local function ProcessCharacter(char)
         local root = char:WaitForChild("HumanoidRootPart", 10)
         if not root then return end
@@ -214,7 +165,7 @@ return function(env)
     
     local noHitSoundAddedConn = nil
 
-    -- Tabelas fracas para mapeamento rápido de categorias de volume
+    -- Tabelas fracas e caches rápidos de alta performance para os Sliders de Volume
     local ActiveSounds = setmetatable({}, {__mode = "k"})
     local SoundCategories = setmetatable({}, {__mode = "k"})
     local originalVolumeBackup = setmetatable({}, {__mode = "k"})
@@ -246,13 +197,13 @@ return function(env)
     for _, obj in ipairs(Workspace:GetDescendants()) do registerSound(obj) end
     Workspace.DescendantAdded:Connect(registerSound)
 
-    -- Laço de sincronização de alto desempenho
+    -- Laço de sincronização global otimizado (Prevenção de stutters)
     task.spawn(function()
         while task.wait(0.3) do
-            local enabled = UserConfigs["SoundPage_Enable Volume Modifier"]
-            local stepMult = UserConfigs["SoundPage_FootSteps Volume"] or 1
-            local jumpMult = UserConfigs["SoundPage_Jump Volume"] or 1
-            local fallMult = UserConfigs["SoundPage_Fall Volume"] or 1
+            local enabled = VolumesEnabled
+            local stepMult = FootstepsVolMultiplier
+            local jumpMult = JumpVolMultiplier
+            local fallMult = FallVolMultiplier
             local muteSteps = LegitSettings.MuteSteps
             local muteJumps = LegitSettings.MuteJumps
             local localChar = LocalPlayer.Character
@@ -273,6 +224,7 @@ return function(env)
                         end
                     end
 
+                    -- Verifica se o som pertence ao LocalPlayer para aplicar o silenciador legítimo
                     if localChar and sound:IsDescendantOf(localChar) then
                         if category == "Footsteps" and muteSteps then
                             multiplier = 0
@@ -291,21 +243,269 @@ return function(env)
     end)
 
     -- =========================================================================
-    -- COLUNA ESQUERDA (Left Column)
+    -- LAYOUT HÍBRIDO (Top 2-Column, Bottom Full-Width)
     -- =========================================================================
-    Library:CreateSection(Page, "Mute Settings", "Left")
     
-    Library:CreateToggle(Page, "Remove Your Steps", false, function(state) 
+    -- Container das configurações lado a lado
+    local SettingsContainer = Instance.new("Frame")
+    SettingsContainer.Size = UDim2.new(1, -2, 0, 210)
+    SettingsContainer.BackgroundTransparency = 1
+    SettingsContainer.Parent = Page
+
+    local MuteBlock = Instance.new("Frame")
+    MuteBlock.Size = UDim2.new(0.5, -6, 1, 0)
+    MuteBlock.Position = UDim2.new(0, 0, 0, 0)
+    MuteBlock.BackgroundColor3 = Color3.new(0, 0, 0)
+    MuteBlock.BackgroundTransparency = 0.45
+    MuteBlock.BorderSizePixel = 0
+    MuteBlock.Parent = SettingsContainer
+    Instance.new("UICorner", MuteBlock).CornerRadius = UDim.new(0, 6)
+    local mStroke = Instance.new("UIStroke", MuteBlock)
+    mStroke.Color = Color3.fromRGB(40, 40, 40)
+    mStroke.Thickness = 1
+
+    local mLayout = Instance.new("UIListLayout", MuteBlock)
+    mLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    mLayout.Padding = UDim.new(0, 8)
+    local mPadding = Instance.new("UIPadding", MuteBlock)
+    mPadding.PaddingTop = UDim.new(0, 10)
+    mPadding.PaddingBottom = UDim.new(0, 10)
+    mPadding.PaddingLeft = UDim.new(0, 12)
+    mPadding.PaddingRight = UDim.new(0, 12)
+
+    local VolumeBlock = Instance.new("Frame")
+    VolumeBlock.Size = UDim2.new(0.5, -6, 1, 0)
+    VolumeBlock.Position = UDim2.new(0.5, 6, 0, 0)
+    VolumeBlock.BackgroundColor3 = Color3.new(0, 0, 0)
+    VolumeBlock.BackgroundTransparency = 0.45
+    VolumeBlock.BorderSizePixel = 0
+    VolumeBlock.Parent = SettingsContainer
+    Instance.new("UICorner", VolumeBlock).CornerRadius = UDim.new(0, 6)
+    local vStroke = Instance.new("UIStroke", VolumeBlock)
+    vStroke.Color = Color3.fromRGB(40, 40, 40)
+    vStroke.Thickness = 1
+
+    local vLayout = Instance.new("UIListLayout", VolumeBlock)
+    vLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    vLayout.Padding = UDim.new(0, 8)
+    local vPadding = Instance.new("UIPadding", VolumeBlock)
+    vPadding.PaddingTop = UDim.new(0, 10)
+    vPadding.PaddingBottom = UDim.new(0, 10)
+    vPadding.PaddingLeft = UDim.new(0, 12)
+    vPadding.PaddingRight = UDim.new(0, 12)
+
+    -- Componentes Compactos da UI do Topo
+    local function CreateCompactToggle(parent, text, defaultVal, callback)
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(1, 0, 0, 24)
+        frame.BackgroundTransparency = 1
+        frame.Parent = parent
+        
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, -40, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = text
+        label.Font = Theme.Font
+        label.TextColor3 = Theme.Text
+        label.TextSize = 11
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = frame
+        
+        local bg = Instance.new("TextButton")
+        bg.Size = UDim2.new(0, 30, 0, 14)
+        bg.Position = UDim2.new(1, -30, 0.5, -7)
+        bg.BackgroundColor3 = Theme.SwitchOff
+        bg.Text = ""
+        bg.Parent = frame
+        Instance.new("UICorner", bg).CornerRadius = UDim.new(1, 0)
+        
+        local bgGrad = Instance.new("UIGradient")
+        bgGrad.Rotation = 90
+        bgGrad.Parent = bg
+        
+        local cir = Instance.new("Frame")
+        cir.Size = UDim2.new(0, 12, 0, 12)
+        cir.Position = UDim2.new(0, 1, 0.5, -6)
+        cir.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+        cir.Parent = bg
+        Instance.new("UICorner", cir).CornerRadius = UDim.new(1, 0)
+        
+        local state = defaultVal
+        
+        local function updateVisuals()
+            if state then
+                TweenService:Create(bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Accent}):Play()
+                bgGrad.Color = ColorSequence.new{
+                    ColorSequenceKeypoint.new(0, Theme.Accent),
+                    ColorSequenceKeypoint.new(1, Theme.AccentDark)
+                }
+                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(1, -13, 0.5, -6), BackgroundColor3 = Color3.new(0,0,0)}):Play()
+            else
+                TweenService:Create(bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.SwitchOff}):Play()
+                bgGrad.Color = ColorSequence.new{
+                    ColorSequenceKeypoint.new(0, Theme.SwitchOff),
+                    ColorSequenceKeypoint.new(1, Theme.SwitchOff)
+                }
+                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(0, 1, 0.5, -6), BackgroundColor3 = Color3.fromRGB(150, 150, 150)}):Play()
+            end
+        end
+        
+        bg.MouseButton1Click:Connect(function()
+            state = not state
+            updateVisuals()
+            callback(state)
+        end)
+        
+        updateVisuals()
+        return {Set = function(val) state = val; updateVisuals(); callback(val) end}
+    end
+
+    local function CreateCompactSlider(parent, text, min, max, defaultVal, callback)
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(1, 0, 0, 34)
+        frame.BackgroundTransparency = 1
+        frame.Parent = parent
+        
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, -50, 0, 14)
+        label.BackgroundTransparency = 1
+        label.Text = text
+        label.Font = Theme.Font
+        label.TextColor3 = Theme.TextDark
+        label.TextSize = 11
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = frame
+        
+        local valLabel = Instance.new("TextLabel")
+        valLabel.Size = UDim2.new(0, 40, 0, 14)
+        valLabel.Position = UDim2.new(1, -40, 0, 0)
+        valLabel.BackgroundTransparency = 1
+        valLabel.Text = tostring(defaultVal)
+        valLabel.Font = Theme.Font
+        valLabel.TextColor3 = Theme.Text
+        valLabel.TextSize = 11
+        valLabel.TextXAlignment = Enum.TextXAlignment.Right
+        valLabel.Parent = frame
+        
+        local bar = Instance.new("Frame")
+        bar.Size = UDim2.new(1, 0, 0, 5)
+        bar.Position = UDim2.new(0, 0, 0, 20)
+        bar.BackgroundColor3 = Theme.SwitchOff
+        bar.BorderSizePixel = 0
+        bar.Parent = frame
+        Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+        
+        local fill = Instance.new("Frame")
+        fill.Size = UDim2.new((defaultVal - min) / (max - min), 0, 1, 0)
+        fill.BackgroundColor3 = Theme.Accent
+        fill.BorderSizePixel = 0
+        fill.Parent = bar
+        Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+        
+        local fillGrad = Instance.new("UIGradient")
+        fillGrad.Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, Theme.Accent),
+            ColorSequenceKeypoint.new(1, Theme.AccentDark)
+        }
+        fillGrad.Parent = fill
+        
+        local trigger = Instance.new("TextButton")
+        trigger.Size = UDim2.new(1, 0, 1, 0)
+        trigger.BackgroundTransparency = 1
+        trigger.Text = ""
+        trigger.Parent = bar
+        
+        local currentVal = defaultVal
+        local dragging = false
+        
+        local function update(input)
+            local ratio = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+            fill.Size = UDim2.new(ratio, 0, 1, 0)
+            local val = math.floor(min + ((max - min) * ratio))
+            valLabel.Text = tostring(val)
+            currentVal = val
+            callback(val)
+        end
+        
+        trigger.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                update(input)
+            end
+        end)
+        
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+            end
+        end)
+        
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                update(input)
+            end
+        end)
+        
+        local function setVal(v)
+            currentVal = math.clamp(v, min, max)
+            local ratio = (currentVal - min) / (max - min)
+            fill.Size = UDim2.new(ratio, 0, 1, 0)
+            valLabel.Text = tostring(currentVal)
+            callback(currentVal)
+        end
+        
+        return {Set = setVal}
+    end
+
+    local function CreateCompactButton(parent, text, callback)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, 0, 0, 24)
+        btn.BackgroundColor3 = Color3.new(0, 0, 0)
+        btn.BackgroundTransparency = 0.45
+        btn.Text = text
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 11
+        btn.TextColor3 = Theme.TextDark
+        btn.Parent = parent
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+        
+        local stroke = Instance.new("UIStroke", btn)
+        stroke.Color = Color3.fromRGB(40, 40, 40)
+        stroke.Thickness = 1
+        
+        btn.MouseEnter:Connect(function()
+            TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
+            TweenService:Create(btn, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
+        end)
+        btn.MouseLeave:Connect(function()
+            TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
+            TweenService:Create(btn, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
+        end)
+        
+        btn.MouseButton1Click:Connect(callback)
+        return btn
+    end
+
+    -- Populando Mute Settings (Esquerda)
+    local MuteTitle = Instance.new("TextLabel")
+    MuteTitle.Size = UDim2.new(1, 0, 0, 16)
+    MuteTitle.BackgroundTransparency = 1
+    MuteTitle.Text = "Mute Settings"
+    MuteTitle.Font = Theme.Font
+    MuteTitle.TextColor3 = Theme.Text
+    MuteTitle.TextSize = 11
+    MuteTitle.TextXAlignment = Enum.TextXAlignment.Left
+    MuteTitle.Parent = MuteBlock
+
+    CreateCompactToggle(MuteBlock, "Remove Your Steps", false, function(state) 
         LegitSettings.MuteSteps = state
         if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
     end)
-    
-    Library:CreateToggle(Page, "Remove Your Jumps", false, function(state) 
+    CreateCompactToggle(MuteBlock, "Remove Your Jumps", false, function(state) 
         LegitSettings.MuteJumps = state
         if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
     end)
-    
-    Library:CreateToggle(Page, "Remove Pc Hack Sounds", false, function(state) 
+    CreateCompactToggle(MuteBlock, "Remove Pc Hack Sounds", false, function(state) 
         if state then 
             for _, obj in ipairs(Workspace:GetDescendants()) do 
                 if obj:IsA("Sound") and isHackSound(obj) and isFromComputer(obj) then muteHack(obj) end 
@@ -324,8 +524,7 @@ return function(env)
             hackSignals = {} 
         end 
     end)
-    
-    Library:CreateToggle(Page, "No hit sound", false, function(state)
+    CreateCompactToggle(MuteBlock, "No hit sound", false, function(state)
         noHitSoundEnabled = state
         if state then
             local function monitorCharacter(character)
@@ -352,82 +551,122 @@ return function(env)
         end
     end)
 
-    -- =========================================================================
-    -- COLUNA DIREITA (Right Column)
-    -- =========================================================================
-    Library:CreateSection(Page, "Volume Settings", "Right")
-    
-    Library:CreateToggle(Page, "Enable Volume Modifier", false, function(state)
+    -- Populando Volume Settings (Direita)
+    local VolTitle = Instance.new("TextLabel")
+    VolTitle.Size = UDim2.new(1, 0, 0, 16)
+    VolTitle.BackgroundTransparency = 1
+    VolTitle.Text = "Volume Settings"
+    VolTitle.Font = Theme.Font
+    VolTitle.TextColor3 = Theme.Text
+    VolTitle.TextSize = 11
+    VolTitle.TextXAlignment = Enum.TextXAlignment.Left
+    VolTitle.Parent = VolumeBlock
+
+    CreateCompactToggle(VolumeBlock, "Enable Volume Modifier", VolumesEnabled, function(state)
         VolumesEnabled = state
+        UserConfigs["Vol_Enabled"] = state
     end)
     
-    local FootstepsSlider = Library:CreateSlider(Page, "FootSteps Volume", 0, 10, 1, function(val)
+    local FootstepsSlider = CreateCompactSlider(VolumeBlock, "FootSteps Volume", 0, 10, FootstepsVolMultiplier, function(val)
         FootstepsVolMultiplier = val
+        UserConfigs["Vol_FootstepsMultiplier"] = val
     end)
     
-    local JumpSlider = Library:CreateSlider(Page, "Jump Volume", 0, 10, 1, function(val)
+    local JumpSlider = CreateCompactSlider(VolumeBlock, "Jump Volume", 0, 10, JumpVolMultiplier, function(val)
         JumpVolMultiplier = val
+        UserConfigs["Vol_JumpMultiplier"] = val
     end)
     
-    local FallSlider = Library:CreateSlider(Page, "Fall Volume", 0, 10, 1, function(val)
+    local FallSlider = CreateCompactSlider(VolumeBlock, "Fall Volume", 0, 10, FallVolMultiplier, function(val)
         FallVolMultiplier = val
+        UserConfigs["Vol_FallMultiplier"] = val
     end)
 
-    Library:CreateButton(Page, "Reset Volumes", function()
+    CreateCompactButton(VolumeBlock, "Reset Volumes", function()
         FootstepsSlider.Set(1)
         JumpSlider.Set(1)
         FallSlider.Set(1)
     end)
 
     -- =========================================================================
-    -- GERENCIADOR DE SOUND CARDS (Design Unificado)
+    -- DESIGN CLÁSSICO DO SOUND CARD (Largura Inteira Original)
     -- =========================================================================
+    Library:CreateSection(Page, "Custom Sound Packs")
+
     local WalkButtons = {}
     local JumpButtons = {}
     local FallButtons = {}
 
-    local function CreateSoundCard(ParentPage, TitleText, Actions)
-        local parent = GetParentTarget(ParentPage)
+    local savedWalk = UserConfigs["CustomSound_Walk"] or "0"
+    local savedJump = UserConfigs["CustomSound_Jump"] or "0"
+    local savedFall = UserConfigs["CustomSound_Fall"] or "0"
+
+    CurrentSoundIDs.Running = savedWalk
+    CurrentSoundIDs.Jumping = savedJump
+    CurrentSoundIDs.Landing = savedFall
+
+    local function updateButtonVisuals(categoryDict, activeId)
+        for id, data in pairs(categoryDict) do
+            if id == activeId then
+                TweenService:Create(data.Btn, TweenInfo.new(0.3), {BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0, TextColor3 = Color3.new(0,0,0)}):Play()
+                TweenService:Create(data.Stroke, TweenInfo.new(0.3), {Color = Theme.Accent, Transparency = 0}):Play()
+            else
+                TweenService:Create(data.Btn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.new(0,0,0), BackgroundTransparency = 0.45, TextColor3 = Color3.fromRGB(150,150,150)}):Play()
+                TweenService:Create(data.Stroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(40, 40, 40), Transparency = 0}):Play()
+            end
+        end
+    end
+
+    local function CreateSoundCard(Parent, TitleText, Actions)
         local Card = Instance.new("Frame")
-        Card.Size = UDim2.new(1, 0, 0, 48)
-        Card.BackgroundTransparency = 1
-        Card.Parent = parent
+        Card.Size = UDim2.new(1, -2, 0, 65)
+        Card.Position = UDim2.new(0, 1, 0, 0)
+        Card.BackgroundColor3 = Color3.new(0, 0, 0)
+        Card.BackgroundTransparency = 0.45 
+        Card.BorderSizePixel = 0
+        Card.Parent = Parent
+        Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 6)
+        
+        local cardStroke = Instance.new("UIStroke", Card)
+        cardStroke.Color = Color3.fromRGB(40, 40, 40)
+        cardStroke.Thickness = 1
 
         local Title = Instance.new("TextLabel")
-        Title.Size = UDim2.new(1, 0, 0, 16)
+        Title.Size = UDim2.new(1, -20, 0, 20)
+        Title.Position = UDim2.new(0, 10, 0, 5)
         Title.BackgroundTransparency = 1
         Title.Text = TitleText
         Title:SetAttribute("OriginalText", TitleText)
-        Title.TextColor3 = Theme.TextDark
+        Title.TextColor3 = Theme.Text
         Title.Font = Theme.Font
-        Title.TextSize = 10
+        Title.TextSize = 12
         Title.TextXAlignment = Enum.TextXAlignment.Left
         Title.Parent = Card
 
         local BtnContainer = Instance.new("Frame")
-        BtnContainer.Size = UDim2.new(1, 0, 0, 24)
-        BtnContainer.Position = UDim2.new(0, 0, 0, 18)
+        BtnContainer.Size = UDim2.new(1, -20, 0, 26)
+        BtnContainer.Position = UDim2.new(0, 10, 0, 30)
         BtnContainer.BackgroundTransparency = 1
         BtnContainer.Parent = Card
 
         local layout = Instance.new("UIListLayout", BtnContainer)
         layout.FillDirection = Enum.FillDirection.Horizontal
-        layout.Padding = UDim.new(0, 6)
+        layout.Padding = UDim.new(0, 8)
         layout.SortOrder = Enum.SortOrder.LayoutOrder
 
         local btnWidth = (1 / #Actions)
         for _, act in ipairs(Actions) do
             local btn = Instance.new("TextButton")
-            btn.Size = UDim2.new(btnWidth, -((#Actions-1)*6 / #Actions), 1, 0)
+            btn.Size = UDim2.new(btnWidth, -((#Actions-1)*8 / #Actions), 1, 0)
             btn.BackgroundColor3 = Color3.new(0, 0, 0)
             btn.BackgroundTransparency = 0.45
             btn.Text = act.Name
             btn:SetAttribute("OriginalText", act.Name)
             btn.Font = Enum.Font.GothamBold
-            btn.TextSize = 10
+            btn.TextSize = 11
             btn.TextColor3 = Color3.fromRGB(150, 150, 150)
             btn.Parent = BtnContainer
-            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 
             local btnStroke = Instance.new("UIStroke", btn)
             btnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
@@ -470,10 +709,35 @@ return function(env)
         end
     end
 
-    -- =========================================================================
-    -- SOUND PACKS: COLUNA ESQUERDA (Left Column)
-    -- =========================================================================
-    Library:CreateSection(Page, "Sound Packs (Part 1)", "Left")
+    local ResetBtnFrame = Instance.new("TextButton")
+    ResetBtnFrame.Size = UDim2.new(1, -2, 0, 30)
+    ResetBtnFrame.Position = UDim2.new(0, 1, 0, 0)
+    ResetBtnFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+    ResetBtnFrame.BackgroundTransparency = 0.45
+    ResetBtnFrame.Text = "Default Sounds (Reset All)"
+    ResetBtnFrame.TextColor3 = Theme.CloseRed
+    ResetBtnFrame.Font = Enum.Font.GothamBold
+    ResetBtnFrame.TextSize = 11
+    ResetBtnFrame.Parent = Page
+    Instance.new("UICorner", ResetBtnFrame).CornerRadius = UDim.new(0, 6)
+    local rbsStr = Instance.new("UIStroke", ResetBtnFrame)
+    rbsStr.Color = Color3.fromRGB(40,40,40)
+
+    ResetBtnFrame.MouseEnter:Connect(function() TweenService:Create(rbsStr, TweenInfo.new(0.3), {Color = Theme.CloseRed}):Play() end)
+    ResetBtnFrame.MouseLeave:Connect(function() TweenService:Create(rbsStr, TweenInfo.new(0.3), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
+    
+    ResetBtnFrame.MouseButton1Click:Connect(function()
+        CurrentSoundIDs.Running = "0"
+        CurrentSoundIDs.Jumping = "0"
+        CurrentSoundIDs.Landing = "0"
+        UserConfigs["CustomSound_Walk"] = "0"
+        UserConfigs["CustomSound_Jump"] = "0"
+        UserConfigs["CustomSound_Fall"] = "0"
+        updateButtonVisuals(WalkButtons, "0")
+        updateButtonVisuals(JumpButtons, "0")
+        updateButtonVisuals(FallButtons, "0")
+        RefreshAllSounds()
+    end)
 
     CreateSoundCard(Page, "michawell", {
         {Name = "Walk", ID = "116140177933689", Type = "Walk"},
@@ -495,11 +759,6 @@ return function(env)
         {Name = "Walk", ID = "131592620665625", Type = "Walk"},
         {Name = "Jump", ID = "89459688918065", Type = "Jump"}
     })
-
-    -- =========================================================================
-    -- SOUND PACKS: COLUNA DIREITA (Right Column)
-    -- =========================================================================
-    Library:CreateSection(Page, "Sound Packs (Part 2)", "Right")
 
     CreateSoundCard(Page, "NoobTwoPoint", {
         {Name = "Walk", ID = "110709356093026", Type = "Walk"},
@@ -524,11 +783,6 @@ return function(env)
         {Name = "Fall", ID = "88947883822456", Type = "Fall"}
     })
 
-    -- =========================================================================
-    -- EXTRA SOUND PACKS (Right Column)
-    -- =========================================================================
-    Library:CreateSection(Page, "Extra Sound Packs", "Right")
-
     CreateSoundCard(Page, "Extra Jumps (Part 1)", {
         {Name = "Pew", ID = "136299701781122", Type = "Jump"},
         {Name = "Sharingan", ID = "118102230060662", Type = "Jump"},
@@ -540,19 +794,6 @@ return function(env)
         {Name = "Three Jumps", ID = "126925004664723", Type = "Jump"},
         {Name = "Yusei Jump", ID = "119519595212440", Type = "Jump"}
     })
-
-    Library:CreateButton(Page, "Reset Sounds", function()
-        CurrentSoundIDs.Running = "0"
-        CurrentSoundIDs.Jumping = "0"
-        CurrentSoundIDs.Landing = "0"
-        UserConfigs["CustomSound_Walk"] = "0"
-        UserConfigs["CustomSound_Jump"] = "0"
-        UserConfigs["CustomSound_Fall"] = "0"
-        updateButtonVisuals(WalkButtons, "0")
-        updateButtonVisuals(JumpButtons, "0")
-        updateButtonVisuals(FallButtons, "0")
-        RefreshAllSounds()
-    end)
 
     updateButtonVisuals(WalkButtons, savedWalk)
     updateButtonVisuals(JumpButtons, savedJump)
