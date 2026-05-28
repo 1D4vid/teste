@@ -16,7 +16,7 @@ return function(env)
     local CurrentSoundIDs = {Running = 0, Jumping = 0, Landing = 0}
     local OriginalSoundBackups = setmetatable({}, {__mode = "k"})
 
-    -- Carregando estados e valores salvos (Desativado por padrão)
+    -- Carregando estados e valores salvos do Bloco de Volumes (Inicia desligado por padrão)
     local VolumesEnabled = UserConfigs["EnableSoundSettings"]
     if VolumesEnabled == nil then VolumesEnabled = false end
 
@@ -79,80 +79,40 @@ return function(env)
     for _, player in ipairs(Players:GetPlayers()) do setupPlayerSoundEvents(player) end
     Players.PlayerAdded:Connect(setupPlayerSoundEvents)
 
-    -- Mapeamento e monitoramento global de sons de alta performance
-    local ActiveSounds = setmetatable({}, {__mode = "k"})
-    local SoundCategories = setmetatable({}, {__mode = "k"})
-    local originalVolumeBackup = setmetatable({}, {__mode = "k"})
-
-    local function getSoundCategory(sound)
-        local name = sound.Name:lower()
-        if name:find("running") or name:find("walk") or name:find("step") then
-            return "Footsteps"
-        elseif name:find("jumping") or name:find("jump") then
-            return "Jump"
-        elseif name:find("landing") or name:find("fall") or name:find("land") then
-            return "Fall"
-        end
-        return nil
-    end
-
-    local function registerSound(obj)
-        if obj:IsA("Sound") then
-            ActiveSounds[obj] = true
-            if not originalVolumeBackup[obj] then
-                originalVolumeBackup[obj] = obj.Volume
+    -- Lógica original de Mute local restaurada integralmente
+    local function ProcessCharacter(char)
+        local root = char:WaitForChild("HumanoidRootPart", 10)
+        if not root then return end
+        local function MuteLogic(soundObj, typeName)
+            if not soundObj then return end
+            local targetVol = 0.5
+            if typeName == "Running" then targetVol = 0.65 end
+            if char == LocalPlayer.Character then
+                if typeName == "Running" and LegitSettings.MuteSteps then targetVol = 0 end
+                if (typeName == "Jumping" or typeName == "Landing") and LegitSettings.MuteJumps then targetVol = 0 end
             end
-            if not SoundCategories[obj] then
-                SoundCategories[obj] = getSoundCategory(obj)
-            end
-        end
-    end
-    
-    for _, obj in ipairs(Workspace:GetDescendants()) do registerSound(obj) end
-    Workspace.DescendantAdded:Connect(registerSound)
-
-    task.spawn(function()
-        while task.wait(0.3) do
-            local enabled = VolumesEnabled
-            local stepMult = FootstepsVolMultiplier
-            local jumpMult = JumpVolMultiplier
-            local fallMult = FallVolMultiplier
-            local muteSteps = LegitSettings.MuteSteps
-            local muteJumps = LegitSettings.MuteJumps
-            local localChar = LocalPlayer.Character
-
-            for sound in pairs(ActiveSounds) do
-                local category = SoundCategories[sound]
-                if category then
-                    local origVol = originalVolumeBackup[sound] or 0.5
-                    local multiplier = 1
-
-                    if enabled then
-                        if category == "Footsteps" then
-                            multiplier = stepMult
-                        elseif category == "Jump" then
-                            multiplier = jumpMult
-                        elseif category == "Fall" then
-                            multiplier = fallMult
-                        end
-                    end
-
-                    if localChar and sound:IsDescendantOf(localChar) then
-                        if category == "Footsteps" and muteSteps then
-                            multiplier = 0
-                        elseif (category == "Jump" or category == "Fall") and muteJumps then
-                            multiplier = 0
-                        end
-                    end
-
-                    local targetVol = origVol * multiplier
-                    if sound.Volume ~= targetVol then
-                        pcall(function() sound.Volume = targetVol end)
-                    end
+            soundObj.Volume = targetVol
+            soundObj:GetPropertyChangedSignal("Volume"):Connect(function()
+                if char == LocalPlayer.Character then
+                    if typeName == "Running" and LegitSettings.MuteSteps then soundObj.Volume = 0 
+                    elseif (typeName == "Jumping" or typeName == "Landing") and LegitSettings.MuteJumps then soundObj.Volume = 0 end
                 end
-            end
+            end)
         end
-    end)
+        task.spawn(function()
+            local s1 = root:WaitForChild("Running", 5)
+            if s1 then MuteLogic(s1, "Running") end
+            local s2 = root:WaitForChild("Jumping", 5)
+            if s2 then MuteLogic(s2, "Jumping") end
+            local s3 = root:WaitForChild("Landing", 5)
+            if s3 then MuteLogic(s3, "Landing") end
+        end)
+    end
+    Players.PlayerAdded:Connect(function(p) p.CharacterAdded:Connect(ProcessCharacter) end)
+    for _, p in pairs(Players:GetPlayers()) do 
+        if p.Character then ProcessCharacter(p.Character) end
+        p.CharacterAdded:Connect(ProcessCharacter) 
+    end
 
     local hackSignals = {}
     local hackConnection = nil
@@ -205,109 +165,142 @@ return function(env)
     
     local noHitSoundAddedConn = nil
 
-    -- ==========================================
-    -- Interface Visual (Toggles Originais)
-    -- ==========================================
-    Library:CreateSection(Page, "Mute Sounds")
-    Library:CreateToggle(Page, "Remove Your Steps", false, function(state) 
-        LegitSettings.MuteSteps = state
-        if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
-    end)
-    Library:CreateToggle(Page, "Remove Your Jumps", false, function(state) 
-        LegitSettings.MuteJumps = state
-        if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
-    end)
-    Library:CreateToggle(Page, "Remove Pc Hack Sounds", false, function(state) 
-        if state then 
-            for _, obj in ipairs(Workspace:GetDescendants()) do 
-                if obj:IsA("Sound") and isHackSound(obj) and isFromComputer(obj) then muteHack(obj) end 
+    -- Tabelas fracas e caches rápidos de alta performance para os Sliders de Volume
+    local ActiveSounds = setmetatable({}, {__mode = "k"})
+    local SoundCategories = setmetatable({}, {__mode = "k"})
+    local originalVolumeBackup = setmetatable({}, {__mode = "k"})
+
+    local function getSoundCategory(sound)
+        local name = sound.Name:lower()
+        if name:find("running") or name:find("walk") or name:find("step") then
+            return "Footsteps"
+        elseif name:find("jumping") or name:find("jump") then
+            return "Jump"
+        elseif name:find("landing") or name:find("fall") or name:find("land") then
+            return "Fall"
+        end
+        return nil
+    end
+
+    local function registerSound(obj)
+        if obj:IsA("Sound") then
+            ActiveSounds[obj] = true
+            if not originalVolumeBackup[obj] then
+                originalVolumeBackup[obj] = obj.Volume
             end
-            hackConnection = Workspace.DescendantAdded:Connect(function(obj) 
-                if obj:IsA("Sound") then 
-                    if isHackSound(obj) and isFromComputer(obj) then muteHack(obj) end 
-                end 
-            end) 
-        else 
-            if hackConnection then hackConnection:Disconnect() hackConnection = nil end
-            for _, data in ipairs(hackSignals) do 
-                if data.Signal then data.Signal:Disconnect() end
-                if data.Object then data.Object.Volume = 0.5 end 
+            if not SoundCategories[obj] then
+                SoundCategories[obj] = getSoundCategory(obj)
             end
-            hackSignals = {} 
-        end 
-    end)
-    Library:CreateToggle(Page, "No hit sound", false, function(state)
-        noHitSoundEnabled = state
-        if state then
-            local function monitorCharacter(character)
-                for _, child in ipairs(character:GetDescendants()) do muteIfHitSound(child) end
-                character.DescendantAdded:Connect(function(child)
-                    task.defer(function() if child and child.Parent and noHitSoundEnabled then muteIfHitSound(child) end end)
-                end)
+        end
+    end
+    
+    for _, obj in ipairs(Workspace:GetDescendants()) do registerSound(obj) end
+    Workspace.DescendantAdded:Connect(registerSound)
+
+    -- Laço de sincronização global otimizado (Prevenção de stuttering)
+    task.spawn(function()
+        while task.wait(0.3) do
+            local enabled = VolumesEnabled
+            local stepMult = FootstepsVolMultiplier
+            local jumpMult = JumpVolMultiplier
+            local fallMult = FallVolMultiplier
+            local muteSteps = LegitSettings.MuteSteps
+            local muteJumps = LegitSettings.MuteJumps
+            local localChar = LocalPlayer.Character
+
+            for sound in pairs(ActiveSounds) do
+                local category = SoundCategories[sound]
+                if category then
+                    local origVol = originalVolumeBackup[sound] or 0.5
+                    local multiplier = 1
+
+                    if enabled then
+                        if category == "Footsteps" then
+                            multiplier = stepMult
+                        elseif category == "Jump" then
+                            multiplier = jumpMult
+                        elseif category == "Fall" then
+                            multiplier = fallMult
+                        end
+                    end
+
+                    -- Verifica se o som pertence ao LocalPlayer para aplicar o silenciador legítimo
+                    if localChar and sound:IsDescendantOf(localChar) then
+                        if category == "Footsteps" and muteSteps then
+                            multiplier = 0
+                        elseif (category == "Jump" or category == "Fall") and muteJumps then
+                            multiplier = 0
+                        end
+                    end
+
+                    local targetVol = origVol * multiplier
+                    if sound.Volume ~= targetVol then
+                        pcall(function() sound.Volume = targetVol end)
+                    end
+                end
             end
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player.Character then monitorCharacter(player.Character) end
-                player.CharacterAdded:Connect(function(c) if noHitSoundEnabled then monitorCharacter(c) end end)
-            end
-            for _, sound in ipairs(game:GetService("SoundService"):GetDescendants()) do muteIfHitSound(sound) end
-            noHitSoundAddedConn = game:GetService("SoundService").DescendantAdded:Connect(function(child)
-                task.defer(function() if child and child.Parent and noHitSoundEnabled then muteIfHitSound(child) end end)
-            end)
-        else
-            if noHitSoundAddedConn then noHitSoundAddedConn:Disconnect() noHitSoundAddedConn = nil end
-            for _, data in ipairs(noHitSoundSignals) do 
-                if data.Signal then data.Signal:Disconnect() end
-                if data.Object then data.Object.Volume = 0.5 end
-            end
-            noHitSoundSignals = {}
         end
     end)
-    
-    -- Bloco de Volume Settings (Design Equivalente ao Script Principal)
-    Library:CreateSection(Page, "Volume Settings")
-    
-    local VolumeBlock = Instance.new("Frame")
-    VolumeBlock.Size = UDim2.new(1, -2, 0, 215)
-    VolumeBlock.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    VolumeBlock.BackgroundTransparency = 0.45
-    VolumeBlock.BorderSizePixel = 0
-    VolumeBlock.Parent = Page
-    Instance.new("UICorner", VolumeBlock).CornerRadius = UDim.new(0, 6)
-    
-    local vStroke = Instance.new("UIStroke", VolumeBlock)
-    vStroke.Color = Color3.fromRGB(40, 40, 40)
-    vStroke.Thickness = 1
-    
-    local listLayout = Instance.new("UIListLayout", VolumeBlock)
-    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    listLayout.Padding = UDim.new(0, 10)
-    
-    local padding = Instance.new("UIPadding", VolumeBlock)
-    padding.PaddingTop = UDim.new(0, 12)
-    padding.PaddingBottom = UDim.new(0, 12)
-    padding.PaddingLeft = UDim.new(0, 14)
-    padding.PaddingRight = UDim.new(0, 14)
 
-    -- Toggle Compacto Identico ao Script Principal (OldStyle)
-    local function CreateCompactToggle(parent, text, defaultVal, callback)
+    -- ==========================================
+    -- Construtores de Design Unificado (Cards)
+    -- ==========================================
+    local function CreateSectionCard(parent, titleText)
+        local card = Instance.new("Frame")
+        card.Size = UDim2.new(1, -2, 0, 0)
+        card.AutomaticSize = Enum.AutomaticSize.Y
+        card.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        card.BackgroundTransparency = 0.45
+        card.BorderSizePixel = 0
+        card.Parent = parent
+        Instance.new("UICorner", card).CornerRadius = UDim.new(0, 6)
+        
+        local stroke = Instance.new("UIStroke", card)
+        stroke.Color = Color3.fromRGB(40, 40, 40)
+        stroke.Thickness = 1
+        
+        local list = Instance.new("UIListLayout", card)
+        list.SortOrder = Enum.SortOrder.LayoutOrder
+        list.Padding = UDim.new(0, 10)
+        
+        local pad = Instance.new("UIPadding", card)
+        pad.PaddingTop = UDim.new(0, 12)
+        pad.PaddingBottom = UDim.new(0, 12)
+        pad.PaddingLeft = UDim.new(0, 14)
+        pad.PaddingRight = UDim.new(0, 14)
+        
+        local title = Instance.new("TextLabel")
+        title.Size = UDim2.new(1, 0, 0, 18)
+        title.BackgroundTransparency = 1
+        title.Text = titleText
+        title.Font = Theme.Font
+        title.TextColor3 = Theme.Text
+        title.TextSize = 13
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.Parent = card
+        
+        return card
+    end
+
+    local function CreateCardToggle(card, text, defaultVal, callback)
         local frame = Instance.new("Frame")
         frame.Size = UDim2.new(1, 0, 0, 24)
         frame.BackgroundTransparency = 1
-        frame.Parent = parent
+        frame.Parent = card
         
         local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -45, 1, 0)
+        label.Size = UDim2.new(1, -40, 1, 0)
         label.BackgroundTransparency = 1
         label.Text = text
         label.Font = Theme.Font
-        label.TextColor3 = Theme.Text
-        label.TextSize = 12
+        label.TextColor3 = Theme.TextDark
+        label.TextSize = 11
         label.TextXAlignment = Enum.TextXAlignment.Left
         label.Parent = frame
         
         local bg = Instance.new("TextButton")
-        bg.Size = UDim2.new(0, 34, 0, 18)
-        bg.Position = UDim2.new(1, -34, 0.5, -9)
+        bg.Size = UDim2.new(0, 30, 0, 14)
+        bg.Position = UDim2.new(1, -30, 0.5, -7)
         bg.BackgroundColor3 = Theme.SwitchOff
         bg.Text = ""
         bg.Parent = frame
@@ -318,8 +311,8 @@ return function(env)
         bgGrad.Parent = bg
         
         local cir = Instance.new("Frame")
-        cir.Size = UDim2.new(0, 14, 0, 14)
-        cir.Position = UDim2.new(0, 2, 0.5, -7)
+        cir.Size = UDim2.new(0, 12, 0, 12)
+        cir.Position = UDim2.new(0, 1, 0.5, -6)
         cir.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
         cir.Parent = bg
         Instance.new("UICorner", cir).CornerRadius = UDim.new(1, 0)
@@ -333,14 +326,16 @@ return function(env)
                     ColorSequenceKeypoint.new(0, Theme.Accent),
                     ColorSequenceKeypoint.new(1, Theme.AccentDark)
                 }
-                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(1, -16, 0.5, -7), BackgroundColor3 = Color3.new(0,0,0)}):Play()
+                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(1, -13, 0.5, -6), BackgroundColor3 = Color3.new(0,0,0)}):Play()
+                TweenService:Create(label, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
             else
                 TweenService:Create(bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.SwitchOff}):Play()
                 bgGrad.Color = ColorSequence.new{
                     ColorSequenceKeypoint.new(0, Theme.SwitchOff),
                     ColorSequenceKeypoint.new(1, Theme.SwitchOff)
                 }
-                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(0, 2, 0.5, -7), BackgroundColor3 = Color3.fromRGB(150, 150, 150)}):Play()
+                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(0, 1, 0.5, -6), BackgroundColor3 = Color3.fromRGB(150, 150, 150)}):Play()
+                TweenService:Create(label, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
             end
         end
         
@@ -351,41 +346,45 @@ return function(env)
         end)
         
         updateVisuals()
-        return {Set = function(val) state = val; updateVisuals(); callback(val) end}
+        return {
+            Set = function(val)
+                state = val
+                updateVisuals()
+                callback(val)
+            end
+        }
     end
 
-    -- Slider Compacto Identico ao Script Principal (OldStyle)
-    local function CreateCompactSlider(parent, text, min, max, defaultVal, callback)
+    local function CreateCardSlider(card, text, min, max, defaultVal, callback)
         local frame = Instance.new("Frame")
         frame.Size = UDim2.new(1, 0, 0, 36)
         frame.BackgroundTransparency = 1
-        frame.Parent = parent
+        frame.Parent = card
         
         local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -45, 0, 16)
-        label.Position = UDim2.new(0, 0, 0, 0)
+        label.Size = UDim2.new(1, -50, 0, 14)
         label.BackgroundTransparency = 1
         label.Text = text
         label.Font = Theme.Font
-        label.TextColor3 = Theme.Text
+        label.TextColor3 = Theme.TextDark
         label.TextSize = 11
         label.TextXAlignment = Enum.TextXAlignment.Left
         label.Parent = frame
         
         local valLabel = Instance.new("TextLabel")
-        valLabel.Size = UDim2.new(0, 40, 0, 16)
+        valLabel.Size = UDim2.new(0, 40, 0, 14)
         valLabel.Position = UDim2.new(1, -40, 0, 0)
         valLabel.BackgroundTransparency = 1
         valLabel.Text = tostring(defaultVal)
         valLabel.Font = Theme.Font
-        valLabel.TextColor3 = Theme.TextDark
+        valLabel.TextColor3 = Theme.Text
         valLabel.TextSize = 11
         valLabel.TextXAlignment = Enum.TextXAlignment.Right
         valLabel.Parent = frame
         
         local bar = Instance.new("Frame")
-        bar.Size = UDim2.new(1, 0, 0, 8)
-        bar.Position = UDim2.new(0, 0, 0, 22)
+        bar.Size = UDim2.new(1, 0, 0, 5)
+        bar.Position = UDim2.new(0, 0, 0, 20)
         bar.BackgroundColor3 = Theme.SwitchOff
         bar.BorderSizePixel = 0
         bar.Parent = frame
@@ -453,17 +452,17 @@ return function(env)
         return {Set = setVal}
     end
 
-    local function CreateCompactButton(parent, text, callback)
+    local function CreateCardButton(parent, text, callback)
         local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(1, 0, 0, 26)
-        btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        btn.Size = UDim2.new(1, 0, 0, 24)
+        btn.BackgroundColor3 = Color3.new(0, 0, 0)
         btn.BackgroundTransparency = 0.45
         btn.Text = text
         btn.Font = Enum.Font.GothamBold
         btn.TextSize = 11
-        btn.TextColor3 = Theme.Text
+        btn.TextColor3 = Theme.TextDark
         btn.Parent = parent
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
         
         local stroke = Instance.new("UIStroke", btn)
         stroke.Color = Color3.fromRGB(40, 40, 40)
@@ -482,36 +481,102 @@ return function(env)
         return btn
     end
 
-    -- Ativador Master do Bloco (Volume Modifier)
-    local MasterToggle = CreateCompactToggle(VolumeBlock, "Enable Volume Modifier", VolumesEnabled, function(state)
+    -- ==========================================
+    -- Card 1: Mute Sounds (Unificado)
+    -- ==========================================
+    local MuteSoundsCard = CreateSectionCard(Page, "Mute Sounds")
+
+    CreateCardToggle(MuteSoundsCard, "Remove Your Steps", false, function(state) 
+        LegitSettings.MuteSteps = state
+        if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
+    end)
+
+    CreateCardToggle(MuteSoundsCard, "Remove Your Jumps", false, function(state) 
+        LegitSettings.MuteJumps = state
+        if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
+    end)
+
+    CreateCardToggle(MuteSoundsCard, "Remove Pc Hack Sounds", false, function(state) 
+        if state then 
+            for _, obj in ipairs(Workspace:GetDescendants()) do 
+                if obj:IsA("Sound") and isHackSound(obj) and isFromComputer(obj) then muteHack(obj) end 
+            end
+            hackConnection = Workspace.DescendantAdded:Connect(function(obj) 
+                if obj:IsA("Sound") then 
+                    if isHackSound(obj) and isFromComputer(obj) then muteHack(obj) end 
+                end 
+            end) 
+        else 
+            if hackConnection then hackConnection:Disconnect() hackConnection = nil end
+            for _, data in ipairs(hackSignals) do 
+                if data.Signal then data.Signal:Disconnect() end
+                if data.Object then data.Object.Volume = 0.5 end 
+            end
+            hackSignals = {} 
+        end 
+    end)
+
+    CreateCardToggle(MuteSoundsCard, "No hit sound", false, function(state)
+        noHitSoundEnabled = state
+        if state then
+            local function monitorCharacter(character)
+                for _, child in ipairs(character:GetDescendants()) do muteIfHitSound(child) end
+                character.DescendantAdded:Connect(function(child)
+                    task.defer(function() if child and child.Parent and noHitSoundEnabled then muteIfHitSound(child) end end)
+                end)
+            end
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player.Character then monitorCharacter(player.Character) end
+                player.CharacterAdded:Connect(function(c) if noHitSoundEnabled then monitorCharacter(c) end end)
+            end
+            for _, sound in ipairs(game:GetService("SoundService"):GetDescendants()) do muteIfHitSound(sound) end
+            noHitSoundAddedConn = game:GetService("SoundService").DescendantAdded:Connect(function(child)
+                task.defer(function() if child and child.Parent and noHitSoundEnabled then muteIfHitSound(child) end end)
+            end)
+        else
+            if noHitSoundAddedConn then noHitSoundAddedConn:Disconnect() noHitSoundAddedConn = nil end
+            for _, data in ipairs(noHitSoundSignals) do 
+                if data.Signal then data.Signal:Disconnect() end
+                if data.Object then data.Object.Volume = 0.5 end
+            end
+            noHitSoundSignals = {}
+        end
+    end)
+    
+    -- ==========================================
+    -- Card 2: Volume Settings (Unificado)
+    -- ==========================================
+    local VolumeSettingsCard = CreateSectionCard(Page, "Volume Settings")
+
+    local MasterToggle = CreateCardToggle(VolumeSettingsCard, "Enable Volume Modifier", VolumesEnabled, function(state)
         VolumesEnabled = state
         UserConfigs["EnableSoundSettings"] = state
     end)
 
-    -- Sliders Individuais com Escala Correta e Design Integrado
-    local FootstepsSlider = CreateCompactSlider(VolumeBlock, "FootSteps Volume", 0, 10, FootstepsVolMultiplier, function(val)
+    local FootstepsSlider = CreateCardSlider(VolumeSettingsCard, "FootSteps Volume", 0, 10, FootstepsVolMultiplier, function(val)
         FootstepsVolMultiplier = val
         UserConfigs["FootstepsVol"] = val
     end)
     
-    local JumpSlider = CreateCompactSlider(VolumeBlock, "Jump Volume", 0, 10, JumpVolMultiplier, function(val)
+    local JumpSlider = CreateCardSlider(VolumeSettingsCard, "Jump Volume", 0, 10, JumpVolMultiplier, function(val)
         JumpVolMultiplier = val
         UserConfigs["JumpVol"] = val
     end)
     
-    local FallSlider = CreateCompactSlider(VolumeBlock, "Fall Volume", 0, 10, FallVolMultiplier, function(val)
+    local FallSlider = CreateCardSlider(VolumeSettingsCard, "Fall Volume", 0, 10, FallVolMultiplier, function(val)
         FallVolMultiplier = val
         UserConfigs["FallVol"] = val
     end)
 
-    -- Botão de Reset integrado
-    CreateCompactButton(VolumeBlock, "Reset Volumes", function()
+    CreateCardButton(VolumeSettingsCard, "Reset Volumes", function()
         FootstepsSlider.Set(1)
         JumpSlider.Set(1)
         FallSlider.Set(1)
     end)
     
-    -- Seção Custom Sound Packs (Mantida com o design normal de cartões originais solicitado)
+    -- ==========================================
+    -- Seção Custom Sound Packs (EXCEÇÃO: Cartões com design normal original)
+    -- ==========================================
     Library:CreateSection(Page, "Custom Sound Packs")
     local targetParentSounds = GetParentTarget(Page)
     
