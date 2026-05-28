@@ -765,6 +765,12 @@ return function(env)
         RefreshAllSounds()
     end)
 
+    CreateSoundCard(Page, "NorthDxv1Ces", {
+        {Name = "North Passos", ID = "119933956036500", Type = "Walk"},
+        {Name = "North Jump", ID = "87683560682449", Type = "Jump"},
+        {Name = "North Queda", ID = "73586375325988", Type = "fall"}
+    })
+    
     CreateSoundCard(Page, "michawell", {
         {Name = "Walk", ID = "116140177933689", Type = "Walk"},
         {Name = "Jump", ID = "70420181848348", Type = "Jump"}
@@ -820,7 +826,7 @@ return function(env)
         {Name = "Three Jumps", ID = "126925004664723", Type = "Jump"},
         {Name = "Yusei Jump", ID = "119519595212440", Type = "Jump"}
     })
-
+    
     updateButtonVisuals(WalkButtons, savedWalk)
     updateButtonVisuals(JumpButtons, savedJump)
     updateButtonVisuals(FallButtons, savedFall)
