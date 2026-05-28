@@ -105,9 +105,7 @@ return function(env)
         player.CharacterAdded:Connect(function(newCharacter) replaceSounds(newCharacter) end)
     end
     for _, player in ipairs(Players:GetPlayers()) do setupPlayerSoundEvents(player) end
-    Players.Parent.ChildAdded:Connect(function(child)
-        if child:IsA("Player") then setupPlayerSoundEvents(child) end
-    end)
+    Players.PlayerAdded:Connect(setupPlayerSoundEvents)
 
     -- Sincronização original de Mute local
     local function ProcessCharacter(char)
@@ -656,16 +654,15 @@ return function(env)
     end)
 
     -- =========================================================================
-    -- MUSIC PLAYER (Design de Categoria Vertical Padrão / Sem Gaps)
+    -- MUSIC PLAYER (Design Elegante, Compacto com Dropdown Flutuante)
     -- =========================================================================
     local MusicBlock = Instance.new("Frame")
-    MusicBlock.Size = UDim2.new(1, -2, 0, 0)
-    MusicBlock.AutomaticSize = Enum.AutomaticSize.Y -- O bloco se ajusta dinamicamente ao conteúdo vertical, zerando espaços vazios
+    MusicBlock.Size = UDim2.new(1, -2, 0, 95) -- Tamanho aumentado para 95px de segurança total contra colisões
     MusicBlock.BackgroundColor3 = Color3.new(0, 0, 0)
     MusicBlock.BackgroundTransparency = 0.45
     MusicBlock.BorderSizePixel = 0
-    MusicBlock.ClipsDescendants = false -- Permite o dropdown flutuar perfeitamente sobre os cards abaixo
-    MusicBlock.ZIndex = 100 -- Eleva o bloco sobre todos os cards de som inferiores
+    MusicBlock.ClipsDescendants = false -- Permite que a lista flutue perfeitamente sobre os cards
+    MusicBlock.ZIndex = 100 -- ZIndex muito alto para priorizar todos os herdeiros
     MusicBlock.Parent = Page
     
     local muStroke = Instance.new("UIStroke", MusicBlock)
@@ -678,139 +675,48 @@ return function(env)
     muPadding.PaddingLeft = UDim.new(0, 12)
     muPadding.PaddingRight = UDim.new(0, 12)
 
-    local muLayout = Instance.new("UIListLayout", MusicBlock)
-    muLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    muLayout.Padding = UDim.new(0, 8) -- Espaçamento interno padronizado entre as linhas
-
-    -- Linha de Título e Slider (Estilo Side-by-Side Integrado)
-    local TopRow = Instance.new("Frame", MusicBlock)
-    TopRow.Size = UDim2.new(1, 0, 0, 20)
-    TopRow.BackgroundTransparency = 1
-    TopRow.LayoutOrder = 1
-    TopRow.ZIndex = 101
-
-    local MusicTitle = Instance.new("TextLabel", TopRow)
-    MusicTitle.Size = UDim2.new(0.4, 0, 1, 0)
+    local MusicTitle = Instance.new("TextLabel")
+    MusicTitle.Size = UDim2.new(0.4, 0, 0, 16)
     MusicTitle.BackgroundTransparency = 1
     MusicTitle.Text = "Music Player"
     MusicTitle.Font = Theme.Font
     MusicTitle.TextColor3 = Theme.Text
     MusicTitle.TextSize = 12
     MusicTitle.TextXAlignment = Enum.TextXAlignment.Left
-    MusicTitle.ZIndex = 102
+    MusicTitle.ZIndex = 101
+    MusicTitle.Parent = MusicBlock
 
-    -- Slider de Volume Compacto alinhado no Topo Direito (Sem colisões)
-    local sliderFrame = Instance.new("Frame", TopRow)
-    sliderFrame.Size = UDim2.new(0.45, 0, 1, 15)
-    sliderFrame.Position = UDim2.new(0.55, 0, 0, -4)
-    sliderFrame.BackgroundTransparency = 1
-    sliderFrame.ZIndex = 102
-
-    local sliderLabel = Instance.new("TextLabel", sliderFrame)
-    sliderLabel.Size = UDim2.new(1, -35, 0, 14)
-    sliderLabel.BackgroundTransparency = 1
-    sliderLabel.Text = "Music Vol"
-    sliderLabel.Font = Theme.Font
-    sliderLabel.TextColor3 = Theme.TextDark
-    sliderLabel.TextSize = 10
-    sliderLabel.TextXAlignment = Enum.TextXAlignment.Left
-    sliderLabel.ZIndex = 103
-
-    local sliderVal = Instance.new("TextLabel", sliderFrame)
-    sliderVal.Size = UDim2.new(0, 30, 0, 14)
-    sliderVal.Position = UDim2.new(1, -30, 0, 0)
-    sliderVal.BackgroundTransparency = 1
-    sliderVal.Text = "50%"
-    sliderVal.Font = Theme.Font
-    sliderVal.TextColor3 = Theme.Text
-    sliderVal.TextSize = 10
-    sliderVal.TextXAlignment = Enum.TextXAlignment.Right
-    sliderVal.ZIndex = 103
-
-    local sliderBar = Instance.new("Frame", sliderFrame)
-    sliderBar.Size = UDim2.new(1, 0, 0, 5)
-    sliderBar.Position = UDim2.new(0, 0, 0, 18)
-    sliderBar.BackgroundColor3 = Theme.SwitchOff
-    sliderBar.BorderSizePixel = 0
-    sliderBar.ZIndex = 103
-    Instance.new("UICorner", sliderBar).CornerRadius = UDim.new(1, 0)
-
-    local sliderFill = Instance.new("Frame", sliderBar)
-    sliderFill.Size = UDim2.new(0.5, 0, 1, 0)
-    sliderFill.BackgroundColor3 = Theme.Accent
-    sliderFill.BorderSizePixel = 0
-    sliderFill.ZIndex = 104
-    Instance.new("UICorner", sliderFill).CornerRadius = UDim.new(1, 0)
-    ApplyGradient(sliderFill, Theme.Accent, Theme.AccentDark, 0)
-
-    local sliderTrigger = Instance.new("TextButton", sliderBar)
-    sliderTrigger.Size = UDim2.new(1, 0, 1, 0)
-    sliderTrigger.BackgroundTransparency = 1
-    sliderTrigger.Text = ""
-    sliderTrigger.ZIndex = 105
-
-    local mDragging = false
-    local function updateMusicVol(input)
-        local ratio = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
-        sliderFill.Size = UDim2.new(ratio, 0, 1, 0)
-        local pct = math.floor(ratio * 100)
-        sliderVal.Text = pct .. "%"
-        MusicSound.Volume = ratio
-    end
-
-    sliderTrigger.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            mDragging = true
-            updateMusicVol(input)
-        end
-    end)
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            mDragging = false
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if mDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            updateMusicVol(input)
-        end
-    end)
-
-    -- Linha Inferior: TextBox, Dropdown e Play/Stop dispostos lado a lado com segurança horizontal
-    local ControlsRow = Instance.new("Frame", MusicBlock)
-    ControlsRow.Size = UDim2.new(1, 0, 0, 28)
-    ControlsRow.BackgroundTransparency = 1
-    ControlsRow.LayoutOrder = 2
-    ControlsRow.ZIndex = 101
-
-    -- Entrada Customizada de ID
+    -- Entrada Customizada de ID (Fundo preto transparente integrado)
     local textBox = Instance.new("TextBox")
-    textBox.Size = UDim2.new(0.32, -6, 1, 0)
-    textBox.Position = UDim2.new(0, 0, 0, 0)
+    textBox.Size = UDim2.new(0.32, -6, 0, 28)
+    textBox.Position = UDim2.new(0, 0, 0, 42) -- Alinhado perfeitamente na parte inferior
     textBox.PlaceholderText = "Insert ID..."
     textBox.Text = ""
-    textBox.BackgroundColor3 = Theme.SwitchOff
+    textBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Fundo preto
+    textBox.BackgroundTransparency = 0.45 -- Transparência idêntica
     textBox.TextColor3 = Theme.Text
     textBox.PlaceholderColor3 = Theme.TextDark
     textBox.Font = Theme.Font
     textBox.TextSize = 10
     textBox.ClearTextOnFocus = true
-    textBox.ZIndex = 102
-    textBox.Parent = ControlsRow
+    textBox.ZIndex = 101
+    textBox.Parent = MusicBlock
     Instance.new("UICorner", textBox).CornerRadius = UDim.new(0, 4)
     local tbStroke = Instance.new("UIStroke", textBox)
     tbStroke.Color = Color3.fromRGB(40, 40, 40)
 
-    -- Seletor Dropdown de Músicas
+    -- Botão Seletor de Faixas (Pre-seleções) (Fundo preto transparente integrado)
     local songDropdown = Instance.new("TextButton")
-    songDropdown.Size = UDim2.new(0.32, -6, 1, 0)
-    songDropdown.Position = UDim2.new(0.32, 6, 0, 0)
-    songDropdown.BackgroundColor3 = Theme.SwitchOff
+    songDropdown.Size = UDim2.new(0.32, -6, 0, 28)
+    songDropdown.Position = UDim2.new(0.32, 6, 0, 42) -- Alinhado no centro inferior
+    songDropdown.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Fundo preto
+    songDropdown.BackgroundTransparency = 0.45 -- Transparência idêntica
     songDropdown.Text = "Select Song"
     songDropdown.Font = Theme.Font
     songDropdown.TextSize = 10
     songDropdown.TextColor3 = Theme.TextDark
-    songDropdown.ZIndex = 103
-    songDropdown.Parent = ControlsRow
+    songDropdown.ZIndex = 102
+    songDropdown.Parent = MusicBlock
     Instance.new("UICorner", songDropdown).CornerRadius = UDim.new(0, 4)
     local sdStroke = Instance.new("UIStroke", songDropdown)
     sdStroke.Color = Color3.fromRGB(40, 40, 40)
@@ -823,15 +729,15 @@ return function(env)
     sdArrow.Font = Enum.Font.Gotham
     sdArrow.TextColor3 = Theme.TextDark
     sdArrow.TextSize = 8
-    sdArrow.ZIndex = 104
+    sdArrow.ZIndex = 103
     sdArrow.Parent = songDropdown
 
-    -- Dropdown Flutuante de Alta Prioridade (Opaque Background, ZIndex = 200)
+    -- Container Flutuante do Menu de Músicas com Opacidade Total (ZIndex = 200)
     local SongMenu = Instance.new("Frame")
     SongMenu.Size = UDim2.new(1, 0, 0, 134)
     SongMenu.Position = UDim2.new(0, 0, 1, 4)
     SongMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    SongMenu.BackgroundTransparency = 0 -- Totalmente opaco para encobrir botões traseiros
+    SongMenu.BackgroundTransparency = 0 -- OPACO para não deixar os elementos de trás visíveis
     SongMenu.BorderSizePixel = 0
     SongMenu.Visible = false
     SongMenu.ZIndex = 200
@@ -909,18 +815,18 @@ return function(env)
         end
     end)
 
-    -- Botão Play/Stop com espaçamento lateral seguro
+    -- Botão Play/Stop de Canto Inferior Direito sem colisão de Y
     local playBtn = Instance.new("TextButton")
-    playBtn.Size = UDim2.new(0.34, -12, 1, 0)
-    playBtn.Position = UDim2.new(0.66, 12, 0, 0)
+    playBtn.Size = UDim2.new(0.34, -12, 0, 28)
+    playBtn.Position = UDim2.new(0.66, 12, 0, 42) -- Alinhado à direita inferior (Sem colisão com o slider que fica em Y = -4)
     playBtn.BackgroundColor3 = Color3.new(0, 0, 0)
     playBtn.BackgroundTransparency = 0.45
     playBtn.Text = "Play"
     playBtn.Font = Theme.Font
     playBtn.TextSize = 10
     playBtn.TextColor3 = Theme.TextDark
-    playBtn.ZIndex = 102
-    playBtn.Parent = ControlsRow
+    playBtn.ZIndex = 101
+    playBtn.Parent = MusicBlock
     Instance.new("UICorner", playBtn).CornerRadius = UDim.new(0, 4)
     local pbStroke = Instance.new("UIStroke", playBtn)
     pbStroke.Color = Color3.fromRGB(40, 40, 40)
@@ -959,6 +865,88 @@ return function(env)
                 textBox.Text = ""
                 textBox.PlaceholderText = "Invalid ID!"
             end
+        end
+    end)
+
+    -- Slider de Volume da Música (Y = -4 para espaçamento de folga)
+    local sliderFrame = Instance.new("Frame")
+    sliderFrame.Size = UDim2.new(0.4, 0, 0, 35)
+    sliderFrame.Position = UDim2.new(0.6, 0, 0, -4) -- Posicionado no topo direito do bloco
+    sliderFrame.BackgroundTransparency = 1
+    sliderFrame.ZIndex = 101
+    sliderFrame.Parent = MusicBlock
+
+    local sliderLabel = Instance.new("TextLabel")
+    sliderLabel.Size = UDim2.new(1, -35, 0, 14)
+    sliderLabel.BackgroundTransparency = 1
+    sliderLabel.Text = "Music Vol"
+    sliderLabel.Font = Theme.Font
+    sliderLabel.TextColor3 = Theme.TextDark
+    sliderLabel.TextSize = 10
+    sliderLabel.TextXAlignment = Enum.TextXAlignment.Left
+    sliderLabel.ZIndex = 102
+    sliderLabel.Parent = sliderFrame
+
+    local sliderVal = Instance.new("TextLabel")
+    sliderVal.Size = UDim2.new(0, 30, 0, 14)
+    sliderVal.Position = UDim2.new(1, -30, 0, 0)
+    sliderVal.BackgroundTransparency = 1
+    sliderVal.Text = "50%"
+    sliderVal.Font = Theme.Font
+    sliderVal.TextColor3 = Theme.Text
+    sliderVal.TextSize = 10
+    sliderVal.TextXAlignment = Enum.TextXAlignment.Right
+    sliderVal.ZIndex = 102
+    sliderVal.Parent = sliderFrame
+
+    local sliderBar = Instance.new("Frame")
+    sliderBar.Size = UDim2.new(1, 0, 0, 5)
+    sliderBar.Position = UDim2.new(0, 0, 0, 20)
+    sliderBar.BackgroundColor3 = Theme.SwitchOff
+    sliderBar.BorderSizePixel = 0
+    sliderBar.ZIndex = 102
+    sliderBar.Parent = sliderFrame
+    Instance.new("UICorner", sliderBar).CornerRadius = UDim.new(1, 0)
+
+    local sliderFill = Instance.new("Frame")
+    sliderFill.Size = UDim2.new(0.5, 0, 1, 0) -- default 50%
+    sliderFill.BackgroundColor3 = Theme.Accent
+    sliderFill.BorderSizePixel = 0
+    sliderFill.ZIndex = 103
+    sliderFill.Parent = sliderBar
+    Instance.new("UICorner", sliderFill).CornerRadius = UDim.new(1, 0)
+    ApplyGradient(sliderFill, Theme.Accent, Theme.AccentDark, 0)
+
+    local sliderTrigger = Instance.new("TextButton")
+    sliderTrigger.Size = UDim2.new(1, 0, 1, 0)
+    sliderTrigger.BackgroundTransparency = 1
+    sliderTrigger.Text = ""
+    sliderTrigger.ZIndex = 104
+    sliderTrigger.Parent = sliderBar
+
+    local mDragging = false
+    local function updateMusicVol(input)
+        local ratio = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
+        sliderFill.Size = UDim2.new(ratio, 0, 1, 0)
+        local pct = math.floor(ratio * 100)
+        sliderVal.Text = pct .. "%"
+        MusicSound.Volume = ratio
+    end
+
+    sliderTrigger.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            mDragging = true
+            updateMusicVol(input)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            mDragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if mDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            updateMusicVol(input)
         end
     end)
 
