@@ -24,6 +24,15 @@ return function(env)
     local JumpVolMultiplier = UserConfigs["Vol_JumpMultiplier"] or 1
     local FallVolMultiplier = UserConfigs["Vol_FallMultiplier"] or 1
 
+    -- Função auxiliar de Gradiente idêntica à do Hub Principal
+    local function ApplyGradient(instance, color1, color2, rotation)
+        local gradient = instance:FindFirstChildOfClass("UIGradient") or Instance.new("UIGradient")
+        gradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0.00, color1), ColorSequenceKeypoint.new(1.00, color2)}
+        gradient.Rotation = rotation or 45
+        gradient.Parent = instance
+        return gradient
+    end
+
     local function formatID(id)
         if type(id) == "number" and id > 0 then return "rbxassetid://" .. id
         elseif type(id) == "string" and id ~= "" and id ~= "0" then
@@ -253,7 +262,7 @@ return function(env)
     -- LAYOUT HÍBRIDO (Top 2-Column, Bottom Full-Width)
     -- =========================================================================
     
-    -- Container das configurações lado a lado com tamanho de segurança aumentado
+    -- Container das configurações lado a lado com tamanho de segurança aumentado para 230px
     local SettingsContainer = Instance.new("Frame")
     SettingsContainer.Size = UDim2.new(1, -2, 0, 230)
     SettingsContainer.BackgroundTransparency = 1
@@ -273,12 +282,12 @@ return function(env)
 
     local mLayout = Instance.new("UIListLayout", MuteBlock)
     mLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    mLayout.Padding = UDim.new(0, 8)
+    mLayout.Padding = UDim.new(0, 4)
     local mPadding = Instance.new("UIPadding", MuteBlock)
-    mPadding.PaddingTop = UDim.new(0, 10)
-    mPadding.PaddingBottom = UDim.new(0, 10)
-    mPadding.PaddingLeft = UDim.new(0, 12)
-    mPadding.PaddingRight = UDim.new(0, 12)
+    mPadding.PaddingTop = UDim.new(0, 8)
+    mPadding.PaddingBottom = UDim.new(0, 8)
+    mPadding.PaddingLeft = UDim.new(0, 10)
+    mPadding.PaddingRight = UDim.new(0, 10)
 
     local VolumeBlock = Instance.new("Frame")
     VolumeBlock.Size = UDim2.new(0.5, -6, 1, 0)
@@ -294,70 +303,70 @@ return function(env)
 
     local vLayout = Instance.new("UIListLayout", VolumeBlock)
     vLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    vLayout.Padding = UDim.new(0, 8)
+    vLayout.Padding = UDim.new(0, 4)
     local vPadding = Instance.new("UIPadding", VolumeBlock)
-    vPadding.PaddingTop = UDim.new(0, 10)
-    vPadding.PaddingBottom = UDim.new(0, 10)
-    vPadding.PaddingLeft = UDim.new(0, 12)
-    vPadding.PaddingRight = UDim.new(0, 12)
+    vPadding.PaddingTop = UDim.new(0, 8)
+    vPadding.PaddingBottom = UDim.new(0, 8)
+    vPadding.PaddingLeft = UDim.new(0, 10)
+    vPadding.PaddingRight = UDim.new(0, 10)
 
-    -- Componentes Compactos da UI do Topo
+    -- Componentes Compactos da UI com Réplica de Fidelidade 100% ao Hub Original
     local function CreateCompactToggle(parent, text, defaultVal, callback)
-        local frame = Instance.new("Frame")
-        frame.Size = UDim2.new(1, 0, 0, 24)
-        frame.BackgroundTransparency = 1
-        frame.Parent = parent
+        local Tgl = Instance.new("TextButton")
+        Tgl.Size = UDim2.new(1, 0, 0, 30)
+        Tgl.BackgroundTransparency = 1
+        Tgl.Text = ""
+        Tgl.Parent = parent
+
+        local Label = Instance.new("TextLabel")
+        Label.Size = UDim2.new(1, -40, 1, 0)
+        Label.Position = UDim2.new(0, 5, 0, 0)
+        Label.BackgroundTransparency = 1
+        Label.Text = text
+        Label.Font = Theme.Font
+        Label.TextXAlignment = Enum.TextXAlignment.Left
+        Label.TextScaled = true 
+        local tConst = Instance.new("UITextSizeConstraint", Label)
+        tConst.MinTextSize = 7
+        tConst.MaxTextSize = 11
+        Label.TextColor3 = Theme.TextDark
+        Label.Parent = Tgl
         
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -40, 1, 0)
-        label.BackgroundTransparency = 1
-        label.Text = text
-        label.Font = Theme.Font
-        label.TextColor3 = Theme.Text
-        label.TextSize = 11
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.Parent = frame
+        local Bg = Instance.new("Frame")
+        Bg.Size = UDim2.new(0, 30, 0, 14)
+        Bg.Position = UDim2.new(1, -30, 0.5, -7)
+        Bg.BackgroundColor3 = Theme.SwitchOff
+        Bg.Parent = Tgl
+        Instance.new("UICorner", Bg).CornerRadius = UDim.new(1, 0)
+        local BgGrad = ApplyGradient(Bg, Theme.SwitchOff, Theme.SwitchOff, 90)
         
-        local bg = Instance.new("TextButton")
-        bg.Size = UDim2.new(0, 30, 0, 14)
-        bg.Position = UDim2.new(1, -30, 0.5, -7)
-        bg.BackgroundColor3 = Theme.SwitchOff
-        bg.Text = ""
-        bg.Parent = frame
-        Instance.new("UICorner", bg).CornerRadius = UDim.new(1, 0)
-        
-        local bgGrad = Instance.new("UIGradient")
-        bgGrad.Rotation = 90
-        bgGrad.Parent = bg
-        
-        local cir = Instance.new("Frame")
-        cir.Size = UDim2.new(0, 12, 0, 12)
-        cir.Position = UDim2.new(0, 1, 0.5, -6)
-        cir.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
-        cir.Parent = bg
-        Instance.new("UICorner", cir).CornerRadius = UDim.new(1, 0)
+        local Cir = Instance.new("Frame")
+        Cir.Size = UDim2.new(0, 12, 0, 12)
+        Cir.Position = UDim2.new(0, 1, 0.5, -6)
+        Cir.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+        Cir.Parent = Bg
+        Instance.new("UICorner", Cir).CornerRadius = UDim.new(1, 0)
         
         local state = defaultVal
         
         local function updateVisuals()
+            local onPos = UDim2.new(1, -13, 0.5, -6)
+            local offPos = UDim2.new(0, 1, 0.5, -6)
+            
             if state then
-                TweenService:Create(bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Accent}):Play()
-                bgGrad.Color = ColorSequence.new{
-                    ColorSequenceKeypoint.new(0, Theme.Accent),
-                    ColorSequenceKeypoint.new(1, Theme.AccentDark)
-                }
-                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(1, -13, 0.5, -6), BackgroundColor3 = Color3.new(0,0,0)}):Play()
+                TweenService:Create(Bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Accent}):Play()
+                BgGrad.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Theme.Accent), ColorSequenceKeypoint.new(1, Theme.AccentDark)}
+                TweenService:Create(Cir, TweenInfo.new(0.2), {Position = onPos, BackgroundColor3 = Color3.new(0,0,0)}):Play()
+                TweenService:Create(Label, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
             else
-                TweenService:Create(bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.SwitchOff}):Play()
-                bgGrad.Color = ColorSequence.new{
-                    ColorSequenceKeypoint.new(0, Theme.SwitchOff),
-                    ColorSequenceKeypoint.new(1, Theme.SwitchOff)
-                }
-                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(0, 1, 0.5, -6), BackgroundColor3 = Color3.fromRGB(150, 150, 150)}):Play()
+                TweenService:Create(Bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.SwitchOff}):Play()
+                BgGrad.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Theme.SwitchOff), ColorSequenceKeypoint.new(1, Theme.SwitchOff)}
+                TweenService:Create(Cir, TweenInfo.new(0.2), {Position = offPos, BackgroundColor3 = Color3.fromRGB(150, 150, 150)}):Play()
+                TweenService:Create(Label, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
             end
         end
         
-        bg.MouseButton1Click:Connect(function()
+        Tgl.MouseButton1Click:Connect(function()
             state = not state
             updateVisuals()
             callback(state)
@@ -368,73 +377,72 @@ return function(env)
     end
 
     local function CreateCompactSlider(parent, text, min, max, defaultVal, callback)
-        local frame = Instance.new("Frame")
-        frame.Size = UDim2.new(1, 0, 0, 34)
-        frame.BackgroundTransparency = 1
-        frame.Parent = parent
+        local Frame = Instance.new("Frame")
+        Frame.Size = UDim2.new(1, 0, 0, 35)
+        Frame.BackgroundTransparency = 1
+        Frame.Parent = parent
+
+        local Label = Instance.new("TextLabel")
+        Label.Size = UDim2.new(1, -45, 0, 20)
+        Label.Position = UDim2.new(0, 5, 0, 2)
+        Label.BackgroundTransparency = 1
+        Label.Text = text
+        Label.Font = Theme.Font
+        Label.TextXAlignment = Enum.TextXAlignment.Left
+        Label.TextScaled = true 
+        local lConst = Instance.new("UITextSizeConstraint", Label)
+        lConst.MinTextSize = 7
+        lConst.MaxTextSize = 11
+        Label.TextColor3 = Theme.TextDark
+        Label.Parent = Frame
         
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -50, 0, 14)
-        label.BackgroundTransparency = 1
-        label.Text = text
-        label.Font = Theme.Font
-        label.TextColor3 = Theme.TextDark
-        label.TextSize = 11
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.Parent = frame
+        local ValueLabel = Instance.new("TextLabel")
+        ValueLabel.Size = UDim2.new(0, 40, 0, 20)
+        ValueLabel.Position = UDim2.new(1, -5, 0, 2)
+        ValueLabel.AnchorPoint = Vector2.new(1, 0)
+        ValueLabel.BackgroundTransparency = 1
+        ValueLabel.Text = tostring(defaultVal)
+        ValueLabel.Font = Theme.Font
+        ValueLabel.TextSize = 11
+        ValueLabel.TextXAlignment = Enum.TextXAlignment.Right
+        ValueLabel.TextColor3 = Theme.Text
+        ValueLabel.Parent = Frame
         
-        local valLabel = Instance.new("TextLabel")
-        valLabel.Size = UDim2.new(0, 40, 0, 14)
-        valLabel.Position = UDim2.new(1, -40, 0, 0)
-        valLabel.BackgroundTransparency = 1
-        valLabel.Text = tostring(defaultVal)
-        valLabel.Font = Theme.Font
-        valLabel.TextColor3 = Theme.Text
-        valLabel.TextSize = 11
-        valLabel.TextXAlignment = Enum.TextXAlignment.Right
-        valLabel.Parent = frame
+        local SliderBar = Instance.new("Frame")
+        SliderBar.Size = UDim2.new(1, -10, 0, 8)
+        SliderBar.Position = UDim2.new(0, 5, 0, 25)
+        SliderBar.BackgroundColor3 = Theme.SwitchOff
+        SliderBar.BorderSizePixel = 0
+        SliderBar.Parent = Frame
+        Instance.new("UICorner", SliderBar).CornerRadius = UDim.new(1, 0)
         
-        local bar = Instance.new("Frame")
-        bar.Size = UDim2.new(1, 0, 0, 5)
-        bar.Position = UDim2.new(0, 0, 0, 20)
-        bar.BackgroundColor3 = Theme.SwitchOff
-        bar.BorderSizePixel = 0
-        bar.Parent = frame
-        Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+        local Fill = Instance.new("Frame")
+        Fill.Size = UDim2.new((defaultVal - min) / (max - min), 0, 1, 0)
+        Fill.BackgroundColor3 = Theme.Accent
+        Fill.BorderSizePixel = 0
+        Fill.Parent = SliderBar
+        Instance.new("UICorner", Fill).CornerRadius = UDim.new(1, 0)
+        ApplyGradient(Fill, Theme.Accent, Theme.AccentDark, 0)
         
-        local fill = Instance.new("Frame")
-        fill.Size = UDim2.new((defaultVal - min) / (max - min), 0, 1, 0)
-        fill.BackgroundColor3 = Theme.Accent
-        fill.BorderSizePixel = 0
-        fill.Parent = bar
-        Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-        
-        local fillGrad = Instance.new("UIGradient")
-        fillGrad.Color = ColorSequence.new{
-            ColorSequenceKeypoint.new(0, Theme.Accent),
-            ColorSequenceKeypoint.new(1, Theme.AccentDark)
-        }
-        fillGrad.Parent = fill
-        
-        local trigger = Instance.new("TextButton")
-        trigger.Size = UDim2.new(1, 0, 1, 0)
-        trigger.BackgroundTransparency = 1
-        trigger.Text = ""
-        trigger.Parent = bar
+        local Trigger = Instance.new("TextButton")
+        Trigger.Size = UDim2.new(1, 0, 1, 0)
+        Trigger.BackgroundTransparency = 1
+        Trigger.Text = ""
+        Trigger.Parent = SliderBar
         
         local currentVal = defaultVal
         local dragging = false
         
         local function update(input)
-            local ratio = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
-            fill.Size = UDim2.new(ratio, 0, 1, 0)
-            local val = math.floor(min + ((max - min) * ratio))
-            valLabel.Text = tostring(val)
+            local pos = UDim2.new(math.clamp((input.Position.X - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X, 0, 1), 0, 1, 0)
+            Fill.Size = pos
+            local val = math.floor(min + ((max - min) * pos.X.Scale))
+            ValueLabel.Text = tostring(val)
             currentVal = val
             callback(val)
         end
         
-        trigger.InputBegan:Connect(function(input)
+        Trigger.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                 dragging = true
                 update(input)
@@ -455,9 +463,9 @@ return function(env)
         
         local function setVal(v)
             currentVal = math.clamp(v, min, max)
-            local ratio = (currentVal - min) / (max - min)
-            fill.Size = UDim2.new(ratio, 0, 1, 0)
-            valLabel.Text = tostring(currentVal)
+            local pos = (currentVal - min) / (max - min)
+            TweenService:Create(Fill, TweenInfo.new(0.2), {Size = UDim2.new(pos, 0, 1, 0)}):Play()
+            ValueLabel.Text = tostring(currentVal)
             callback(currentVal)
         end
         
@@ -465,44 +473,49 @@ return function(env)
     end
 
     local function CreateCompactButton(parent, text, callback)
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(1, 0, 0, 24)
-        btn.BackgroundColor3 = Color3.new(0, 0, 0)
-        btn.BackgroundTransparency = 0.45
-        btn.Text = text
-        btn.Font = Enum.Font.GothamBold
-        btn.TextSize = 11
-        btn.TextColor3 = Theme.TextDark
-        btn.Parent = parent
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+        local BtnFrame = Instance.new("TextButton")
+        BtnFrame.Size = UDim2.new(1, 0, 0, 30)
+        BtnFrame.BackgroundTransparency = 1
+        BtnFrame.Text = ""
+        BtnFrame.Parent = parent
         
-        local stroke = Instance.new("UIStroke", btn)
-        stroke.Color = Color3.fromRGB(40, 40, 40)
-        stroke.Thickness = 1
-        
-        btn.MouseEnter:Connect(function()
-            TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
-            TweenService:Create(btn, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
-        end)
-        btn.MouseLeave:Connect(function()
-            TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
-            TweenService:Create(btn, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
-        end)
-        
-        btn.MouseButton1Click:Connect(callback)
-        return btn
+        local Label = Instance.new("TextLabel")
+        Label.Size = UDim2.new(1, -10, 1, 0)
+        Label.Position = UDim2.new(0, 5, 0, 0)
+        Label.BackgroundTransparency = 1
+        Label.Text = text
+        Label:SetAttribute("OriginalText", text) 
+        Label.Font = Theme.Font
+        Label.TextXAlignment = Enum.TextXAlignment.Center
+        Label.TextScaled = true 
+        local tConst = Instance.new("UITextSizeConstraint", Label)
+        tConst.MinTextSize = 7
+        tConst.MaxTextSize = 11
+        Label.TextColor3 = Theme.TextDark
+        Label.Parent = BtnFrame
+
+        BtnFrame.MouseEnter:Connect(function() TweenService:Create(Label, TweenInfo.new(0.2), {TextColor3 = Theme.Accent}):Play() end)
+        BtnFrame.MouseLeave:Connect(function() TweenService:Create(Label, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play() end)
+        BtnFrame.MouseButton1Click:Connect(callback)
+        return BtnFrame
     end
 
-    -- Populando Mute Settings (Esquerda)
+    -- Criando e Populando o Header Mute Settings (Esquerda)
+    local MuteHeader = Instance.new("Frame")
+    MuteHeader.Name = "HeaderContainer"
+    MuteHeader.Size = UDim2.new(1, 0, 0, 20)
+    MuteHeader.BackgroundTransparency = 1
+    MuteHeader.Parent = MuteBlock
+    
     local MuteTitle = Instance.new("TextLabel")
-    MuteTitle.Size = UDim2.new(1, 0, 0, 16)
+    MuteTitle.Size = UDim2.new(1, 0, 1, 0)
     MuteTitle.BackgroundTransparency = 1
     MuteTitle.Text = "Mute Settings"
     MuteTitle.Font = Theme.Font
-    MuteTitle.TextColor3 = Theme.Text
-    MuteTitle.TextSize = 11
+    MuteTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MuteTitle.TextSize = 12
     MuteTitle.TextXAlignment = Enum.TextXAlignment.Left
-    MuteTitle.Parent = MuteBlock
+    MuteTitle.Parent = MuteHeader
 
     CreateCompactToggle(MuteBlock, "Remove Your Steps", false, function(state) 
         LegitSettings.MuteSteps = state
@@ -558,16 +571,22 @@ return function(env)
         end
     end)
 
-    -- Populando Volume Settings (Direita)
+    -- Criando e Populando o Header Volume Settings (Direita)
+    local VolHeader = Instance.new("Frame")
+    VolHeader.Name = "HeaderContainer"
+    VolHeader.Size = UDim2.new(1, 0, 0, 20)
+    VolHeader.BackgroundTransparency = 1
+    VolHeader.Parent = VolumeBlock
+    
     local VolTitle = Instance.new("TextLabel")
-    VolTitle.Size = UDim2.new(1, 0, 0, 16)
+    VolTitle.Size = UDim2.new(1, 0, 1, 0)
     VolTitle.BackgroundTransparency = 1
     VolTitle.Text = "Volume Settings"
     VolTitle.Font = Theme.Font
-    VolTitle.TextColor3 = Theme.Text
-    VolTitle.TextSize = 11
+    VolTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    VolTitle.TextSize = 12
     VolTitle.TextXAlignment = Enum.TextXAlignment.Left
-    VolTitle.Parent = VolumeBlock
+    VolTitle.Parent = VolHeader
 
     CreateCompactToggle(VolumeBlock, "Enable Volume Modifier", VolumesEnabled, function(state)
         VolumesEnabled = state
@@ -596,7 +615,7 @@ return function(env)
     end)
 
     -- =========================================================================
-    -- DESIGN CLÁSSICO DO SOUND CARD (Largura Inteira Original)
+    -- DESIGN CLÁSSICO DO SOUND CARD (Largura Inteira Original Restaurado)
     -- =========================================================================
     Library:CreateSection(Page, "Custom Sound Packs")
 
