@@ -25,12 +25,23 @@ return function(env)
     local JumpVolMultiplier = UserConfigs["Vol_JumpMultiplier"] or 1
     local FallVolMultiplier = UserConfigs["Vol_FallMultiplier"] or 1
 
-    -- Instância de som global para o Music Player
+    -- Instância de som de alta fidelidade para as músicas customizadas
     local MusicSound = Instance.new("Sound")
     MusicSound.Name = "NexVoid_CustomMusic"
     MusicSound.Looped = true
     MusicSound.Volume = 0.5
     MusicSound.Parent = SoundService
+
+    -- Lista de faixas pré-selecionadas solicitadas
+    local SongsList = {
+        {Name = "low cortisol", ID = "110919391228823"},
+        {Name = "six seven", ID = "139780631670217"},
+        {Name = "Dor funk", ID = "13748697311453"},
+        {Name = "ballerina cappucina", ID = "140675348569592"},
+        {Name = "its you", ID = "139010646759693"},
+        {Name = "funk brazil", ID = "131443412031360"},
+        {Name = "na na na", ID = "94884255368589"}
+    }
 
     -- Função auxiliar de Gradiente idêntica à do Hub Principal
     local function ApplyGradient(instance, color1, color2, rotation)
@@ -633,15 +644,15 @@ return function(env)
     end)
 
     -- =========================================================================
-    -- MUSIC PLAYER (Design Elegante e Compacto)
+    -- MUSIC PLAYER (Design Elegante, Compacto com Dropdown Flutuante)
     -- =========================================================================
     local MusicBlock = Instance.new("Frame")
     MusicBlock.Size = UDim2.new(1, -2, 0, 85)
     MusicBlock.BackgroundColor3 = Color3.new(0, 0, 0)
     MusicBlock.BackgroundTransparency = 0.45
     MusicBlock.BorderSizePixel = 0
+    MusicBlock.ClipsDescendants = false -- Permite que a lista flutue livremente sobre outros elementos
     MusicBlock.Parent = Page
-    Instance.new("UICorner", MusicBlock).CornerRadius = UDim.new(0, 6)
     
     local muStroke = Instance.new("UIStroke", MusicBlock)
     muStroke.Color = Color3.fromRGB(40, 40, 40)
@@ -663,10 +674,11 @@ return function(env)
     MusicTitle.TextXAlignment = Enum.TextXAlignment.Left
     MusicTitle.Parent = MusicBlock
 
+    -- Entrada Customizada de ID
     local textBox = Instance.new("TextBox")
-    textBox.Size = UDim2.new(0.35, -6, 0, 28)
+    textBox.Size = UDim2.new(0.32, -6, 0, 28)
     textBox.Position = UDim2.new(0, 0, 0, 24)
-    textBox.PlaceholderText = "Insert Sound ID..."
+    textBox.PlaceholderText = "Insert ID..."
     textBox.Text = ""
     textBox.BackgroundColor3 = Theme.SwitchOff
     textBox.TextColor3 = Theme.Text
@@ -679,9 +691,115 @@ return function(env)
     local tbStroke = Instance.new("UIStroke", textBox)
     tbStroke.Color = Color3.fromRGB(40, 40, 40)
 
+    -- Botão Seletor de Faixas (Pre-seleções)
+    local songDropdown = Instance.new("TextButton")
+    songDropdown.Size = UDim2.new(0.32, -6, 0, 28)
+    songDropdown.Position = UDim2.new(0.32, 6, 0, 24)
+    songDropdown.BackgroundColor3 = Theme.SwitchOff
+    songDropdown.Text = "Select Song"
+    songDropdown.Font = Theme.Font
+    songDropdown.TextSize = 10
+    songDropdown.TextColor3 = Theme.TextDark
+    songDropdown.Parent = MusicBlock
+    Instance.new("UICorner", songDropdown).CornerRadius = UDim.new(0, 4)
+    local sdStroke = Instance.new("UIStroke", songDropdown)
+    sdStroke.Color = Color3.fromRGB(40, 40, 40)
+    
+    local sdArrow = Instance.new("TextLabel")
+    sdArrow.Size = UDim2.new(0, 16, 1, 0)
+    sdArrow.Position = UDim2.new(1, -18, 0, 0)
+    sdArrow.BackgroundTransparency = 1
+    sdArrow.Text = "▼"
+    sdArrow.Font = Enum.Font.Gotham
+    sdArrow.TextColor3 = Theme.TextDark
+    sdArrow.TextSize = 8
+    sdArrow.Parent = songDropdown
+
+    -- Container Flutuante do Menu de Músicas
+    local SongMenu = Instance.new("Frame")
+    SongMenu.Size = UDim2.new(1, 0, 0, 134)
+    SongMenu.Position = UDim2.new(0, 0, 1, 4)
+    SongMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    SongMenu.BorderSizePixel = 0
+    SongMenu.Visible = false
+    SongMenu.ZIndex = 1000
+    SongMenu.Parent = songDropdown
+    Instance.new("UICorner", SongMenu).CornerRadius = UDim.new(0, 4)
+    local smStroke = Instance.new("UIStroke", SongMenu)
+    smStroke.Color = Color3.fromRGB(40, 40, 40)
+    
+    local smScroll = Instance.new("ScrollingFrame", SongMenu)
+    smScroll.Size = UDim2.new(1, -4, 1, -4)
+    smScroll.Position = UDim2.new(0, 2, 0, 2)
+    smScroll.BackgroundTransparency = 1
+    smScroll.BorderSizePixel = 0
+    smScroll.ScrollBarThickness = 2
+    smScroll.ScrollBarImageColor3 = Theme.Accent
+    smScroll.CanvasSize = UDim2.new(0, 0, 0, #SongsList * 22)
+    smScroll.ZIndex = 1001
+    
+    local smLayout = Instance.new("UIListLayout", smScroll)
+    smLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+    for _, song in ipairs(SongsList) do
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, 0, 0, 22)
+        btn.BackgroundTransparency = 1
+        btn.Text = song.Name
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 9
+        btn.TextColor3 = Theme.TextDark
+        btn.ZIndex = 1002
+        btn.Parent = smScroll
+        
+        local sep = Instance.new("Frame")
+        sep.Size = UDim2.new(1, -10, 0, 1)
+        sep.Position = UDim2.new(0, 5, 1, -1)
+        sep.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        sep.BorderSizePixel = 0
+        sep.ZIndex = 1003
+        sep.Parent = btn
+        
+        btn.MouseEnter:Connect(function()
+            TweenService:Create(btn, TweenInfo.new(0.15), {TextColor3 = Theme.Text}):Play()
+        end)
+        btn.MouseLeave:Connect(function()
+            TweenService:Create(btn, TweenInfo.new(0.15), {TextColor3 = Theme.TextDark}):Play()
+        end)
+        
+        btn.MouseButton1Click:Connect(function()
+            textBox.Text = song.ID
+            songDropdown.Text = song.Name
+            SongMenu.Visible = false
+            sdArrow.Text = "▼"
+        end)
+    end
+
+    songDropdown.MouseButton1Click:Connect(function()
+        SongMenu.Visible = not SongMenu.Visible
+        sdArrow.Text = SongMenu.Visible and "▲" or "▼"
+    end)
+
+    -- Atualiza dinamicamente o dropdown se o ID for alterado manualmente
+    textBox:GetPropertyChangedSignal("Text"):Connect(function()
+        local currentText = textBox.Text
+        local found = false
+        for _, s in ipairs(SongsList) do
+            if s.ID == currentText then
+                songDropdown.Text = s.Name
+                found = true
+                break
+            end
+        end
+        if not found then
+            songDropdown.Text = "Select Song"
+        end
+    end)
+
+    -- Botão Play/Stop
     local playBtn = Instance.new("TextButton")
-    playBtn.Size = UDim2.new(0.3, -6, 0, 28)
-    playBtn.Position = UDim2.new(0.35, 6, 0, 24)
+    playBtn.Size = UDim2.new(0.32, -6, 0, 28)
+    playBtn.Position = UDim2.new(0.68, 6, 0, 24)
     playBtn.BackgroundColor3 = Color3.new(0, 0, 0)
     playBtn.BackgroundTransparency = 0.45
     playBtn.Text = "Play"
@@ -730,6 +848,7 @@ return function(env)
         end
     end)
 
+    -- Slider de Volume da Música
     local sliderFrame = Instance.new("Frame")
     sliderFrame.Size = UDim2.new(0.35, -12, 0, 35)
     sliderFrame.Position = UDim2.new(0.65, 12, 0, 19)
