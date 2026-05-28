@@ -11,12 +11,63 @@ return function(env)
     local GetParentTarget = env.GetParentTarget
     local UserInputService = game:GetService("UserInputService")
 
-    -- Variaveis de Lógica e Backup do Antigo Script
+    -- ==========================================
+    -- CONVERSÃO DINÂMICA DA PÁGINA PARA O ESTILO MODERNO DO HUB
+    -- ==========================================
+    for _, child in ipairs(Page:GetChildren()) do
+        if child:IsA("UIListLayout") or child:IsA("UIPadding") then
+            child:Destroy()
+        end
+    end
+
+    local PageLayout = Instance.new("UIListLayout")
+    PageLayout.FillDirection = Enum.FillDirection.Horizontal
+    PageLayout.Padding = UDim.new(0, 12)
+    PageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    PageLayout.Parent = Page
+
+    local PP = Instance.new("UIPadding")
+    PP.PaddingBottom = UDim.new(0, 10)
+    PP.Parent = Page
+
+    local LeftCol = Instance.new("Frame")
+    LeftCol.Name = "LeftCol"
+    LeftCol.Size = UDim2.new(0.5, -6, 0, 0)
+    LeftCol.AutomaticSize = Enum.AutomaticSize.Y
+    LeftCol.BackgroundTransparency = 1
+    LeftCol.Parent = Page
+
+    local LL = Instance.new("UIListLayout")
+    LL.Padding = UDim.new(0, 10)
+    LL.SortOrder = Enum.SortOrder.LayoutOrder
+    LL.Parent = LeftCol
+
+    local RightCol = Instance.new("Frame")
+    RightCol.Name = "RightCol"
+    RightCol.Size = UDim2.new(0.5, -6, 0, 0)
+    RightCol.AutomaticSize = Enum.AutomaticSize.Y
+    RightCol.BackgroundTransparency = 1
+    RightCol.Parent = Page
+
+    local RL = Instance.new("UIListLayout")
+    RL.Padding = UDim.new(0, 10)
+    RL.SortOrder = Enum.SortOrder.LayoutOrder
+    RL.Parent = RightCol
+
+    local SectionCount = Instance.new("IntValue")
+    SectionCount.Name = "SectionCount"
+    SectionCount.Value = 0
+    SectionCount.Parent = Page
+
+    -- Força a biblioteca a renderizar o estilo moderno (toggles transparentes dentro de boxes)
+    Page:SetAttribute("OldStyle", false)
+
+    -- Variaveis de Lógica e Backup
     local LegitSettings = {MuteSteps = false, MuteJumps = false, MuteHack = false}
     local CurrentSoundIDs = {Running = 0, Jumping = 0, Landing = 0}
     local OriginalSoundBackups = setmetatable({}, {__mode = "k"})
 
-    -- Carregando estados e valores salvos do Bloco de Volumes (Inicia desligado por padrão)
+    -- Carregando estados e valores salvos do Bloco de Volumes
     local VolumesEnabled = UserConfigs["EnableSoundSettings"]
     if VolumesEnabled == nil then VolumesEnabled = false end
 
@@ -79,7 +130,7 @@ return function(env)
     for _, player in ipairs(Players:GetPlayers()) do setupPlayerSoundEvents(player) end
     Players.PlayerAdded:Connect(setupPlayerSoundEvents)
 
-    -- Lógica original de Mute local restaurada integralmente
+    -- Lógica de Mute local
     local function ProcessCharacter(char)
         local root = char:WaitForChild("HumanoidRootPart", 10)
         if not root then return end
@@ -165,7 +216,7 @@ return function(env)
     
     local noHitSoundAddedConn = nil
 
-    -- Tabelas fracas e caches rápidos de alta performance para os Sliders de Volume
+    -- Tabelas fracas para os Sliders de Volume
     local ActiveSounds = setmetatable({}, {__mode = "k"})
     local SoundCategories = setmetatable({}, {__mode = "k"})
     local originalVolumeBackup = setmetatable({}, {__mode = "k"})
@@ -197,7 +248,7 @@ return function(env)
     for _, obj in ipairs(Workspace:GetDescendants()) do registerSound(obj) end
     Workspace.DescendantAdded:Connect(registerSound)
 
-    -- Laço de sincronização global otimizado (Prevenção de stuttering)
+    -- Laço de sincronização global
     task.spawn(function()
         while task.wait(0.3) do
             local enabled = VolumesEnabled
@@ -224,7 +275,6 @@ return function(env)
                         end
                     end
 
-                    -- Verifica se o som pertence ao LocalPlayer para aplicar o silenciador legítimo
                     if localChar and sound:IsDescendantOf(localChar) then
                         if category == "Footsteps" and muteSteps then
                             multiplier = 0
@@ -243,9 +293,9 @@ return function(env)
     end)
 
     -- ==========================================
-    -- Interface Visual (Toggles Originais Mantidas)
+    -- DESIGN MODERNO: SEÇÃO DE MUTES (COLUNA ESQUERDA)
     -- ==========================================
-    Library:CreateSection(Page, "Mute Sounds")
+    Library:CreateSection(Page, "Mute Sounds", "Left")
     Library:CreateToggle(Page, "Remove Your Steps", false, function(state) 
         LegitSettings.MuteSteps = state
         if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
@@ -301,9 +351,9 @@ return function(env)
     end)
     
     -- ==========================================
-    -- Bloco de Volumes (Nativo do Hub)
+    -- DESIGN MODERNO: CONFIGURAÇÃO DE VOLUMES (COLUNA DIREITA)
     -- ==========================================
-    Library:CreateSection(Page, "Volume Settings")
+    Library:CreateSection(Page, "Volume Settings", "Right")
     
     local MasterToggle = Library:CreateToggle(Page, "Enable Volume Modifier", VolumesEnabled, function(state)
         VolumesEnabled = state
@@ -332,11 +382,8 @@ return function(env)
     end)
     
     -- ==========================================
-    -- Seção Custom Sound Packs (Mantém Design Personalizado)
+    -- CUSTOM SOUND PACKS (MANTÉM O DESIGN EXCLUSIVO DOS CARTÕES)
     -- ==========================================
-    Library:CreateSection(Page, "Custom Sound Packs")
-    local targetParentSounds = GetParentTarget(Page)
-    
     local WalkButtons = {}
     local JumpButtons = {}
     local FallButtons = {}
@@ -453,7 +500,62 @@ return function(env)
         end
     end
 
-    -- Criando o botão Reset Sounds integrado ao layout
+    -- Cria as seções de pacotes de forma distribuída para manter a harmonia visual
+    Library:CreateSection(Page, "Custom Sound Packs (Part 1)", "Left")
+    local colEsquerdaSons = GetParentTarget(Page)
+
+    CreateSoundCard(colEsquerdaSons, "michawell", {
+        {Name = "Walk", ID = "116140177933689", Type = "Walk"},
+        {Name = "Jump", ID = "70420181848348", Type = "Jump"}
+    })
+    CreateSoundCard(colEsquerdaSons, "DraxynSoulx", {
+        {Name = "Walk", ID = "130152479167305", Type = "Walk"},
+        {Name = "Jump", ID = "122238807601932", Type = "Jump"},
+        {Name = "Fall", ID = "71782790555091", Type = "Fall"}
+    })
+    CreateSoundCard(colEsquerdaSons, "Luana_Mitxu", {
+        {Name = "Walk", ID = "107070338913559", Type = "Walk"},
+        {Name = "Jump", ID = "133939057526098", Type = "Jump"}
+    })
+    CreateSoundCard(colEsquerdaSons, "Facility Gamer", {
+        {Name = "Walk", ID = "131592620665625", Type = "Walk"},
+        {Name = "Jump", ID = "89459688918065", Type = "Jump"}
+    })
+    CreateSoundCard(colEsquerdaSons, "NoobTwoPoint", {
+        {Name = "Walk", ID = "110709356093026", Type = "Walk"},
+        {Name = "Jump", ID = "124276657634407", Type = "Jump"}
+    })
+
+    Library:CreateSection(Page, "Custom Sound Packs (Part 2)", "Right")
+    local colDireitaSons = GetParentTarget(Page)
+
+    CreateSoundCard(colDireitaSons, "Tio Morcego", {
+        {Name = "Walk", ID = "97458293386939", Type = "Walk"},
+        {Name = "Jump", ID = "72503238596964", Type = "Jump"},
+        {Name = "Fall", ID = "83702883984130", Type = "Fall"}
+    })
+    CreateSoundCard(colDireitaSons, "FKPS", {
+        {Name = "Walk", ID = "97733831736820", Type = "Walk"},
+        {Name = "Jump", ID = "86031664547378", Type = "Jump"},
+        {Name = "Fall", ID = "78180192109919", Type = "Fall"}
+    })
+    CreateSoundCard(colDireitaSons, "Normal", {
+        {Name = "Walk", ID = "79392671800290", Type = "Walk"},
+        {Name = "Jump", ID = "80853972291847", Type = "Jump"},
+        {Name = "Fall", ID = "88947883822456", Type = "Fall"}
+    })
+    CreateSoundCard(colDireitaSons, "Extra Jumps (Part 1)", {
+        {Name = "Pew", ID = "136299701781122", Type = "Jump"},
+        {Name = "Sharingan", ID = "118102230060662", Type = "Jump"},
+        {Name = "Albino", ID = "129415490412106", Type = "Jump"}
+    })
+    CreateSoundCard(colDireitaSons, "Extra Jumps (Part 2)", {
+        {Name = "1Rxdrigo", ID = "80276851298640", Type = "Jump"},
+        {Name = "Three Jumps", ID = "126925004664723", Type = "Jump"},
+        {Name = "Yusei Jump", ID = "119519595212440", Type = "Jump"}
+    })
+
+    -- Adiciona o botão de Reset no final do bloco da direita
     Library:CreateButton(Page, "Reset Sounds", function()
         CurrentSoundIDs.Running = "0"
         CurrentSoundIDs.Jumping = "0"
@@ -466,62 +568,6 @@ return function(env)
         updateButtonVisuals(FallButtons, "0")
         RefreshAllSounds()
     end)
-
-    CreateSoundCard(targetParentSounds, "michawell", {
-        {Name = "Walk", ID = "116140177933689", Type = "Walk"},
-        {Name = "Jump", ID = "70420181848348", Type = "Jump"}
-    })
-
-    CreateSoundCard(targetParentSounds, "DraxynSoulx", {
-        {Name = "Walk", ID = "130152479167305", Type = "Walk"},
-        {Name = "Jump", ID = "122238807601932", Type = "Jump"},
-        {Name = "Fall", ID = "71782790555091", Type = "Fall"}
-    })
-
-    CreateSoundCard(targetParentSounds, "Luana_Mitxu", {
-        {Name = "Walk", ID = "107070338913559", Type = "Walk"},
-        {Name = "Jump", ID = "133939057526098", Type = "Jump"}
-    })
-
-    CreateSoundCard(targetParentSounds, "Facility Gamer", {
-        {Name = "Walk", ID = "131592620665625", Type = "Walk"},
-        {Name = "Jump", ID = "89459688918065", Type = "Jump"}
-    })
-
-    CreateSoundCard(targetParentSounds, "NoobTwoPoint", {
-        {Name = "Walk", ID = "110709356093026", Type = "Walk"},
-        {Name = "Jump", ID = "124276657634407", Type = "Jump"}
-    })
-
-    CreateSoundCard(targetParentSounds, "Tio Morcego", {
-        {Name = "Walk", ID = "97458293386939", Type = "Walk"},
-        {Name = "Jump", ID = "72503238596964", Type = "Jump"},
-        {Name = "Fall", ID = "83702883984130", Type = "Fall"}
-    })
-
-    CreateSoundCard(targetParentSounds, "FKPS", {
-        {Name = "Walk", ID = "97733831736820", Type = "Walk"},
-        {Name = "Jump", ID = "86031664547378", Type = "Jump"},
-        {Name = "Fall", ID = "78180192109919", Type = "Fall"}
-    })
-
-    CreateSoundCard(targetParentSounds, "Normal", {
-        {Name = "Walk", ID = "79392671800290", Type = "Walk"},
-        {Name = "Jump", ID = "80853972291847", Type = "Jump"},
-        {Name = "Fall", ID = "88947883822456", Type = "Fall"}
-    })
-
-    CreateSoundCard(targetParentSounds, "Extra Jumps (Part 1)", {
-        {Name = "Pew", ID = "136299701781122", Type = "Jump"},
-        {Name = "Sharingan", ID = "118102230060662", Type = "Jump"},
-        {Name = "Albino", ID = "129415490412106", Type = "Jump"}
-    })
-
-    CreateSoundCard(targetParentSounds, "Extra Jumps (Part 2)", {
-        {Name = "1Rxdrigo", ID = "80276851298640", Type = "Jump"},
-        {Name = "Three Jumps", ID = "126925004664723", Type = "Jump"},
-        {Name = "Yusei Jump", ID = "119519595212440", Type = "Jump"}
-    })
 
     updateButtonVisuals(WalkButtons, savedWalk)
     updateButtonVisuals(JumpButtons, savedJump)
