@@ -732,12 +732,12 @@ return function(env)
     sdArrow.ZIndex = 103
     sdArrow.Parent = songDropdown
 
-    -- Container Flutuante do Menu de Músicas com Opacidade Total (ZIndex = 200)
+    -- Container Flutuante do Menu de Músicas com Opacidade Total e Fundo Preto Transparente
     local SongMenu = Instance.new("Frame")
     SongMenu.Size = UDim2.new(1, 0, 0, 134)
     SongMenu.Position = UDim2.new(0, 0, 1, 4)
-    SongMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    SongMenu.BackgroundTransparency = 0 -- OPACO para não deixar os elementos de trás visíveis
+    SongMenu.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Preto
+    SongMenu.BackgroundTransparency = 0.15 -- Transparente/Translúcido elegante
     SongMenu.BorderSizePixel = 0
     SongMenu.Visible = false
     SongMenu.ZIndex = 200
@@ -762,7 +762,7 @@ return function(env)
     for _, song in ipairs(SongsList) do
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(1, 0, 0, 22)
-        btn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
         btn.BackgroundTransparency = 1
         btn.Text = song.Name
         btn.Font = Enum.Font.Gotham
@@ -780,7 +780,7 @@ return function(env)
         sep.Parent = btn
         
         btn.MouseEnter:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0, BackgroundColor3 = Color3.fromRGB(35, 35, 35), TextColor3 = Theme.Text}):Play()
+            TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0.6, BackgroundColor3 = Color3.fromRGB(255, 255, 255), TextColor3 = Theme.Text}):Play()
         end)
         btn.MouseLeave:Connect(function()
             TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 1, TextColor3 = Theme.TextDark}):Play()
