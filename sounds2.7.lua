@@ -262,15 +262,21 @@ return function(env)
     -- LAYOUT HÍBRIDO (Top 2-Column, Bottom Full-Width)
     -- =========================================================================
     
-    -- Container das configurações lado a lado com tamanho de segurança aumentado para 230px
+    -- Container das configurações com ajuste automático de tamanho para evitar gaps
     local SettingsContainer = Instance.new("Frame")
-    SettingsContainer.Size = UDim2.new(1, -2, 0, 230)
+    SettingsContainer.Size = UDim2.new(1, -2, 0, 0)
+    SettingsContainer.AutomaticSize = Enum.AutomaticSize.Y
     SettingsContainer.BackgroundTransparency = 1
     SettingsContainer.Parent = Page
 
+    local sLayout = Instance.new("UIListLayout", SettingsContainer)
+    sLayout.FillDirection = Enum.FillDirection.Horizontal
+    sLayout.Padding = UDim.new(0, 12)
+    sLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
     local MuteBlock = Instance.new("Frame")
-    MuteBlock.Size = UDim2.new(0.5, -6, 1, 0)
-    MuteBlock.Position = UDim2.new(0, 0, 0, 0)
+    MuteBlock.Size = UDim2.new(0.5, -6, 0, 0)
+    MuteBlock.AutomaticSize = Enum.AutomaticSize.Y
     MuteBlock.BackgroundColor3 = Color3.new(0, 0, 0)
     MuteBlock.BackgroundTransparency = 0.45
     MuteBlock.BorderSizePixel = 0
@@ -290,8 +296,8 @@ return function(env)
     mPadding.PaddingRight = UDim.new(0, 10)
 
     local VolumeBlock = Instance.new("Frame")
-    VolumeBlock.Size = UDim2.new(0.5, -6, 1, 0)
-    VolumeBlock.Position = UDim2.new(0.5, 6, 0, 0)
+    VolumeBlock.Size = UDim2.new(0.5, -6, 0, 0)
+    VolumeBlock.AutomaticSize = Enum.AutomaticSize.Y
     VolumeBlock.BackgroundColor3 = Color3.new(0, 0, 0)
     VolumeBlock.BackgroundTransparency = 0.45
     VolumeBlock.BorderSizePixel = 0
@@ -463,7 +469,7 @@ return function(env)
         
         local function setVal(v)
             currentVal = math.clamp(v, min, max)
-            local pos = (currentVal - min) / (max - min)
+            local ratio = (currentVal - min) / (max - min)
             TweenService:Create(Fill, TweenInfo.new(0.2), {Size = UDim2.new(pos, 0, 1, 0)}):Play()
             ValueLabel.Text = tostring(currentVal)
             callback(currentVal)
@@ -486,7 +492,7 @@ return function(env)
         Label.Text = text
         Label:SetAttribute("OriginalText", text) 
         Label.Font = Theme.Font
-        Label.TextXAlignment = Enum.TextXAlignment.Center
+        Label.TextXAlignment = Enum.TextXAlignment.Left
         Label.TextScaled = true 
         local tConst = Instance.new("UITextSizeConstraint", Label)
         tConst.MinTextSize = 7
@@ -554,7 +560,7 @@ return function(env)
                 end)
             end
             for _, player in ipairs(Players:GetPlayers()) do
-                if player.Character then monitorCharacter(player.Character) end
+                if player.Character then monitorCharacter(character) end
                 player.CharacterAdded:Connect(function(c) if noHitSoundEnabled then monitorCharacter(c) end end)
             end
             for _, sound in ipairs(game:GetService("SoundService"):GetDescendants()) do muteIfHitSound(sound) end
@@ -699,33 +705,34 @@ return function(env)
             btnStroke.Color = Color3.fromRGB(40, 40, 40)
             btnStroke.Thickness = 1
 
-            if act.Type == "Walk" then WalkButtons[act.ID] = {Btn = btn, Stroke = btnStroke}
-            elseif act.Type == "Jump" then JumpButtons[act.ID] = {Btn = btn, Stroke = btnStroke}
-            elseif act.Type == "Fall" then FallButtons[act.ID] = {Btn = btn, Stroke = btnStroke} end
+            local actTypeLower = string.lower(act.Type)
+            if actTypeLower == "walk" then WalkButtons[act.ID] = {Btn = btn, Stroke = btnStroke}
+            elseif actTypeLower == "jump" then JumpButtons[act.ID] = {Btn = btn, Stroke = btnStroke}
+            elseif actTypeLower == "fall" then FallButtons[act.ID] = {Btn = btn, Stroke = btnStroke} end
 
             btn.MouseEnter:Connect(function()
-                local activeId = (act.Type == "Walk" and CurrentSoundIDs.Running) or (act.Type == "Jump" and CurrentSoundIDs.Jumping) or CurrentSoundIDs.Landing
+                local activeId = (actTypeLower == "walk" and CurrentSoundIDs.Running) or (actTypeLower == "jump" and CurrentSoundIDs.Jumping) or CurrentSoundIDs.Landing
                 if activeId ~= act.ID then
                     TweenService:Create(btnStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
                 end
             end)
             btn.MouseLeave:Connect(function()
-                local activeId = (act.Type == "Walk" and CurrentSoundIDs.Running) or (act.Type == "Jump" and CurrentSoundIDs.Jumping) or CurrentSoundIDs.Landing
+                local activeId = (actTypeLower == "walk" and CurrentSoundIDs.Running) or (actTypeLower == "jump" and CurrentSoundIDs.Jumping) or CurrentSoundIDs.Landing
                 if activeId ~= act.ID then
                     TweenService:Create(btnStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
                 end
             end)
 
             btn.MouseButton1Click:Connect(function()
-                if act.Type == "Walk" then
+                if actTypeLower == "walk" then
                     CurrentSoundIDs.Running = act.ID
                     UserConfigs["CustomSound_Walk"] = act.ID
                     updateButtonVisuals(WalkButtons, act.ID)
-                elseif act.Type == "Jump" then
+                elseif actTypeLower == "jump" then
                     CurrentSoundIDs.Jumping = act.ID
                     UserConfigs["CustomSound_Jump"] = act.ID
                     updateButtonVisuals(JumpButtons, act.ID)
-                elseif act.Type == "Fall" then
+                elseif actTypeLower == "fall" then
                     CurrentSoundIDs.Landing = act.ID
                     UserConfigs["CustomSound_Fall"] = act.ID
                     updateButtonVisuals(FallButtons, act.ID)
@@ -765,12 +772,13 @@ return function(env)
         RefreshAllSounds()
     end)
 
+    -- Inserindo a nova categoria solicitada no topo
     CreateSoundCard(Page, "NorthDxv1Ces", {
         {Name = "North Passos", ID = "119933956036500", Type = "Walk"},
         {Name = "North Jump", ID = "87683560682449", Type = "Jump"},
         {Name = "North Queda", ID = "73586375325988", Type = "fall"}
     })
-    
+
     CreateSoundCard(Page, "michawell", {
         {Name = "Walk", ID = "116140177933689", Type = "Walk"},
         {Name = "Jump", ID = "70420181848348", Type = "Jump"}
@@ -826,7 +834,7 @@ return function(env)
         {Name = "Three Jumps", ID = "126925004664723", Type = "Jump"},
         {Name = "Yusei Jump", ID = "119519595212440", Type = "Jump"}
     })
-    
+
     updateButtonVisuals(WalkButtons, savedWalk)
     updateButtonVisuals(JumpButtons, savedJump)
     updateButtonVisuals(FallButtons, savedFall)
