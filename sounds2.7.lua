@@ -243,260 +243,18 @@ return function(env)
     end)
 
     -- ==========================================
-    -- Construtores de Design Unificado (Cards)
+    -- Interface Visual (Toggles Originais Mantidas)
     -- ==========================================
-    local function CreateSectionCard(parent, titleText)
-        local card = Instance.new("Frame")
-        card.Size = UDim2.new(1, -2, 0, 0)
-        card.AutomaticSize = Enum.AutomaticSize.Y
-        card.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-        card.BackgroundTransparency = 0.45
-        card.BorderSizePixel = 0
-        card.Parent = parent
-        Instance.new("UICorner", card).CornerRadius = UDim.new(0, 6)
-        
-        local stroke = Instance.new("UIStroke", card)
-        stroke.Color = Color3.fromRGB(40, 40, 40)
-        stroke.Thickness = 1
-        
-        local list = Instance.new("UIListLayout", card)
-        list.SortOrder = Enum.SortOrder.LayoutOrder
-        list.Padding = UDim.new(0, 10)
-        
-        local pad = Instance.new("UIPadding", card)
-        pad.PaddingTop = UDim.new(0, 12)
-        pad.PaddingBottom = UDim.new(0, 12)
-        pad.PaddingLeft = UDim.new(0, 14)
-        pad.PaddingRight = UDim.new(0, 14)
-        
-        local title = Instance.new("TextLabel")
-        title.Size = UDim2.new(1, 0, 0, 18)
-        title.BackgroundTransparency = 1
-        title.Text = titleText
-        title.Font = Theme.Font
-        title.TextColor3 = Theme.Text
-        title.TextSize = 13
-        title.TextXAlignment = Enum.TextXAlignment.Left
-        title.Parent = card
-        
-        return card
-    end
-
-    local function CreateCardToggle(card, text, defaultVal, callback)
-        local frame = Instance.new("Frame")
-        frame.Size = UDim2.new(1, 0, 0, 24)
-        frame.BackgroundTransparency = 1
-        frame.Parent = card
-        
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -40, 1, 0)
-        label.BackgroundTransparency = 1
-        label.Text = text
-        label.Font = Theme.Font
-        label.TextColor3 = Theme.TextDark
-        label.TextSize = 11
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.Parent = frame
-        
-        local bg = Instance.new("TextButton")
-        bg.Size = UDim2.new(0, 30, 0, 14)
-        bg.Position = UDim2.new(1, -30, 0.5, -7)
-        bg.BackgroundColor3 = Theme.SwitchOff
-        bg.Text = ""
-        bg.Parent = frame
-        Instance.new("UICorner", bg).CornerRadius = UDim.new(1, 0)
-        
-        local bgGrad = Instance.new("UIGradient")
-        bgGrad.Rotation = 90
-        bgGrad.Parent = bg
-        
-        local cir = Instance.new("Frame")
-        cir.Size = UDim2.new(0, 12, 0, 12)
-        cir.Position = UDim2.new(0, 1, 0.5, -6)
-        cir.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
-        cir.Parent = bg
-        Instance.new("UICorner", cir).CornerRadius = UDim.new(1, 0)
-        
-        local state = defaultVal
-        
-        local function updateVisuals()
-            if state then
-                TweenService:Create(bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Accent}):Play()
-                bgGrad.Color = ColorSequence.new{
-                    ColorSequenceKeypoint.new(0, Theme.Accent),
-                    ColorSequenceKeypoint.new(1, Theme.AccentDark)
-                }
-                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(1, -13, 0.5, -6), BackgroundColor3 = Color3.new(0,0,0)}):Play()
-                TweenService:Create(label, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
-            else
-                TweenService:Create(bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.SwitchOff}):Play()
-                bgGrad.Color = ColorSequence.new{
-                    ColorSequenceKeypoint.new(0, Theme.SwitchOff),
-                    ColorSequenceKeypoint.new(1, Theme.SwitchOff)
-                }
-                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(0, 1, 0.5, -6), BackgroundColor3 = Color3.fromRGB(150, 150, 150)}):Play()
-                TweenService:Create(label, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
-            end
-        end
-        
-        bg.MouseButton1Click:Connect(function()
-            state = not state
-            updateVisuals()
-            callback(state)
-        end)
-        
-        updateVisuals()
-        return {
-            Set = function(val)
-                state = val
-                updateVisuals()
-                callback(val)
-            end
-        }
-    end
-
-    local function CreateCardSlider(card, text, min, max, defaultVal, callback)
-        local frame = Instance.new("Frame")
-        frame.Size = UDim2.new(1, 0, 0, 36)
-        frame.BackgroundTransparency = 1
-        frame.Parent = card
-        
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -50, 0, 14)
-        label.BackgroundTransparency = 1
-        label.Text = text
-        label.Font = Theme.Font
-        label.TextColor3 = Theme.TextDark
-        label.TextSize = 11
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.Parent = frame
-        
-        local valLabel = Instance.new("TextLabel")
-        valLabel.Size = UDim2.new(0, 40, 0, 14)
-        valLabel.Position = UDim2.new(1, -40, 0, 0)
-        valLabel.BackgroundTransparency = 1
-        valLabel.Text = tostring(defaultVal)
-        valLabel.Font = Theme.Font
-        valLabel.TextColor3 = Theme.Text
-        valLabel.TextSize = 11
-        valLabel.TextXAlignment = Enum.TextXAlignment.Right
-        valLabel.Parent = frame
-        
-        local bar = Instance.new("Frame")
-        bar.Size = UDim2.new(1, 0, 0, 5)
-        bar.Position = UDim2.new(0, 0, 0, 20)
-        bar.BackgroundColor3 = Theme.SwitchOff
-        bar.BorderSizePixel = 0
-        bar.Parent = frame
-        Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
-        
-        local fill = Instance.new("Frame")
-        fill.Size = UDim2.new((defaultVal - min) / (max - min), 0, 1, 0)
-        fill.BackgroundColor3 = Theme.Accent
-        fill.BorderSizePixel = 0
-        fill.Parent = bar
-        Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-        
-        local fillGrad = Instance.new("UIGradient")
-        fillGrad.Color = ColorSequence.new{
-            ColorSequenceKeypoint.new(0, Theme.Accent),
-            ColorSequenceKeypoint.new(1, Theme.AccentDark)
-        }
-        fillGrad.Parent = fill
-        
-        local trigger = Instance.new("TextButton")
-        trigger.Size = UDim2.new(1, 0, 1, 0)
-        trigger.BackgroundTransparency = 1
-        trigger.Text = ""
-        trigger.Parent = bar
-        
-        local currentVal = defaultVal
-        local dragging = false
-        
-        local function update(input)
-            local ratio = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
-            fill.Size = UDim2.new(ratio, 0, 1, 0)
-            local val = math.floor(min + ((max - min) * ratio))
-            valLabel.Text = tostring(val)
-            currentVal = val
-            callback(val)
-        end
-        
-        trigger.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                dragging = true
-                update(input)
-            end
-        end)
-        
-        UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                dragging = false
-            end
-        end)
-        
-        UserInputService.InputChanged:Connect(function(input)
-            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                update(input)
-            end
-        end)
-        
-        local function setVal(v)
-            currentVal = math.clamp(v, min, max)
-            local ratio = (currentVal - min) / (max - min)
-            fill.Size = UDim2.new(ratio, 0, 1, 0)
-            valLabel.Text = tostring(currentVal)
-            callback(currentVal)
-        end
-        
-        return {Set = setVal}
-    end
-
-    local function CreateCardButton(parent, text, callback)
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(1, 0, 0, 24)
-        btn.BackgroundColor3 = Color3.new(0, 0, 0)
-        btn.BackgroundTransparency = 0.45
-        btn.Text = text
-        btn.Font = Enum.Font.GothamBold
-        btn.TextSize = 11
-        btn.TextColor3 = Theme.TextDark
-        btn.Parent = parent
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
-        
-        local stroke = Instance.new("UIStroke", btn)
-        stroke.Color = Color3.fromRGB(40, 40, 40)
-        stroke.Thickness = 1
-        
-        btn.MouseEnter:Connect(function()
-            TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
-            TweenService:Create(btn, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
-        end)
-        btn.MouseLeave:Connect(function()
-            TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
-            TweenService:Create(btn, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
-        end)
-        
-        btn.MouseButton1Click:Connect(callback)
-        return btn
-    end
-
-    -- ==========================================
-    -- Card 1: Mute Sounds (Unificado)
-    -- ==========================================
-    local MuteSoundsCard = CreateSectionCard(Page, "Mute Sounds")
-
-    CreateCardToggle(MuteSoundsCard, "Remove Your Steps", false, function(state) 
+    Library:CreateSection(Page, "Mute Sounds")
+    Library:CreateToggle(Page, "Remove Your Steps", false, function(state) 
         LegitSettings.MuteSteps = state
         if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
     end)
-
-    CreateCardToggle(MuteSoundsCard, "Remove Your Jumps", false, function(state) 
+    Library:CreateToggle(Page, "Remove Your Jumps", false, function(state) 
         LegitSettings.MuteJumps = state
         if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
     end)
-
-    CreateCardToggle(MuteSoundsCard, "Remove Pc Hack Sounds", false, function(state) 
+    Library:CreateToggle(Page, "Remove Pc Hack Sounds", false, function(state) 
         if state then 
             for _, obj in ipairs(Workspace:GetDescendants()) do 
                 if obj:IsA("Sound") and isHackSound(obj) and isFromComputer(obj) then muteHack(obj) end 
@@ -515,8 +273,7 @@ return function(env)
             hackSignals = {} 
         end 
     end)
-
-    CreateCardToggle(MuteSoundsCard, "No hit sound", false, function(state)
+    Library:CreateToggle(Page, "No hit sound", false, function(state)
         noHitSoundEnabled = state
         if state then
             local function monitorCharacter(character)
@@ -544,38 +301,38 @@ return function(env)
     end)
     
     -- ==========================================
-    -- Card 2: Volume Settings (Unificado)
+    -- Bloco de Volumes (Nativo do Hub)
     -- ==========================================
-    local VolumeSettingsCard = CreateSectionCard(Page, "Volume Settings")
-
-    local MasterToggle = CreateCardToggle(VolumeSettingsCard, "Enable Volume Modifier", VolumesEnabled, function(state)
+    Library:CreateSection(Page, "Volume Settings")
+    
+    local MasterToggle = Library:CreateToggle(Page, "Enable Volume Modifier", VolumesEnabled, function(state)
         VolumesEnabled = state
         UserConfigs["EnableSoundSettings"] = state
     end)
 
-    local FootstepsSlider = CreateCardSlider(VolumeSettingsCard, "FootSteps Volume", 0, 10, FootstepsVolMultiplier, function(val)
+    local FootstepsSlider = Library:CreateSlider(Page, "FootSteps Volume", 0, 10, FootstepsVolMultiplier, function(val)
         FootstepsVolMultiplier = val
         UserConfigs["FootstepsVol"] = val
     end)
     
-    local JumpSlider = CreateCardSlider(VolumeSettingsCard, "Jump Volume", 0, 10, JumpVolMultiplier, function(val)
+    local JumpSlider = Library:CreateSlider(Page, "Jump Volume", 0, 10, JumpVolMultiplier, function(val)
         JumpVolMultiplier = val
         UserConfigs["JumpVol"] = val
     end)
     
-    local FallSlider = CreateCardSlider(VolumeSettingsCard, "Fall Volume", 0, 10, FallVolMultiplier, function(val)
+    local FallSlider = Library:CreateSlider(Page, "Fall Volume", 0, 10, FallVolMultiplier, function(val)
         FallVolMultiplier = val
         UserConfigs["FallVol"] = val
     end)
 
-    CreateCardButton(VolumeSettingsCard, "Reset Volumes", function()
+    Library:CreateButton(Page, "Reset Volumes", function()
         FootstepsSlider.Set(1)
         JumpSlider.Set(1)
         FallSlider.Set(1)
     end)
     
     -- ==========================================
-    -- Seção Custom Sound Packs (EXCEÇÃO: Cartões com design normal original)
+    -- Seção Custom Sound Packs (Mantém Design Personalizado)
     -- ==========================================
     Library:CreateSection(Page, "Custom Sound Packs")
     local targetParentSounds = GetParentTarget(Page)
