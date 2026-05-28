@@ -10,6 +10,7 @@ return function(env)
     local UserConfigs = env.UserConfigs
     local GetParentTarget = env.GetParentTarget
     local UserInputService = game:GetService("UserInputService")
+    local SoundService = game:GetService("SoundService")
 
     -- Variaveis de Lógica e Backup do Antigo Script
     local LegitSettings = {MuteSteps = false, MuteJumps = false, MuteHack = false}
@@ -23,6 +24,13 @@ return function(env)
     local FootstepsVolMultiplier = UserConfigs["Vol_FootstepsMultiplier"] or 1
     local JumpVolMultiplier = UserConfigs["Vol_JumpMultiplier"] or 1
     local FallVolMultiplier = UserConfigs["Vol_FallMultiplier"] or 1
+
+    -- Instância de som global para o Music Player
+    local MusicSound = Instance.new("Sound")
+    MusicSound.Name = "NexVoid_CustomMusic"
+    MusicSound.Looped = true
+    MusicSound.Volume = 0.5
+    MusicSound.Parent = SoundService
 
     -- Função auxiliar de Gradiente idêntica à do Hub Principal
     local function ApplyGradient(instance, color1, color2, rotation)
@@ -621,6 +629,179 @@ return function(env)
                 if data.Object then data.Object.Volume = 0.5 end
             end
             noHitSoundSignals = {}
+        end
+    end)
+
+    -- =========================================================================
+    -- MUSIC PLAYER (Design Elegante e Compacto)
+    -- =========================================================================
+    local MusicBlock = Instance.new("Frame")
+    MusicBlock.Size = UDim2.new(1, -2, 0, 85)
+    MusicBlock.BackgroundColor3 = Color3.new(0, 0, 0)
+    MusicBlock.BackgroundTransparency = 0.45
+    MusicBlock.BorderSizePixel = 0
+    MusicBlock.Parent = Page
+    Instance.new("UICorner", MusicBlock).CornerRadius = UDim.new(0, 6)
+    
+    local muStroke = Instance.new("UIStroke", MusicBlock)
+    muStroke.Color = Color3.fromRGB(40, 40, 40)
+    muStroke.Thickness = 1
+
+    local muPadding = Instance.new("UIPadding", MusicBlock)
+    muPadding.PaddingTop = UDim.new(0, 10)
+    muPadding.PaddingBottom = UDim.new(0, 10)
+    muPadding.PaddingLeft = UDim.new(0, 12)
+    muPadding.PaddingRight = UDim.new(0, 12)
+
+    local MusicTitle = Instance.new("TextLabel")
+    MusicTitle.Size = UDim2.new(1, 0, 0, 16)
+    MusicTitle.BackgroundTransparency = 1
+    MusicTitle.Text = "Music Player"
+    MusicTitle.Font = Theme.Font
+    MusicTitle.TextColor3 = Theme.Text
+    MusicTitle.TextSize = 12
+    MusicTitle.TextXAlignment = Enum.TextXAlignment.Left
+    MusicTitle.Parent = MusicBlock
+
+    local textBox = Instance.new("TextBox")
+    textBox.Size = UDim2.new(0.35, -6, 0, 28)
+    textBox.Position = UDim2.new(0, 0, 0, 24)
+    textBox.PlaceholderText = "Insert Sound ID..."
+    textBox.Text = ""
+    textBox.BackgroundColor3 = Theme.SwitchOff
+    textBox.TextColor3 = Theme.Text
+    textBox.PlaceholderColor3 = Theme.TextDark
+    textBox.Font = Theme.Font
+    textBox.TextSize = 10
+    textBox.ClearTextOnFocus = true
+    textBox.Parent = MusicBlock
+    Instance.new("UICorner", textBox).CornerRadius = UDim.new(0, 4)
+    local tbStroke = Instance.new("UIStroke", textBox)
+    tbStroke.Color = Color3.fromRGB(40, 40, 40)
+
+    local playBtn = Instance.new("TextButton")
+    playBtn.Size = UDim2.new(0.3, -6, 0, 28)
+    playBtn.Position = UDim2.new(0.35, 6, 0, 24)
+    playBtn.BackgroundColor3 = Color3.new(0, 0, 0)
+    playBtn.BackgroundTransparency = 0.45
+    playBtn.Text = "Play"
+    playBtn.Font = Theme.Font
+    playBtn.TextSize = 10
+    playBtn.TextColor3 = Theme.TextDark
+    playBtn.Parent = MusicBlock
+    Instance.new("UICorner", playBtn).CornerRadius = UDim.new(0, 4)
+    local pbStroke = Instance.new("UIStroke", playBtn)
+    pbStroke.Color = Color3.fromRGB(40, 40, 40)
+
+    playBtn.MouseEnter:Connect(function()
+        TweenService:Create(pbStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
+        TweenService:Create(playBtn, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
+    end)
+    playBtn.MouseLeave:Connect(function()
+        if playBtn.Text ~= "Stop" then
+            TweenService:Create(pbStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
+            TweenService:Create(playBtn, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
+        end
+    end)
+
+    local isPlaying = false
+    playBtn.MouseButton1Click:Connect(function()
+        if isPlaying then
+            MusicSound:Stop()
+            isPlaying = false
+            playBtn.Text = "Play"
+            TweenService:Create(pbStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
+            TweenService:Create(playBtn, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
+        else
+            local text = textBox.Text
+            local cleanId = text:match("%d+")
+            if cleanId then
+                MusicSound:Stop()
+                MusicSound.SoundId = "rbxassetid://" .. cleanId
+                MusicSound:Play()
+                isPlaying = true
+                playBtn.Text = "Stop"
+                TweenService:Create(pbStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
+                TweenService:Create(playBtn, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
+            else
+                textBox.Text = ""
+                textBox.PlaceholderText = "Invalid ID!"
+            end
+        end
+    end)
+
+    local sliderFrame = Instance.new("Frame")
+    sliderFrame.Size = UDim2.new(0.35, -12, 0, 35)
+    sliderFrame.Position = UDim2.new(0.65, 12, 0, 19)
+    sliderFrame.BackgroundTransparency = 1
+    sliderFrame.Parent = MusicBlock
+
+    local sliderLabel = Instance.new("TextLabel")
+    sliderLabel.Size = UDim2.new(1, -35, 0, 14)
+    sliderLabel.BackgroundTransparency = 1
+    sliderLabel.Text = "Music Vol"
+    sliderLabel.Font = Theme.Font
+    sliderLabel.TextColor3 = Theme.TextDark
+    sliderLabel.TextSize = 10
+    sliderLabel.TextXAlignment = Enum.TextXAlignment.Left
+    sliderLabel.Parent = sliderFrame
+
+    local sliderVal = Instance.new("TextLabel")
+    sliderVal.Size = UDim2.new(0, 30, 0, 14)
+    sliderVal.Position = UDim2.new(1, -30, 0, 0)
+    sliderVal.BackgroundTransparency = 1
+    sliderVal.Text = "50%"
+    sliderVal.Font = Theme.Font
+    sliderVal.TextColor3 = Theme.Text
+    sliderVal.TextSize = 10
+    sliderVal.TextXAlignment = Enum.TextXAlignment.Right
+    sliderVal.Parent = sliderFrame
+
+    local sliderBar = Instance.new("Frame")
+    sliderBar.Size = UDim2.new(1, 0, 0, 5)
+    sliderBar.Position = UDim2.new(0, 0, 0, 20)
+    sliderBar.BackgroundColor3 = Theme.SwitchOff
+    sliderBar.BorderSizePixel = 0
+    sliderBar.Parent = sliderFrame
+    Instance.new("UICorner", sliderBar).CornerRadius = UDim.new(1, 0)
+
+    local sliderFill = Instance.new("Frame")
+    sliderFill.Size = UDim2.new(0.5, 0, 1, 0) -- default 50%
+    sliderFill.BackgroundColor3 = Theme.Accent
+    sliderFill.BorderSizePixel = 0
+    sliderFill.Parent = sliderBar
+    Instance.new("UICorner", sliderFill).CornerRadius = UDim.new(1, 0)
+    ApplyGradient(sliderFill, Theme.Accent, Theme.AccentDark, 0)
+
+    local sliderTrigger = Instance.new("TextButton")
+    sliderTrigger.Size = UDim2.new(1, 0, 1, 0)
+    sliderTrigger.BackgroundTransparency = 1
+    sliderTrigger.Text = ""
+    sliderTrigger.Parent = sliderBar
+
+    local mDragging = false
+    local function updateMusicVol(input)
+        local ratio = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
+        sliderFill.Size = UDim2.new(ratio, 0, 1, 0)
+        local pct = math.floor(ratio * 100)
+        sliderVal.Text = pct .. "%"
+        MusicSound.Volume = ratio
+    end
+
+    sliderTrigger.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            mDragging = true
+            updateMusicVol(input)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            mDragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if mDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            updateMusicVol(input)
         end
     end)
 
