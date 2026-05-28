@@ -10,14 +10,13 @@ return function(env)
     local UserConfigs = env.UserConfigs
     local GetParentTarget = env.GetParentTarget
     local UserInputService = game:GetService("UserInputService")
-    local RunService = game:GetService("RunService")
 
     -- Variaveis de Lógica e Backup do Antigo Script
     local LegitSettings = {MuteSteps = false, MuteJumps = false, MuteHack = false}
     local CurrentSoundIDs = {Running = 0, Jumping = 0, Landing = 0}
     local OriginalSoundBackups = setmetatable({}, {__mode = "k"})
 
-    -- Carregando estados e valores salvos do Bloco de Volumes (Inicia desligado por padrão)
+    -- Carregando estados e valores salvos (Desativado por padrão)
     local VolumesEnabled = UserConfigs["EnableSoundSettings"]
     if VolumesEnabled == nil then VolumesEnabled = false end
 
@@ -112,7 +111,6 @@ return function(env)
     for _, obj in ipairs(Workspace:GetDescendants()) do registerSound(obj) end
     Workspace.DescendantAdded:Connect(registerSound)
 
-    -- Sincronização de volume baseada no motor original do script
     task.spawn(function()
         while task.wait(0.3) do
             local enabled = VolumesEnabled
@@ -208,46 +206,108 @@ return function(env)
     local noHitSoundAddedConn = nil
 
     -- ==========================================
-    -- Estrutura de Helpers de UI do Script Principal
+    -- Interface Visual (Toggles Originais)
     -- ==========================================
-    local function CreateBlockHeader(parent, text)
-        local container = Instance.new("Frame")
-        container.Size = UDim2.new(1, 0, 0, 20)
-        container.BackgroundTransparency = 1
-        container.Parent = parent
-        
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, 0, 1, 0)
-        label.BackgroundTransparency = 1
-        label.Text = text
-        label.Font = Enum.Font.GothamBold
-        label.TextSize = 12
-        label.TextColor3 = Color3.fromRGB(255, 255, 255)
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.Parent = container
-        
-        return container
-    end
+    Library:CreateSection(Page, "Mute Sounds")
+    Library:CreateToggle(Page, "Remove Your Steps", false, function(state) 
+        LegitSettings.MuteSteps = state
+        if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
+    end)
+    Library:CreateToggle(Page, "Remove Your Jumps", false, function(state) 
+        LegitSettings.MuteJumps = state
+        if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
+    end)
+    Library:CreateToggle(Page, "Remove Pc Hack Sounds", false, function(state) 
+        if state then 
+            for _, obj in ipairs(Workspace:GetDescendants()) do 
+                if obj:IsA("Sound") and isHackSound(obj) and isFromComputer(obj) then muteHack(obj) end 
+            end
+            hackConnection = Workspace.DescendantAdded:Connect(function(obj) 
+                if obj:IsA("Sound") then 
+                    if isHackSound(obj) and isFromComputer(obj) then muteHack(obj) end 
+                end 
+            end) 
+        else 
+            if hackConnection then hackConnection:Disconnect() hackConnection = nil end
+            for _, data in ipairs(hackSignals) do 
+                if data.Signal then data.Signal:Disconnect() end
+                if data.Object then data.Object.Volume = 0.5 end 
+            end
+            hackSignals = {} 
+        end 
+    end)
+    Library:CreateToggle(Page, "No hit sound", false, function(state)
+        noHitSoundEnabled = state
+        if state then
+            local function monitorCharacter(character)
+                for _, child in ipairs(character:GetDescendants()) do muteIfHitSound(child) end
+                character.DescendantAdded:Connect(function(child)
+                    task.defer(function() if child and child.Parent and noHitSoundEnabled then muteIfHitSound(child) end end)
+                end)
+            end
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player.Character then monitorCharacter(player.Character) end
+                player.CharacterAdded:Connect(function(c) if noHitSoundEnabled then monitorCharacter(c) end end)
+            end
+            for _, sound in ipairs(game:GetService("SoundService"):GetDescendants()) do muteIfHitSound(sound) end
+            noHitSoundAddedConn = game:GetService("SoundService").DescendantAdded:Connect(function(child)
+                task.defer(function() if child and child.Parent and noHitSoundEnabled then muteIfHitSound(child) end end)
+            end)
+        else
+            if noHitSoundAddedConn then noHitSoundAddedConn:Disconnect() noHitSoundAddedConn = nil end
+            for _, data in ipairs(noHitSoundSignals) do 
+                if data.Signal then data.Signal:Disconnect() end
+                if data.Object then data.Object.Volume = 0.5 end
+            end
+            noHitSoundSignals = {}
+        end
+    end)
+    
+    -- Bloco de Volume Settings (Design Equivalente ao Script Principal)
+    Library:CreateSection(Page, "Volume Settings")
+    
+    local VolumeBlock = Instance.new("Frame")
+    VolumeBlock.Size = UDim2.new(1, -2, 0, 215)
+    VolumeBlock.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    VolumeBlock.BackgroundTransparency = 0.45
+    VolumeBlock.BorderSizePixel = 0
+    VolumeBlock.Parent = Page
+    Instance.new("UICorner", VolumeBlock).CornerRadius = UDim.new(0, 6)
+    
+    local vStroke = Instance.new("UIStroke", VolumeBlock)
+    vStroke.Color = Color3.fromRGB(40, 40, 40)
+    vStroke.Thickness = 1
+    
+    local listLayout = Instance.new("UIListLayout", VolumeBlock)
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    listLayout.Padding = UDim.new(0, 10)
+    
+    local padding = Instance.new("UIPadding", VolumeBlock)
+    padding.PaddingTop = UDim.new(0, 12)
+    padding.PaddingBottom = UDim.new(0, 12)
+    padding.PaddingLeft = UDim.new(0, 14)
+    padding.PaddingRight = UDim.new(0, 14)
 
-    local function CreateCategoryToggle(parent, text, defaultVal, callback)
+    -- Toggle Compacto Identico ao Script Principal (OldStyle)
+    local function CreateCompactToggle(parent, text, defaultVal, callback)
         local frame = Instance.new("Frame")
-        frame.Size = UDim2.new(1, 0, 0, 26)
+        frame.Size = UDim2.new(1, 0, 0, 24)
         frame.BackgroundTransparency = 1
         frame.Parent = parent
         
         local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -40, 1, 0)
+        label.Size = UDim2.new(1, -45, 1, 0)
         label.BackgroundTransparency = 1
         label.Text = text
         label.Font = Theme.Font
-        label.TextColor3 = Theme.TextDark
-        label.TextSize = 11
+        label.TextColor3 = Theme.Text
+        label.TextSize = 12
         label.TextXAlignment = Enum.TextXAlignment.Left
         label.Parent = frame
         
         local bg = Instance.new("TextButton")
-        bg.Size = UDim2.new(0, 30, 0, 14)
-        bg.Position = UDim2.new(1, -30, 0.5, -7)
+        bg.Size = UDim2.new(0, 34, 0, 18)
+        bg.Position = UDim2.new(1, -34, 0.5, -9)
         bg.BackgroundColor3 = Theme.SwitchOff
         bg.Text = ""
         bg.Parent = frame
@@ -258,8 +318,8 @@ return function(env)
         bgGrad.Parent = bg
         
         local cir = Instance.new("Frame")
-        cir.Size = UDim2.new(0, 12, 0, 12)
-        cir.Position = UDim2.new(0, 1, 0.5, -6)
+        cir.Size = UDim2.new(0, 14, 0, 14)
+        cir.Position = UDim2.new(0, 2, 0.5, -7)
         cir.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
         cir.Parent = bg
         Instance.new("UICorner", cir).CornerRadius = UDim.new(1, 0)
@@ -273,16 +333,14 @@ return function(env)
                     ColorSequenceKeypoint.new(0, Theme.Accent),
                     ColorSequenceKeypoint.new(1, Theme.AccentDark)
                 }
-                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(1, -13, 0.5, -6), BackgroundColor3 = Color3.new(0,0,0)}):Play()
-                TweenService:Create(label, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
+                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(1, -16, 0.5, -7), BackgroundColor3 = Color3.new(0,0,0)}):Play()
             else
                 TweenService:Create(bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.SwitchOff}):Play()
                 bgGrad.Color = ColorSequence.new{
                     ColorSequenceKeypoint.new(0, Theme.SwitchOff),
                     ColorSequenceKeypoint.new(1, Theme.SwitchOff)
                 }
-                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(0, 1, 0.5, -6), BackgroundColor3 = Color3.fromRGB(150, 150, 150)}):Play()
-                TweenService:Create(label, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
+                TweenService:Create(cir, TweenInfo.new(0.2), {Position = UDim2.new(0, 2, 0.5, -7), BackgroundColor3 = Color3.fromRGB(150, 150, 150)}):Play()
             end
         end
         
@@ -292,51 +350,42 @@ return function(env)
             callback(state)
         end)
         
-        frame.MouseEnter:Connect(function()
-            if not state then
-                TweenService:Create(label, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
-            end
-        end)
-        frame.MouseLeave:Connect(function()
-            if not state then
-                TweenService:Create(label, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
-            end
-        end)
-        
         updateVisuals()
         return {Set = function(val) state = val; updateVisuals(); callback(val) end}
     end
 
+    -- Slider Compacto Identico ao Script Principal (OldStyle)
     local function CreateCompactSlider(parent, text, min, max, defaultVal, callback)
         local frame = Instance.new("Frame")
-        frame.Size = UDim2.new(1, 0, 0, 34)
+        frame.Size = UDim2.new(1, 0, 0, 36)
         frame.BackgroundTransparency = 1
         frame.Parent = parent
         
         local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -50, 0, 14)
+        label.Size = UDim2.new(1, -45, 0, 16)
+        label.Position = UDim2.new(0, 0, 0, 0)
         label.BackgroundTransparency = 1
         label.Text = text
         label.Font = Theme.Font
-        label.TextColor3 = Theme.TextDark
+        label.TextColor3 = Theme.Text
         label.TextSize = 11
         label.TextXAlignment = Enum.TextXAlignment.Left
         label.Parent = frame
         
         local valLabel = Instance.new("TextLabel")
-        valLabel.Size = UDim2.new(0, 40, 0, 14)
+        valLabel.Size = UDim2.new(0, 40, 0, 16)
         valLabel.Position = UDim2.new(1, -40, 0, 0)
         valLabel.BackgroundTransparency = 1
         valLabel.Text = tostring(defaultVal)
         valLabel.Font = Theme.Font
-        valLabel.TextColor3 = Theme.Text
+        valLabel.TextColor3 = Theme.TextDark
         valLabel.TextSize = 11
         valLabel.TextXAlignment = Enum.TextXAlignment.Right
         valLabel.Parent = frame
         
         local bar = Instance.new("Frame")
-        bar.Size = UDim2.new(1, 0, 0, 5)
-        bar.Position = UDim2.new(0, 0, 0, 20)
+        bar.Size = UDim2.new(1, 0, 0, 8)
+        bar.Position = UDim2.new(0, 0, 0, 22)
         bar.BackgroundColor3 = Theme.SwitchOff
         bar.BorderSizePixel = 0
         bar.Parent = frame
@@ -406,15 +455,15 @@ return function(env)
 
     local function CreateCompactButton(parent, text, callback)
         local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(1, 0, 0, 24)
-        btn.BackgroundColor3 = Color3.new(0, 0, 0)
+        btn.Size = UDim2.new(1, 0, 0, 26)
+        btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
         btn.BackgroundTransparency = 0.45
         btn.Text = text
         btn.Font = Enum.Font.GothamBold
         btn.TextSize = 11
-        btn.TextColor3 = Theme.TextDark
+        btn.TextColor3 = Theme.Text
         btn.Parent = parent
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
         
         local stroke = Instance.new("UIStroke", btn)
         stroke.Color = Color3.fromRGB(40, 40, 40)
@@ -433,119 +482,13 @@ return function(env)
         return btn
     end
 
-    -- ==========================================
-    -- MUTE SOUNDS (Design Alinhado ao Hub)
-    -- ==========================================
-    local MuteBlock = Instance.new("Frame")
-    MuteBlock.Size = UDim2.new(1, -2, 0, 165)
-    MuteBlock.BackgroundColor3 = Color3.new(0, 0, 0)
-    MuteBlock.BackgroundTransparency = 0.45
-    MuteBlock.BorderSizePixel = 0
-    MuteBlock.Parent = Page
-    Instance.new("UICorner", MuteBlock).CornerRadius = UDim.new(0, 6)
-    
-    local mStroke = Instance.new("UIStroke", MuteBlock)
-    mStroke.Color = Color3.fromRGB(40, 40, 40)
-    mStroke.Thickness = 1
-    
-    local mListLayout = Instance.new("UIListLayout", MuteBlock)
-    mListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    mListLayout.Padding = UDim.new(0, 6)
-    
-    local mPadding = Instance.new("UIPadding", MuteBlock)
-    mPadding.PaddingTop = UDim.new(0, 10)
-    mPadding.PaddingBottom = UDim.new(0, 10)
-    mPadding.PaddingLeft = UDim.new(0, 12)
-    mPadding.PaddingRight = UDim.new(0, 12)
-
-    CreateBlockHeader(MuteBlock, "MUTE SOUNDS")
-
-    CreateCategoryToggle(MuteBlock, "Remove Your Steps", false, function(state) 
-        LegitSettings.MuteSteps = state
-    end)
-    CreateCategoryToggle(MuteBlock, "Remove Your Jumps", false, function(state) 
-        LegitSettings.MuteJumps = state
-    end)
-    CreateCategoryToggle(MuteBlock, "Remove Pc Hack Sounds", false, function(state) 
-        if state then 
-            for _, obj in ipairs(Workspace:GetDescendants()) do 
-                if obj:IsA("Sound") and isHackSound(obj) and isFromComputer(obj) then muteHack(obj) end 
-            end
-            hackConnection = Workspace.DescendantAdded:Connect(function(obj) 
-                if obj:IsA("Sound") then 
-                    if isHackSound(obj) and isFromComputer(obj) then muteHack(obj) end 
-                end 
-            end) 
-        else 
-            if hackConnection then hackConnection:Disconnect() hackConnection = nil end
-            for _, data in ipairs(hackSignals) do 
-                if data.Signal then data.Signal:Disconnect() end
-                if data.Object then data.Object.Volume = 0.5 end 
-            end
-            hackSignals = {} 
-        end 
-    end)
-    CreateCategoryToggle(MuteBlock, "No hit sound", false, function(state)
-        noHitSoundEnabled = state
-        if state then
-            local function monitorCharacter(character)
-                for _, child in ipairs(character:GetDescendants()) do muteIfHitSound(child) end
-                character.DescendantAdded:Connect(function(child)
-                    task.defer(function() if child and child.Parent and noHitSoundEnabled then muteIfHitSound(child) end end)
-                end)
-            end
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player.Character then monitorCharacter(player.Character) end
-                player.CharacterAdded:Connect(function(c) if noHitSoundEnabled then monitorCharacter(c) end end)
-            end
-            for _, sound in ipairs(game:GetService("SoundService"):GetDescendants()) do muteIfHitSound(sound) end
-            noHitSoundAddedConn = game:GetService("SoundService").DescendantAdded:Connect(function(child)
-                task.defer(function() if child and child.Parent and noHitSoundEnabled then muteIfHitSound(child) end end)
-            end)
-        else
-            if noHitSoundAddedConn then noHitSoundAddedConn:Disconnect() noHitSoundAddedConn = nil end
-            for _, data in ipairs(noHitSoundSignals) do 
-                if data.Signal then data.Signal:Disconnect() end
-                if data.Object then data.Object.Volume = 0.5 end
-            end
-            noHitSoundSignals = {}
-        end
-    end)
-    
-    -- ==========================================
-    -- VOLUME SETTINGS (Design Alinhado ao Hub)
-    -- ==========================================
-    local VolumeBlock = Instance.new("Frame")
-    VolumeBlock.Size = UDim2.new(1, -2, 0, 225)
-    VolumeBlock.BackgroundColor3 = Color3.new(0, 0, 0)
-    VolumeBlock.BackgroundTransparency = 0.45
-    VolumeBlock.BorderSizePixel = 0
-    VolumeBlock.Parent = Page
-    Instance.new("UICorner", VolumeBlock).CornerRadius = UDim.new(0, 6)
-    
-    local vStroke = Instance.new("UIStroke", VolumeBlock)
-    vStroke.Color = Color3.fromRGB(40, 40, 40)
-    vStroke.Thickness = 1
-    
-    local listLayout = Instance.new("UIListLayout", VolumeBlock)
-    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    listLayout.Padding = UDim.new(0, 8)
-    
-    local padding = Instance.new("UIPadding", VolumeBlock)
-    padding.PaddingTop = UDim.new(0, 10)
-    padding.PaddingBottom = UDim.new(0, 10)
-    padding.PaddingLeft = UDim.new(0, 12)
-    padding.PaddingRight = UDim.new(0, 12)
-
-    CreateBlockHeader(VolumeBlock, "VOLUME SETTINGS")
-
-    -- Toggle Master do Bloco
-    CreateCompactToggle(VolumeBlock, "Enable Volume Modifier", VolumesEnabled, function(state)
+    -- Ativador Master do Bloco (Volume Modifier)
+    local MasterToggle = CreateCompactToggle(VolumeBlock, "Enable Volume Modifier", VolumesEnabled, function(state)
         VolumesEnabled = state
         UserConfigs["EnableSoundSettings"] = state
     end)
 
-    -- Sliders Compactos
+    -- Sliders Individuais com Escala Correta e Design Integrado
     local FootstepsSlider = CreateCompactSlider(VolumeBlock, "FootSteps Volume", 0, 10, FootstepsVolMultiplier, function(val)
         FootstepsVolMultiplier = val
         UserConfigs["FootstepsVol"] = val
@@ -561,16 +504,14 @@ return function(env)
         UserConfigs["FallVol"] = val
     end)
 
-    -- Botão de Reset
+    -- Botão de Reset integrado
     CreateCompactButton(VolumeBlock, "Reset Volumes", function()
         FootstepsSlider.Set(1)
         JumpSlider.Set(1)
         FallSlider.Set(1)
     end)
     
-    -- ==========================================
-    -- CUSTOM SOUND PACKS (Design Original)
-    -- ==========================================
+    -- Seção Custom Sound Packs (Mantida com o design normal de cartões originais solicitado)
     Library:CreateSection(Page, "Custom Sound Packs")
     local targetParentSounds = GetParentTarget(Page)
     
@@ -690,7 +631,7 @@ return function(env)
         end
     end
 
-    -- Criando o botão Reset Sounds integrado ao layout original
+    -- Criando o botão Reset Sounds integrado ao layout
     Library:CreateButton(Page, "Reset Sounds", function()
         CurrentSoundIDs.Running = "0"
         CurrentSoundIDs.Jumping = "0"
