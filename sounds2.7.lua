@@ -11,69 +11,67 @@ return function(env)
     local GetParentTarget = env.GetParentTarget
     local UserInputService = game:GetService("UserInputService")
 
-    -- ==========================================
-    -- CONVERSÃO DINÂMICA DA PÁGINA PARA O ESTILO MODERNO DO HUB
-    -- ==========================================
-    for _, child in ipairs(Page:GetChildren()) do
-        if child:IsA("UIListLayout") or child:IsA("UIPadding") then
-            child:Destroy()
-        end
+    -- =========================================================================
+    -- CONVERSÃO DINÂMICA PARA O DESIGN MODERNO (LeftCol / RightCol)
+    -- =========================================================================
+    if Page:GetAttribute("OldStyle") == true then
+        Page:SetAttribute("OldStyle", false)
+        
+        local oldLayout = Page:FindFirstChildOfClass("UIListLayout")
+        if oldLayout then oldLayout:Destroy() end
+        local oldPadding = Page:FindFirstChildOfClass("UIPadding")
+        if oldPadding then oldPadding:Destroy() end
+
+        local PageLayout = Instance.new("UIListLayout")
+        PageLayout.FillDirection = Enum.FillDirection.Horizontal
+        PageLayout.Padding = UDim.new(0, 12) 
+        PageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        PageLayout.Parent = Page
+
+        local PP = Instance.new("UIPadding")
+        PP.PaddingBottom = UDim.new(0, 10)
+        PP.Parent = Page
+
+        local LeftCol = Instance.new("Frame")
+        LeftCol.Name = "LeftCol"
+        LeftCol.Size = UDim2.new(0.5, -6, 0, 0)
+        LeftCol.AutomaticSize = Enum.AutomaticSize.Y
+        LeftCol.BackgroundTransparency = 1
+        LeftCol.Parent = Page
+        local LL = Instance.new("UIListLayout")
+        LL.Padding = UDim.new(0, 10)
+        LL.SortOrder = Enum.SortOrder.LayoutOrder
+        LL.Parent = LeftCol
+
+        local RightCol = Instance.new("Frame")
+        RightCol.Name = "RightCol"
+        RightCol.Size = UDim2.new(0.5, -6, 0, 0)
+        RightCol.AutomaticSize = Enum.AutomaticSize.Y
+        RightCol.BackgroundTransparency = 1
+        RightCol.Parent = Page
+        local RL = Instance.new("UIListLayout")
+        RL.Padding = UDim.new(0, 10)
+        RL.SortOrder = Enum.SortOrder.LayoutOrder
+        RL.Parent = RightCol
+
+        local SectionCount = Instance.new("IntValue")
+        SectionCount.Name = "SectionCount"
+        SectionCount.Value = 0
+        SectionCount.Parent = Page
     end
 
-    local PageLayout = Instance.new("UIListLayout")
-    PageLayout.FillDirection = Enum.FillDirection.Horizontal
-    PageLayout.Padding = UDim.new(0, 12)
-    PageLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    PageLayout.Parent = Page
-
-    local PP = Instance.new("UIPadding")
-    PP.PaddingBottom = UDim.new(0, 10)
-    PP.Parent = Page
-
-    local LeftCol = Instance.new("Frame")
-    LeftCol.Name = "LeftCol"
-    LeftCol.Size = UDim2.new(0.5, -6, 0, 0)
-    LeftCol.AutomaticSize = Enum.AutomaticSize.Y
-    LeftCol.BackgroundTransparency = 1
-    LeftCol.Parent = Page
-
-    local LL = Instance.new("UIListLayout")
-    LL.Padding = UDim.new(0, 10)
-    LL.SortOrder = Enum.SortOrder.LayoutOrder
-    LL.Parent = LeftCol
-
-    local RightCol = Instance.new("Frame")
-    RightCol.Name = "RightCol"
-    RightCol.Size = UDim2.new(0.5, -6, 0, 0)
-    RightCol.AutomaticSize = Enum.AutomaticSize.Y
-    RightCol.BackgroundTransparency = 1
-    RightCol.Parent = Page
-
-    local RL = Instance.new("UIListLayout")
-    RL.Padding = UDim.new(0, 10)
-    RL.SortOrder = Enum.SortOrder.LayoutOrder
-    RL.Parent = RightCol
-
-    local SectionCount = Instance.new("IntValue")
-    SectionCount.Name = "SectionCount"
-    SectionCount.Value = 0
-    SectionCount.Parent = Page
-
-    -- Força a biblioteca a renderizar o estilo moderno (toggles transparentes dentro de boxes)
-    Page:SetAttribute("OldStyle", false)
-
-    -- Variaveis de Lógica e Backup
+    -- Variaveis de Lógica e Backup do Antigo Script
     local LegitSettings = {MuteSteps = false, MuteJumps = false, MuteHack = false}
     local CurrentSoundIDs = {Running = 0, Jumping = 0, Landing = 0}
     local OriginalSoundBackups = setmetatable({}, {__mode = "k"})
 
-    -- Carregando estados e valores salvos do Bloco de Volumes
-    local VolumesEnabled = UserConfigs["EnableSoundSettings"]
+    -- Carregando estados salvos do Bloco de Volumes (Inicia desligado por padrão)
+    local VolumesEnabled = UserConfigs["SoundPage_Enable Volume Modifier"]
     if VolumesEnabled == nil then VolumesEnabled = false end
 
-    local FootstepsVolMultiplier = UserConfigs["FootstepsVol"] or 1
-    local JumpVolMultiplier = UserConfigs["JumpVol"] or 1
-    local FallVolMultiplier = UserConfigs["FallVol"] or 1
+    local FootstepsVolMultiplier = UserConfigs["SoundPage_FootSteps Volume"] or 1
+    local JumpVolMultiplier = UserConfigs["SoundPage_Jump Volume"] or 1
+    local FallVolMultiplier = UserConfigs["SoundPage_Fall Volume"] or 1
 
     local function formatID(id)
         if type(id) == "number" and id > 0 then return "rbxassetid://" .. id
@@ -130,7 +128,7 @@ return function(env)
     for _, player in ipairs(Players:GetPlayers()) do setupPlayerSoundEvents(player) end
     Players.PlayerAdded:Connect(setupPlayerSoundEvents)
 
-    -- Lógica de Mute local
+    -- Sincronização e monitoramento de volumes
     local function ProcessCharacter(char)
         local root = char:WaitForChild("HumanoidRootPart", 10)
         if not root then return end
@@ -216,7 +214,7 @@ return function(env)
     
     local noHitSoundAddedConn = nil
 
-    -- Tabelas fracas para os Sliders de Volume
+    -- Tabelas fracas para mapeamento rápido de categorias de volume
     local ActiveSounds = setmetatable({}, {__mode = "k"})
     local SoundCategories = setmetatable({}, {__mode = "k"})
     local originalVolumeBackup = setmetatable({}, {__mode = "k"})
@@ -248,13 +246,13 @@ return function(env)
     for _, obj in ipairs(Workspace:GetDescendants()) do registerSound(obj) end
     Workspace.DescendantAdded:Connect(registerSound)
 
-    -- Laço de sincronização global
+    -- Laço de sincronização de alto desempenho
     task.spawn(function()
         while task.wait(0.3) do
-            local enabled = VolumesEnabled
-            local stepMult = FootstepsVolMultiplier
-            local jumpMult = JumpVolMultiplier
-            local fallMult = FallVolMultiplier
+            local enabled = UserConfigs["SoundPage_Enable Volume Modifier"]
+            local stepMult = UserConfigs["SoundPage_FootSteps Volume"] or 1
+            local jumpMult = UserConfigs["SoundPage_Jump Volume"] or 1
+            local fallMult = UserConfigs["SoundPage_Fall Volume"] or 1
             local muteSteps = LegitSettings.MuteSteps
             local muteJumps = LegitSettings.MuteJumps
             local localChar = LocalPlayer.Character
@@ -292,18 +290,21 @@ return function(env)
         end
     end)
 
-    -- ==========================================
-    -- DESIGN MODERNO: SEÇÃO DE MUTES (COLUNA ESQUERDA)
-    -- ==========================================
-    Library:CreateSection(Page, "Mute Sounds", "Left")
+    -- =========================================================================
+    -- COLUNA ESQUERDA (Left Column)
+    -- =========================================================================
+    Library:CreateSection(Page, "Mute Settings", "Left")
+    
     Library:CreateToggle(Page, "Remove Your Steps", false, function(state) 
         LegitSettings.MuteSteps = state
         if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
     end)
+    
     Library:CreateToggle(Page, "Remove Your Jumps", false, function(state) 
         LegitSettings.MuteJumps = state
         if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
     end)
+    
     Library:CreateToggle(Page, "Remove Pc Hack Sounds", false, function(state) 
         if state then 
             for _, obj in ipairs(Workspace:GetDescendants()) do 
@@ -323,6 +324,7 @@ return function(env)
             hackSignals = {} 
         end 
     end)
+    
     Library:CreateToggle(Page, "No hit sound", false, function(state)
         noHitSoundEnabled = state
         if state then
@@ -349,30 +351,26 @@ return function(env)
             noHitSoundSignals = {}
         end
     end)
-    
-    -- ==========================================
-    -- DESIGN MODERNO: CONFIGURAÇÃO DE VOLUMES (COLUNA DIREITA)
-    -- ==========================================
+
+    -- =========================================================================
+    -- COLUNA DIREITA (Right Column)
+    -- =========================================================================
     Library:CreateSection(Page, "Volume Settings", "Right")
     
-    local MasterToggle = Library:CreateToggle(Page, "Enable Volume Modifier", VolumesEnabled, function(state)
+    Library:CreateToggle(Page, "Enable Volume Modifier", false, function(state)
         VolumesEnabled = state
-        UserConfigs["EnableSoundSettings"] = state
     end)
-
-    local FootstepsSlider = Library:CreateSlider(Page, "FootSteps Volume", 0, 10, FootstepsVolMultiplier, function(val)
+    
+    local FootstepsSlider = Library:CreateSlider(Page, "FootSteps Volume", 0, 10, 1, function(val)
         FootstepsVolMultiplier = val
-        UserConfigs["FootstepsVol"] = val
     end)
     
-    local JumpSlider = Library:CreateSlider(Page, "Jump Volume", 0, 10, JumpVolMultiplier, function(val)
+    local JumpSlider = Library:CreateSlider(Page, "Jump Volume", 0, 10, 1, function(val)
         JumpVolMultiplier = val
-        UserConfigs["JumpVol"] = val
     end)
     
-    local FallSlider = Library:CreateSlider(Page, "Fall Volume", 0, 10, FallVolMultiplier, function(val)
+    local FallSlider = Library:CreateSlider(Page, "Fall Volume", 0, 10, 1, function(val)
         FallVolMultiplier = val
-        UserConfigs["FallVol"] = val
     end)
 
     Library:CreateButton(Page, "Reset Volumes", function()
@@ -380,84 +378,56 @@ return function(env)
         JumpSlider.Set(1)
         FallSlider.Set(1)
     end)
-    
-    -- ==========================================
-    -- CUSTOM SOUND PACKS (MANTÉM O DESIGN EXCLUSIVO DOS CARTÕES)
-    -- ==========================================
+
+    -- =========================================================================
+    -- GERENCIADOR DE SOUND CARDS (Design Unificado)
+    -- =========================================================================
     local WalkButtons = {}
     local JumpButtons = {}
     local FallButtons = {}
 
-    local savedWalk = UserConfigs["CustomSound_Walk"] or "0"
-    local savedJump = UserConfigs["CustomSound_Jump"] or "0"
-    local savedFall = UserConfigs["CustomSound_Fall"] or "0"
-
-    CurrentSoundIDs.Running = savedWalk
-    CurrentSoundIDs.Jumping = savedJump
-    CurrentSoundIDs.Landing = savedFall
-
-    local function updateButtonVisuals(categoryDict, activeId)
-        for id, data in pairs(categoryDict) do
-            if id == activeId then
-                TweenService:Create(data.Btn, TweenInfo.new(0.3), {BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0, TextColor3 = Color3.new(0,0,0)}):Play()
-                TweenService:Create(data.Stroke, TweenInfo.new(0.3), {Color = Theme.Accent, Transparency = 0}):Play()
-            else
-                TweenService:Create(data.Btn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.new(0,0,0), BackgroundTransparency = 0.45, TextColor3 = Color3.fromRGB(150,150,150)}):Play()
-                TweenService:Create(data.Stroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(40, 40, 40), Transparency = 0}):Play()
-            end
-        end
-    end
-
-    local function CreateSoundCard(Parent, TitleText, Actions)
+    local function CreateSoundCard(ParentPage, TitleText, Actions)
+        local parent = GetParentTarget(ParentPage)
         local Card = Instance.new("Frame")
-        Card.Size = UDim2.new(1, -2, 0, 65)
-        Card.Position = UDim2.new(0, 1, 0, 0)
-        Card.BackgroundColor3 = Color3.new(0, 0, 0)
-        Card.BackgroundTransparency = 0.45 
-        Card.BorderSizePixel = 0
-        Card.Parent = Parent
-        Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 6)
-        
-        local cardStroke = Instance.new("UIStroke", Card)
-        cardStroke.Color = Color3.fromRGB(40, 40, 40)
-        cardStroke.Thickness = 1
+        Card.Size = UDim2.new(1, 0, 0, 48)
+        Card.BackgroundTransparency = 1
+        Card.Parent = parent
 
         local Title = Instance.new("TextLabel")
-        Title.Size = UDim2.new(1, -20, 0, 20)
-        Title.Position = UDim2.new(0, 10, 0, 5)
+        Title.Size = UDim2.new(1, 0, 0, 16)
         Title.BackgroundTransparency = 1
         Title.Text = TitleText
         Title:SetAttribute("OriginalText", TitleText)
-        Title.TextColor3 = Theme.Text
+        Title.TextColor3 = Theme.TextDark
         Title.Font = Theme.Font
-        Title.TextSize = 12
+        Title.TextSize = 10
         Title.TextXAlignment = Enum.TextXAlignment.Left
         Title.Parent = Card
 
         local BtnContainer = Instance.new("Frame")
-        BtnContainer.Size = UDim2.new(1, -20, 0, 26)
-        BtnContainer.Position = UDim2.new(0, 10, 0, 30)
+        BtnContainer.Size = UDim2.new(1, 0, 0, 24)
+        BtnContainer.Position = UDim2.new(0, 0, 0, 18)
         BtnContainer.BackgroundTransparency = 1
         BtnContainer.Parent = Card
 
         local layout = Instance.new("UIListLayout", BtnContainer)
         layout.FillDirection = Enum.FillDirection.Horizontal
-        layout.Padding = UDim.new(0, 8)
+        layout.Padding = UDim.new(0, 6)
         layout.SortOrder = Enum.SortOrder.LayoutOrder
 
         local btnWidth = (1 / #Actions)
         for _, act in ipairs(Actions) do
             local btn = Instance.new("TextButton")
-            btn.Size = UDim2.new(btnWidth, -((#Actions-1)*8 / #Actions), 1, 0)
+            btn.Size = UDim2.new(btnWidth, -((#Actions-1)*6 / #Actions), 1, 0)
             btn.BackgroundColor3 = Color3.new(0, 0, 0)
             btn.BackgroundTransparency = 0.45
             btn.Text = act.Name
             btn:SetAttribute("OriginalText", act.Name)
             btn.Font = Enum.Font.GothamBold
-            btn.TextSize = 11
+            btn.TextSize = 10
             btn.TextColor3 = Color3.fromRGB(150, 150, 150)
             btn.Parent = BtnContainer
-            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
 
             local btnStroke = Instance.new("UIStroke", btn)
             btnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
@@ -500,62 +470,77 @@ return function(env)
         end
     end
 
-    -- Cria as seções de pacotes de forma distribuída para manter a harmonia visual
-    Library:CreateSection(Page, "Custom Sound Packs (Part 1)", "Left")
-    local colEsquerdaSons = GetParentTarget(Page)
+    -- =========================================================================
+    -- SOUND PACKS: COLUNA ESQUERDA (Left Column)
+    -- =========================================================================
+    Library:CreateSection(Page, "Sound Packs (Part 1)", "Left")
 
-    CreateSoundCard(colEsquerdaSons, "michawell", {
+    CreateSoundCard(Page, "michawell", {
         {Name = "Walk", ID = "116140177933689", Type = "Walk"},
         {Name = "Jump", ID = "70420181848348", Type = "Jump"}
     })
-    CreateSoundCard(colEsquerdaSons, "DraxynSoulx", {
+
+    CreateSoundCard(Page, "DraxynSoulx", {
         {Name = "Walk", ID = "130152479167305", Type = "Walk"},
         {Name = "Jump", ID = "122238807601932", Type = "Jump"},
         {Name = "Fall", ID = "71782790555091", Type = "Fall"}
     })
-    CreateSoundCard(colEsquerdaSons, "Luana_Mitxu", {
+
+    CreateSoundCard(Page, "Luana_Mitxu", {
         {Name = "Walk", ID = "107070338913559", Type = "Walk"},
         {Name = "Jump", ID = "133939057526098", Type = "Jump"}
     })
-    CreateSoundCard(colEsquerdaSons, "Facility Gamer", {
+
+    CreateSoundCard(Page, "Facility Gamer", {
         {Name = "Walk", ID = "131592620665625", Type = "Walk"},
         {Name = "Jump", ID = "89459688918065", Type = "Jump"}
     })
-    CreateSoundCard(colEsquerdaSons, "NoobTwoPoint", {
+
+    -- =========================================================================
+    -- SOUND PACKS: COLUNA DIREITA (Right Column)
+    -- =========================================================================
+    Library:CreateSection(Page, "Sound Packs (Part 2)", "Right")
+
+    CreateSoundCard(Page, "NoobTwoPoint", {
         {Name = "Walk", ID = "110709356093026", Type = "Walk"},
         {Name = "Jump", ID = "124276657634407", Type = "Jump"}
     })
 
-    Library:CreateSection(Page, "Custom Sound Packs (Part 2)", "Right")
-    local colDireitaSons = GetParentTarget(Page)
-
-    CreateSoundCard(colDireitaSons, "Tio Morcego", {
+    CreateSoundCard(Page, "Tio Morcego", {
         {Name = "Walk", ID = "97458293386939", Type = "Walk"},
         {Name = "Jump", ID = "72503238596964", Type = "Jump"},
         {Name = "Fall", ID = "83702883984130", Type = "Fall"}
     })
-    CreateSoundCard(colDireitaSons, "FKPS", {
+
+    CreateSoundCard(Page, "FKPS", {
         {Name = "Walk", ID = "97733831736820", Type = "Walk"},
         {Name = "Jump", ID = "86031664547378", Type = "Jump"},
         {Name = "Fall", ID = "78180192109919", Type = "Fall"}
     })
-    CreateSoundCard(colDireitaSons, "Normal", {
+
+    CreateSoundCard(Page, "Normal", {
         {Name = "Walk", ID = "79392671800290", Type = "Walk"},
         {Name = "Jump", ID = "80853972291847", Type = "Jump"},
         {Name = "Fall", ID = "88947883822456", Type = "Fall"}
     })
-    CreateSoundCard(colDireitaSons, "Extra Jumps (Part 1)", {
+
+    -- =========================================================================
+    -- EXTRA SOUND PACKS (Right Column)
+    -- =========================================================================
+    Library:CreateSection(Page, "Extra Sound Packs", "Right")
+
+    CreateSoundCard(Page, "Extra Jumps (Part 1)", {
         {Name = "Pew", ID = "136299701781122", Type = "Jump"},
         {Name = "Sharingan", ID = "118102230060662", Type = "Jump"},
         {Name = "Albino", ID = "129415490412106", Type = "Jump"}
     })
-    CreateSoundCard(colDireitaSons, "Extra Jumps (Part 2)", {
+
+    CreateSoundCard(Page, "Extra Jumps (Part 2)", {
         {Name = "1Rxdrigo", ID = "80276851298640", Type = "Jump"},
         {Name = "Three Jumps", ID = "126925004664723", Type = "Jump"},
         {Name = "Yusei Jump", ID = "119519595212440", Type = "Jump"}
     })
 
-    -- Adiciona o botão de Reset no final do bloco da direita
     Library:CreateButton(Page, "Reset Sounds", function()
         CurrentSoundIDs.Running = "0"
         CurrentSoundIDs.Jumping = "0"
