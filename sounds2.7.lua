@@ -170,6 +170,13 @@ return function(env)
     local SoundCategories = setmetatable({}, {__mode = "k"})
     local originalVolumeBackup = setmetatable({}, {__mode = "k"})
 
+    -- Referências de volume estático para evitar o bug de travamento em volume 0
+    local BaseVolumes = {
+        Footsteps = 0.65,
+        Jump = 0.5,
+        Fall = 0.5
+    }
+
     local function getSoundCategory(sound)
         local name = sound.Name:lower()
         if name:find("running") or name:find("walk") or name:find("step") then
@@ -197,7 +204,7 @@ return function(env)
     for _, obj in ipairs(Workspace:GetDescendants()) do registerSound(obj) end
     Workspace.DescendantAdded:Connect(registerSound)
 
-    -- Laço de sincronização global otimizado (Prevenção de stutters)
+    -- Sincronizador de volumes otimizado utilizando volumes estáticos de referência
     task.spawn(function()
         while task.wait(0.3) do
             local enabled = VolumesEnabled
@@ -211,7 +218,7 @@ return function(env)
             for sound in pairs(ActiveSounds) do
                 local category = SoundCategories[sound]
                 if category then
-                    local origVol = originalVolumeBackup[sound] or 0.5
+                    local baseVol = BaseVolumes[category] or 0.5
                     local multiplier = 1
 
                     if enabled then
@@ -233,7 +240,7 @@ return function(env)
                         end
                     end
 
-                    local targetVol = origVol * multiplier
+                    local targetVol = baseVol * multiplier
                     if sound.Volume ~= targetVol then
                         pcall(function() sound.Volume = targetVol end)
                     end
@@ -246,9 +253,9 @@ return function(env)
     -- LAYOUT HÍBRIDO (Top 2-Column, Bottom Full-Width)
     -- =========================================================================
     
-    -- Container das configurações lado a lado
+    -- Container das configurações lado a lado com tamanho de segurança aumentado
     local SettingsContainer = Instance.new("Frame")
-    SettingsContainer.Size = UDim2.new(1, -2, 0, 210)
+    SettingsContainer.Size = UDim2.new(1, -2, 0, 230)
     SettingsContainer.BackgroundTransparency = 1
     SettingsContainer.Parent = Page
 
