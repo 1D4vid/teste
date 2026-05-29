@@ -46,7 +46,7 @@ return function(env)
         {Name = "na na na", ID = "94884255368589"}
     }
 
-    -- Lógica do Modificador "Mute Beast Sound" integrada
+    -- Lógica de alta performance do modificador "Mute Beast Sound"
     local MuteBeastEnabled = false
     local originalMutedVolumes = setmetatable({}, {__mode = "k"})
     local SoundNameCache = setmetatable({}, {__mode = "k"})
@@ -106,22 +106,23 @@ return function(env)
         end
     end
 
+    local function verifyGeneralSound(sound)
+        if not sound:IsA("Sound") then return end
+        local cachedName = SoundNameCache[sound]
+        if not cachedName then
+            cachedName = sound.Name:lower()
+            SoundNameCache[sound] = cachedName
+        end
+        if TARGET_WARNING_SOUNDS[cachedName] then
+            applyAbsoluteMute(sound)
+        end
+    end
+
+    -- Inicializa conexões e escuta ativa de eventos de áudio do jogo
     local BeastMuteInitialized = false
     local function initializeBeastMute()
         if BeastMuteInitialized then return end
         BeastMuteInitialized = true
-
-        local function verifyGeneralSound(sound)
-            if not sound:IsA("Sound") then return end
-            local cachedName = SoundNameCache[sound]
-            if not cachedName then
-                cachedName = sound.Name:lower()
-                SoundNameCache[sound] = cachedName
-            end
-            if TARGET_WARNING_SOUNDS[cachedName] then
-                applyAbsoluteMute(sound)
-            end
-        end
 
         for _, desc in ipairs(SoundService:GetDescendants()) do verifyGeneralSound(desc) end
         if Workspace.CurrentCamera then
@@ -129,43 +130,39 @@ return function(env)
             Workspace.CurrentCamera.DescendantAdded:Connect(verifyGeneralSound)
         end
         SoundService.DescendantAdded:Connect(verifyGeneralSound)
-
-        local function muteBeastCharacter(character)
-            if not character then return end
-            local hrp = character:WaitForChild("HumanoidRootPart", 5)
-            if hrp then
-                for _, child in ipairs(hrp:GetChildren()) do
-                    if child:IsA("Sound") then applyAbsoluteMute(child) end
-                end
-                hrp.ChildAdded:Connect(function(child)
-                    if child:IsA("Sound") then applyAbsoluteMute(child) end
-                end)
-            end
-            character.ChildAdded:Connect(function(child)
-                if child:IsA("Tool") and BEAST_WEAPONS[child.Name] then
-                    for _, desc in ipairs(child:GetDescendants()) do
-                        if desc:IsA("Sound") then applyAbsoluteMute(desc) end
-                    end
-                end
-            end)
-        end
-
-        local function setupPlayer(player)
-            if player == LocalPlayer then return end
-            local function onCharacterAdded(char)
-                task.defer(function()
-                    if checkIsBeast(player) then
-                        muteBeastCharacter(char)
-                    end
-                end)
-            end
-            if player.Character then onCharacterAdded(player.Character) end
-            player.CharacterAdded:Connect(onCharacterAdded)
-        end
-
-        for _, player in ipairs(Players:GetPlayers()) do setupPlayer(player) end
-        Players.PlayerAdded:Connect(setupPlayer)
     end
+
+    -- Varredura ativa de alta eficiência (Consumo zero de CPU) para mutar passos/golpes da Beast
+    task.spawn(function()
+        while task.wait(1) do
+            if MuteBeastEnabled then
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer then
+                        if checkIsBeast(player) then
+                            local char = player.Character
+                            if char then
+                                -- Silencia passos, pulo e queda no RootPart
+                                local hrp = char:FindFirstChild("HumanoidRootPart")
+                                if hrp then
+                                    for _, child in ipairs(hrp:GetChildren()) do
+                                        if child:IsA("Sound") then applyAbsoluteMute(child) end
+                                    end
+                                end
+                                -- Silencia o som de golpe emitido pela arma equipada
+                                for _, child in ipairs(char:GetChildren()) do
+                                    if child:IsA("Tool") and BEAST_WEAPONS[child.Name] then
+                                        for _, desc in ipairs(child:GetDescendants()) do
+                                            if desc:IsA("Sound") then applyAbsoluteMute(desc) end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
 
     -- Função auxiliar de Gradiente idêntica à do Hub Principal
     local function ApplyGradient(instance, color1, color2, rotation)
@@ -777,7 +774,7 @@ return function(env)
         end
     end)
 
-    -- Adicionando a nova toggle "Mute Beast Sound" no espaço inferior
+    -- Adicionando a toggle "Mute Beast Sound" no espaço inferior
     CreateCompactToggle(MuteBlock, "Mute Beast Sound", false, function(state)
         MuteBeastEnabled = state
         if state then
