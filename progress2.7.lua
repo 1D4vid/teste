@@ -1525,7 +1525,7 @@ return function(env)
                 TweenService:Create(label, TweenInfo.new(0.2, Enum.EasingStyle.Bounce), {TextSize = 28}):Play()
             end
 
-            local function AtualizarCor(combo)
+            local function daggerUpdateColor(combo)
                 local cor = Color3.fromRGB(255, 255, 255)
                 if combo >= 3 and combo <= 4 then cor = Color3.fromRGB(255, 215, 0)
                 elseif combo >= 5 and combo <= 6 then cor = Color3.fromRGB(255, 100, 0)
@@ -1567,7 +1567,7 @@ return function(env)
                             
                             hopCount = hopCount + 1
                             label.Text = "Wallhops: " .. hopCount
-                            AtualizarCor(hopCount)
+                            daggerUpdateColor(hopCount)
                             EfeitoPulo()
                             MostrarUI()
                         else
@@ -1615,7 +1615,7 @@ return function(env)
     -- =========================================================================
     Library:CreateSection(Page, "Beast Indicators")
     
-    -- 1. GetUp Timer (Novo sistema adaptado)
+    -- 1. GetUp Timer (Contador reativo adaptado)
     Library:CreateToggle(Page, "GetUp Timer", false, function(state)
         getupActive = state
         if state then
@@ -1787,6 +1787,19 @@ return function(env)
                     if not isRagdoll or isCaptured or isDead or forceExpired then
                         cleanupPlayer(p, con, listLabel, char)
                         return
+                    end
+
+                    -- Gerenciamento de Billboard Reativo (Cria/Destrói em tempo real baseado no estado do toggle)
+                    if not hideHeadGetUp then
+                        if head and (not bbLabel or not bbLabel.Parent or not head:FindFirstChild("RagdollCountdown")) then
+                            bbLabel = createBillboardCountdown(p, head)
+                        end
+                    else
+                        local oldBb = head and head:FindFirstChild("RagdollCountdown")
+                        if oldBb then
+                            oldBb:Destroy()
+                        end
+                        bbLabel = nil
                     end
 
                     if now - lastUpdate >= UI_UPDATE_INTERVAL then
@@ -2568,7 +2581,7 @@ return function(env)
     Library:CreateDropdown(Page, "PC Progress Design", {"Default", "Style 1", "Style 2"}, "Default", function(val)
         currentComputerStyle = val
         for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj.Name == "ProgressBar" and obj:IsA("BillboardGui") then obj:Destroy() end
+            if obj.Name == "ProgressBar" looming and obj:IsA("BillboardGui") then obj:Destroy() end
             if obj.Name == "ComputerHighlight" and obj:IsA("Highlight") then obj:Destroy() end
         end
         table.clear(CompProgConns)
@@ -2623,6 +2636,7 @@ return function(env)
     Library:CreateToggle(Page, "Hide Head GetUp", false, function(state)
         hideHeadGetUp = state
         if state then
+            -- Oculta imediatamente destruindo os existentes
             for i = 1, #cachedPlayersList do
                 local char = cachedPlayersList[i].Character
                 local head = char and char:FindFirstChild("Head")
