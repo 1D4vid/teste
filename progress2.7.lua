@@ -108,7 +108,7 @@ return function(env)
     local speedLabels2D = {}
     local speedScreenGui = nil
     local speedListFrame = nil
-    local speedCache = {} -- Cache de instâncias rápidas para o WalkSpeed
+    local speedCache = {} 
 
     -- Vars Wallhop Counter
     local WallhopStateConn = nil
@@ -1615,202 +1615,272 @@ return function(env)
     -- =========================================================================
     Library:CreateSection(Page, "Beast Indicators")
     
-    -- 1. GetUp Timer (Adaptado com o novo sistema de contagem regressiva de Ragdoll)
+    -- 1. GetUp Timer (Novo sistema adaptado)
     Library:CreateToggle(Page, "GetUp Timer", false, function(state)
         getupActive = state
         if state then
-            local COUNTDOWN_DURATION = 28
-            local globalLabels = {}
-            local activeConnections = {}
+            local CONFIG_GETUP = { Duration = 28 }
+            local UI_UPDATE_INTERVAL = 0.033
 
-            -- Limpeza de elementos e telas residuais
-            local targetGuiParent = (pcall(function() return CoreGui end) and CoreGui) or LocalPlayer:WaitForChild("PlayerGui")
-            local oldScreen = targetGuiParent:FindFirstChild("RagdollCountdownScreenUI")
-            if oldScreen then oldScreen:Destroy() end
-
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p.Character and p.Character:FindFirstChild("Head") then
-                    local b = p.Character.Head:FindFirstChild("RagdollCountdown")
-                    if b then b:Destroy() end
+            local colorGetUp = function(t)
+                local red = Color3.fromRGB(255, 0, 0)
+                local yellow = Color3.fromRGB(255, 220, 40)
+                local green = Color3.fromRGB(60, 255, 60)
+                if t > 0.5 then
+                    return yellow:Lerp(green, (t - 0.5) * 2)
+                else
+                    return red:Lerp(yellow, t * 2)
                 end
             end
 
-            -- Configuração estrutural do ScreenGui e Painel Lateral
+            local colorToRgbString = function(color)
+                return string.format("rgb(%d,%d,%d)", math.round(color.R * 255), math.round(color.G * 255), math.round(color.B * 255))
+            end
+
+            local targetGuiParent = (pcall(function() return CoreGui end) and CoreGui) or LocalPlayer:WaitForChild("PlayerGui")
+            
+            if targetGuiParent:FindFirstChild("RagdollCountdownScreenUI") then
+                targetGuiParent.RagdollCountdownScreenUI:Destroy()
+            end
+
             getupGui = Instance.new("ScreenGui")
             getupGui.Name = "RagdollCountdownScreenUI"
             getupGui.ResetOnSpawn = false
 
-            local globalFrame = Instance.new("Frame")
-            globalFrame.Size = UDim2.new(0, 300, 0, 400)
-            globalFrame.Position = UDim2.new(1, -310, 0.55, 0)
-            globalFrame.BackgroundTransparency = 1
-            globalFrame.Parent = getupGui
+            getupList = Instance.new("Frame")
+            getupList.Name = "RagdollCountdownFrame"
+            getupList.Size = UDim2.new(0, 300, 0, 400)
+            getupList.Position = UDim2.new(1, -310, 0.55, 0)
+            getupList.BackgroundTransparency = 1
+            getupList.Parent = getupGui
 
             local uiList = Instance.new("UIListLayout")
             uiList.Padding = UDim.new(0, 5)
-            uiList.Parent = globalFrame
+            uiList.Parent = getupList
 
             getupGui.Parent = targetGuiParent
 
-            local createBillboardCountdown = function(player)
-                local character = player.Character
-                if not character then return end
-                local head = character:FindFirstChild("Head")
-                if not head then return end
-                
-                -- Respeito à configuração "Hide Head GetUp"
-                if hideHeadGetUp then 
-                    local oldB = head:FindFirstChild("RagdollCountdown")
-                    if oldB then oldB:Destroy() end
-                    return nil, nil 
-                end
+            local isLocalPlayerFlying = function()
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                if not hrp then return false end
 
-                local billboard = head:FindFirstChild("RagdollCountdown")
-                if not billboard then
-                    billboard = Instance.new("BillboardGui")
-                    billboard.Name = "RagdollCountdown"
-                    billboard.AlwaysOnTop = true
-                    billboard.Size = UDim2.new(5, 0, 3, 0)
-                    billboard.StudsOffset = Vector3.new(0, 3.5, 0)
-                    
-                    local label = Instance.new("TextLabel")
-                    label.Name = "CountdownLabel"
-                    label.Size = UDim2.new(1, 0, 1, 0)
-                    label.BackgroundTransparency = 1
-                    label.TextScaled = true
-                    label.TextStrokeTransparency = 0.2
-                    label.TextStrokeColor3 = Color3.new(0, 0, 0)
-                    label.Parent = billboard
-                    
-                    billboard.Parent = head
+                local bg = hrp:FindFirstChildOfClass("BodyGyro")
+                local bv = hrp:FindFirstChildOfClass("BodyVelocity")
+
+                if bg and bv then
+                    if bg.MaxTorque.X > 1e7 and bv.MaxForce.X > 1e7 then
+                        return true
+                    end
                 end
-                return billboard, billboard:FindFirstChild("CountdownLabel")
+                return false
             end
 
-            local clearCountdown = function(player)
-                if player.Character and player.Character:FindFirstChild("Head") then
-                    local billboard = player.Character.Head:FindFirstChild("RagdollCountdown")
-                    if billboard then billboard:Destroy() end
+            local checkIfRagdoll = function(p, char, hum)
+                if p == LocalPlayer and isLocalPlayerFlying() then
+                    if activeGetUp[LocalPlayer] ~= nil then
+                        return true
+                    end
+                    return false
                 end
-                if globalLabels[player.UserId] then
-                    globalLabels[player.UserId]:Destroy()
-                    globalLabels[player.UserId] = nil
+
+                local isStateRagdoll = hum.PlatformStand or hum:GetState() == Enum.HumanoidStateType.Physics
+                if not isStateRagdoll then return false end
+                if hum.SeatPart then return false end
+
+                return true
+            end
+
+            local createBillboardCountdown = function(p, head)
+                if not head or hideHeadGetUp then return nil end
+                local oldBb = head:FindFirstChild("RagdollCountdown")
+                if oldBb then oldBb:Destroy() end
+
+                local billboard = Instance.new("BillboardGui")
+                billboard.Name = "RagdollCountdown"
+                billboard.AlwaysOnTop = true
+                billboard.Size = UDim2.new(5, 0, 3, 0)
+                billboard.StudsOffset = Vector3.new(0, 3.5, 0)
+
+                local label = Instance.new("TextLabel")
+                label.Name = "CountdownLabel"
+                label.Size = UDim2.new(1, 0, 1, 0)
+                label.BackgroundTransparency = 1
+                label.TextScaled = true
+                label.Font = Enum.Font.SourceSansBold
+                label.TextStrokeTransparency = 0.2
+                label.TextStrokeColor3 = Color3.new(0, 0, 0)
+                label.RichText = true
+                label.Parent = billboard
+
+                billboard.Parent = head
+                return label
+            end
+
+            local cleanupPlayer = function(p, con, frame, char)
+                if char then
+                    local head = char:FindFirstChild("Head")
+                    local bb = head and head:FindFirstChild("RagdollCountdown")
+                    if bb then bb:Destroy() end
                 end
-                if activeConnections[player.UserId] then
-                    activeConnections[player.UserId]:Disconnect()
-                    activeConnections[player.UserId] = nil
+                if frame then frame:Destroy() end
+                activeGetUp[p] = nil
+                if con then
+                    con:Disconnect()
+                    activeConnections[p] = nil
                 end
             end
 
-            local startCountdown = function(player)
-                local head = player.Character and player.Character:FindFirstChild("Head")
-                if not head then return end
-                local _, bbLabel = createBillboardCountdown(player)
-                
-                local endTime = tick() + COUNTDOWN_DURATION
-                if activeConnections[player.UserId] then
-                    activeConnections[player.UserId]:Disconnect()
+            local start = function(p, char, hum, hrp)
+                if activeConnections[p] then
+                    activeConnections[p]:Disconnect()
+                    activeConnections[p] = nil
                 end
                 
-                activeConnections[player.UserId] = RunService.RenderStepped:Connect(function()
-                    if not getupActive or not getupGui or not getupGui.Parent then
-                        clearCountdown(player)
+                local oldFrame = getupList:FindFirstChild(p.Name)
+                if oldFrame then oldFrame:Destroy() end
+
+                activeGetUp[p] = os.clock()
+                local lastHealth = hum.Health
+
+                local head = char:FindFirstChild("Head")
+                local bbLabel = createBillboardCountdown(p, head)
+
+                local listLabel = Instance.new("TextLabel")
+                listLabel.Name = p.Name
+                listLabel.Size = UDim2.new(1, 0, 0, 70)
+                listLabel.BackgroundTransparency = 1
+                listLabel.TextScaled = true
+                listLabel.Font = Enum.Font.SourceSansBold
+                listLabel.TextStrokeTransparency = 0.2
+                listLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+                listLabel.RichText = true
+                listLabel.Parent = getupList
+
+                local lastUpdate = 0
+                local con
+                con = RunService.Heartbeat:Connect(function()
+                    if not getupGui.Parent then
+                        cleanupPlayer(p, con, listLabel, char)
                         return
                     end
-                    local remaining = endTime - tick()
-                    if remaining <= 0 then
-                        clearCountdown(player)
+
+                    if not p.Parent or not char.Parent or not hum.Parent or not hrp or not hrp.Parent then
+                        cleanupPlayer(p, con, listLabel, char)
                         return
                     end
-                    local formatted = string.format("%.2f", remaining)
-                    
-                    if bbLabel and bbLabel.Parent then
-                        bbLabel.RichText = true
-                        bbLabel.Text = '<stroke thickness="3" color="rgb(0,0,0)"><font color="rgb(255,255,255)">' .. player.Name .. '</font></stroke>\n<stroke thickness="3" color="rgb(0,0,0)"><font color="rgb(255,0,0)">' .. formatted .. '</font></stroke>'
+
+                    local isRagdoll = checkIfRagdoll(p, char, hum)
+                    local isCaptured = hrp.Anchored
+                    local isDead = hum.Health <= 0
+
+                    local currentHealth = hum.Health
+                    if currentHealth < lastHealth then
+                        activeGetUp[p] = os.clock()
+                    end
+                    lastHealth = currentHealth
+
+                    local now = os.clock()
+                    local elapsed = now - (activeGetUp[p] or now)
+                    local forceExpired = elapsed >= (CONFIG_GETUP.Duration + 1.0)
+
+                    if not isRagdoll or isCaptured or isDead or forceExpired then
+                        cleanupPlayer(p, con, listLabel, char)
+                        return
                     end
 
-                    local label = globalLabels[player.UserId]
-                    if not label or not label.Parent then
-                        label = Instance.new("TextLabel")
-                        label.Size = UDim2.new(1, 0, 0, 70)
-                        label.BackgroundTransparency = 1
-                        label.TextScaled = true
-                        label.Font = Enum.Font.SourceSansBold
-                        label.TextStrokeTransparency = 0.2
-                        label.TextStrokeColor3 = Color3.new(0, 0, 0)
-                        label.Parent = globalFrame
-                        globalLabels[player.UserId] = label
-                    end
-                    label.RichText = true
-                    label.Text = '<stroke thickness="3" color="rgb(0,0,0)"><font color="rgb(255,255,255)">' .. player.Name .. '</font></stroke>\n<stroke thickness="3" color="rgb(0,0,0)"><font color="rgb(255,0,0)">' .. formatted .. '</font></stroke>'
-                end)
-            end
+                    if now - lastUpdate >= UI_UPDATE_INTERVAL then
+                        lastUpdate = now
 
-            local loopConn
-            loopConn = RunService.Heartbeat:Connect(function()
-                if not getupActive or not getupGui or not getupGui.Parent then
-                    if loopConn then loopConn:Disconnect() end
-                    for _, player in ipairs(Players:GetPlayers()) do
-                        clearCountdown(player)
-                    end
-                    return
-                end
-                for _, player in ipairs(Players:GetPlayers()) do
-                    local character = player.Character
-                    if character then
-                        local humanoid = character:FindFirstChildOfClass("Humanoid")
-                        local inRagdoll = humanoid and humanoid.PlatformStand
-                        local billboard = character:FindFirstChild("Head") and character.Head:FindFirstChild("RagdollCountdown")
-                        if inRagdoll then
-                            if not billboard then
-                                startCountdown(player)
+                        local r = math.max(CONFIG_GETUP.Duration - elapsed, 0)
+                        local c = colorGetUp(r / CONFIG_GETUP.Duration)
+                        local rgbColorString = colorToRgbString(c)
+                        local timeString = string.format("%.2f", r)
+
+                        local formattedText = '<stroke thickness="3" color="rgb(0,0,0)"><font color="rgb(255,255,255)">' .. p.Name .. '</font></stroke>\n<stroke thickness="3" color="rgb(0,0,0)"><font color="' .. rgbColorString .. '">' .. timeString .. '</font></stroke>'
+
+                        if bbLabel and bbLabel.Parent then
+                            if bbLabel.Text ~= formattedText then bbLabel.Text = formattedText end
+                        end
+                        if listLabel.Text ~= formattedText then listLabel.Text = formattedText end
+
+                        if r <= 0 then
+                            local zeroText = '<stroke thickness="3" color="rgb(0,0,0)"><font color="rgb(255,255,255)">' .. p.Name .. '</font></stroke>\n<stroke thickness="3" color="rgb(0,0,0)"><font color="rgb(255,0,0)">0.00</font></stroke>'
+                            if listLabel.Text ~= zeroText then listLabel.Text = zeroText end
+                            if bbLabel and bbLabel.Parent then
+                                if bbLabel.Text ~= zeroText then bbLabel.Text = zeroText end
                             end
-                        else
-                            clearCountdown(player)
                         end
                     end
+                end)
+
+                activeConnections[p] = con
+            end
+
+            local scanLoop = task.spawn(function()
+                while getupActive and getupGui.Parent do
+                    for i = 1, #cachedPlayersList do
+                        local p = cachedPlayersList[i]
+                        if not activeGetUp[p] then
+                            local char = p.Character
+                            local hum = char and char:FindFirstChildOfClass("Humanoid")
+                            if hum then
+                                local isRagdoll = checkIfRagdoll(p, char, hum)
+                                if isRagdoll then
+                                    local hrp = char:FindFirstChild("HumanoidRootPart")
+                                    if hrp then
+                                        local isCaptured = hrp.Anchored
+                                        if not isCaptured then
+                                            task.spawn(start, p, char, hum, hrp)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    task.wait(0.15)
                 end
             end)
-            table.insert(getupConns, loopConn)
+            table.insert(getupConns, scanLoop)
 
-            -- Injeta um finalizador dentro da tabela de conexões para limpeza geral ao desligar
-            table.insert(getupConns, {
-                Disconnect = function()
-                    getupActive = false
-                    if loopConn then loopConn:Disconnect() end
-                    for _, player in ipairs(Players:GetPlayers()) do
-                        clearCountdown(player)
-                    end
-                    if getupGui then
-                        getupGui:Destroy()
-                        getupGui = nil
-                    end
-                    table.clear(globalLabels)
-                    table.clear(activeConnections)
+            local pRem = Players.PlayerRemoving:Connect(function(p)
+                activeGetUp[p] = nil
+                if activeConnections[p] then
+                    activeConnections[p]:Disconnect()
+                    activeConnections[p] = nil
                 end
-            })
+                local oldFrame = getupList and getupList:FindFirstChild(p.Name)
+                if oldFrame then oldFrame:Destroy() end
+            end)
+            table.insert(getupConns, pRem)
         else
             getupActive = false
-            for _, c in ipairs(getupConns) do
-                if typeof(c) == "thread" then 
-                    task.cancel(c) 
-                elseif typeof(c) == "table" and c.Disconnect then
-                    c:Disconnect()
-                else 
-                    c:Disconnect() 
+            
+            for _, conn in ipairs(getupConns) do
+                if typeof(conn) == "thread" then
+                    task.cancel(conn)
+                else
+                    conn:Disconnect()
                 end
             end
             table.clear(getupConns)
-            
-            if getupGui then 
-                getupGui:Destroy() 
-                getupGui = nil 
+
+            for p, con in pairs(activeConnections) do
+                if con then con:Disconnect() end
             end
-            
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player.Character and player.Character:FindFirstChild("Head") then
-                    local billboard = player.Character.Head:FindFirstChild("RagdollCountdown")
-                    if billboard then billboard:Destroy() end
+            table.clear(activeConnections)
+            table.clear(activeGetUp)
+
+            if getupGui then
+                getupGui:Destroy()
+                getupGui = nil
+            end
+
+            for i = 1, #cachedPlayersList do
+                local p = cachedPlayersList[i]
+                if p.Character and p.Character:FindFirstChild("Head") then
+                    local b = p.Character.Head:FindFirstChild("RagdollCountdown")
+                    if b then b:Destroy() end
                 end
             end
         end
@@ -2556,7 +2626,7 @@ return function(env)
             for i = 1, #cachedPlayersList do
                 local char = cachedPlayersList[i].Character
                 local head = char and char:FindFirstChild("Head")
-                local bb = head and (head:FindFirstChild("RC") or head:FindFirstChild("RagdollCountdown"))
+                local bb = head and head:FindFirstChild("RagdollCountdown")
                 if bb then bb:Destroy() end
             end
         end
