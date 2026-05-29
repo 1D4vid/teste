@@ -32,7 +32,7 @@ return function(env)
     MusicSound.Volume = 0.5
     MusicSound.Parent = SoundService
 
-    -- Lista de faixas pré-selecionadas atualizada
+    -- Lista de faixas pré-selecionadas solicitadas
     local SongsList = {
         {Name = "six seven", ID = "139780631670217"},
         {Name = "low cortisol", ID = "110919391228823"},
@@ -45,6 +45,127 @@ return function(env)
         {Name = "funk brazil", ID = "131443412031360"},
         {Name = "na na na", ID = "94884255368589"}
     }
+
+    -- Lógica do Modificador "Mute Beast Sound" integrada
+    local MuteBeastEnabled = false
+    local originalMutedVolumes = setmetatable({}, {__mode = "k"})
+    local SoundNameCache = setmetatable({}, {__mode = "k"})
+
+    local BEAST_WEAPONS = {
+        ["Hammer"] = true,
+        ["Gemstone Hammer"] = true,
+        ["Iron Hammer"] = true,
+        ["Mallet"] = true
+    }
+
+    local TARGET_WARNING_SOUNDS = {
+        ["action"] = true,
+        ["warning"] = true,
+        ["heartbeat"] = true,
+        ["terror"] = true
+    }
+
+    local function checkIsBeast(player)
+        if player.Team and player.Team.Name == "Beast" then return true end
+        local character = player.Character
+        if character then
+            for weapon in pairs(BEAST_WEAPONS) do
+                if character:FindFirstChild(weapon) then return true end
+            end
+        end
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then
+            for weapon in pairs(BEAST_WEAPONS) do
+                if backpack:FindFirstChild(weapon) then return true end
+            end
+        end
+        return false
+    end
+
+    local function applyAbsoluteMute(sound)
+        if not sound:IsA("Sound") then return end
+        if not originalMutedVolumes[sound] then
+            originalMutedVolumes[sound] = sound.Volume
+            sound:GetPropertyChangedSignal("Volume"):Connect(function()
+                if MuteBeastEnabled and sound.Volume > 0 then
+                    sound.Volume = 0
+                end
+            end)
+        end
+        if MuteBeastEnabled then
+            sound.Volume = 0
+        end
+    end
+
+    local function disableBeastMute()
+        MuteBeastEnabled = false
+        for sound, vol in pairs(originalMutedVolumes) do
+            if sound and sound.Parent then
+                pcall(function() sound.Volume = vol end)
+            end
+        end
+    end
+
+    local BeastMuteInitialized = false
+    local function initializeBeastMute()
+        if BeastMuteInitialized then return end
+        BeastMuteInitialized = true
+
+        local function verifyGeneralSound(sound)
+            if not sound:IsA("Sound") then return end
+            local cachedName = SoundNameCache[sound]
+            if not cachedName then
+                cachedName = sound.Name:lower()
+                SoundNameCache[sound] = cachedName
+            end
+            if TARGET_WARNING_SOUNDS[cachedName] then
+                applyAbsoluteMute(sound)
+            end
+        end
+
+        for _, desc in ipairs(SoundService:GetDescendants()) do verifyGeneralSound(desc) end
+        if Workspace.CurrentCamera then
+            for _, desc in ipairs(Workspace.CurrentCamera:GetDescendants()) do verifyGeneralSound(desc) end
+            Workspace.CurrentCamera.DescendantAdded:Connect(verifyGeneralSound)
+        end
+        SoundService.DescendantAdded:Connect(verifyGeneralSound)
+
+        local function muteBeastCharacter(character)
+            if not character then return end
+            local hrp = character:WaitForChild("HumanoidRootPart", 5)
+            if hrp then
+                for _, child in ipairs(hrp:GetChildren()) do
+                    if child:IsA("Sound") then applyAbsoluteMute(child) end
+                end
+                hrp.ChildAdded:Connect(function(child)
+                    if child:IsA("Sound") then applyAbsoluteMute(child) end
+                end)
+            end
+            character.ChildAdded:Connect(function(child)
+                if child:IsA("Tool") and BEAST_WEAPONS[child.Name] then
+                    for _, desc in ipairs(child:GetDescendants()) do
+                        if desc:IsA("Sound") then applyAbsoluteMute(desc) end
+                    end
+                end
+            end)
+        end
+
+        local function setupPlayer(player)
+            if player == LocalPlayer then return end
+            local function onCharacterAdded(char)
+                task.defer(function()
+                    if checkIsBeast(player) then
+                        muteBeastCharacter(char)
+                    end
+                end)
+            end
+            if player.Character then onCharacterAdded(player.Character) end
+            player.CharacterAdded:Connect(onCharacterAdded)
+        end
+
+        for _, player in ipairs(Players:GetPlayers()) do setupPlayer(player) end
+        Players.PlayerAdded:Connect(setupPlayer)
+    end
 
     -- Função auxiliar de Gradiente idêntica à do Hub Principal
     local function ApplyGradient(instance, color1, color2, rotation)
@@ -653,6 +774,21 @@ return function(env)
                 if data.Object then data.Object.Volume = 0.5 end
             end
             noHitSoundSignals = {}
+        end
+    end)
+
+    -- Adicionando a nova toggle "Mute Beast Sound" no espaço inferior
+    CreateCompactToggle(MuteBlock, "Mute Beast Sound", false, function(state)
+        MuteBeastEnabled = state
+        if state then
+            initializeBeastMute()
+            for sound, _ in pairs(originalMutedVolumes) do
+                if sound and sound.Parent then
+                    sound.Volume = 0
+                end
+            end
+        else
+            disableBeastMute()
         end
     end)
 
