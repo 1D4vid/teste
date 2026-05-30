@@ -1,5 +1,4 @@
 return function(env)
-    -- Importando as variáveis enviadas pelo script principal
     local Library = env.Library
     local Page = env.Page
     local Players = env.Players
@@ -12,12 +11,10 @@ return function(env)
     local UserInputService = game:GetService("UserInputService")
     local SoundService = game:GetService("SoundService")
 
-    -- Variaveis de Lógica e Backup do Antigo Script
     local LegitSettings = {MuteSteps = false, MuteJumps = false, MuteHack = false, MuteBeastSounds = false}
     local CurrentSoundIDs = {Running = 0, Jumping = 0, Landing = 0}
     local OriginalSoundBackups = setmetatable({}, {__mode = "k"})
 
-    -- Carregando estados salvos do Bloco de Volumes (Inicia desligado por padrão)
     local VolumesEnabled = UserConfigs["Vol_Enabled"]
     if VolumesEnabled == nil then VolumesEnabled = false end
 
@@ -25,19 +22,16 @@ return function(env)
     local JumpVolMultiplier = UserConfigs["Vol_JumpMultiplier"] or 1
     local FallVolMultiplier = UserConfigs["Vol_FallMultiplier"] or 1
 
-    -- Carrega o estado salvo da nova toggle de silenciamento da Beast
     local MuteBeastSoundsEnabled = UserConfigs["Legit_MuteBeastSounds"]
     if MuteBeastSoundsEnabled == nil then MuteBeastSoundsEnabled = false end
     LegitSettings.MuteBeastSounds = MuteBeastSoundsEnabled
 
-    -- Instância de som de alta fidelidade para as músicas customizadas
     local MusicSound = Instance.new("Sound")
     MusicSound.Name = "NexVoid_CustomMusic"
     MusicSound.Looped = true
     MusicSound.Volume = 0.5
     MusicSound.Parent = SoundService
 
-    -- Lista de faixas pré-selecionadas solicitadas
     local SongsList = {
         {Name = "six seven", ID = "139780631670217"},
         {Name = "low cortisol", ID = "110919391228823"},
@@ -51,7 +45,6 @@ return function(env)
         {Name = "na na na", ID = "94884255368589"}
     }
 
-    -- Armas conhecidas da Beast no Flee the Facility
     local BEAST_WEAPONS = {
         ["Hammer"] = true,
         ["Gemstone Hammer"] = true,
@@ -59,7 +52,6 @@ return function(env)
         ["Mallet"] = true
     }
 
-    -- Sons de aviso gerados localmente pela engine do jogo
     local TARGET_WARNING_SOUNDS = {
         ["action"] = true,
         ["warning"] = true,
@@ -67,7 +59,6 @@ return function(env)
         ["terror"] = true
     }
 
-    -- Identifica se o jogador é a Beast
     local function checkIsBeast(player)
         if player.Team and player.Team.Name == "Beast" then
             return true
@@ -87,7 +78,6 @@ return function(env)
         return false
     end
 
-    -- Função auxiliar de Gradiente idêntica à do Hub Principal
     local function ApplyGradient(instance, color1, color2, rotation)
         local gradient = instance:FindFirstChildOfClass("UIGradient") or Instance.new("UIGradient")
         gradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0.00, color1), ColorSequenceKeypoint.new(1.00, color2)}
@@ -151,7 +141,6 @@ return function(env)
     for _, player in ipairs(Players:GetPlayers()) do setupPlayerSoundEvents(player) end
     Players.PlayerAdded:Connect(setupPlayerSoundEvents)
 
-    -- Sincronização original de Mute local
     local function ProcessCharacter(char)
         local root = char:WaitForChild("HumanoidRootPart", 10)
         if not root then return end
@@ -237,12 +226,10 @@ return function(env)
     
     local noHitSoundAddedConn = nil
 
-    -- Tabelas fracas e caches rápidos de alta performance para os Sliders de Volume
     local ActiveSounds = setmetatable({}, {__mode = "k"})
     local SoundCategories = setmetatable({}, {__mode = "k"})
     local originalVolumeBackup = setmetatable({}, {__mode = "k"})
 
-    -- Referências de volume estático para evitar o bug de travamento em volume 0
     local BaseVolumes = {
         Footsteps = 0.65,
         Jump = 0.5,
@@ -289,11 +276,9 @@ return function(env)
     for _, obj in ipairs(Workspace:GetDescendants()) do registerSound(obj) end
     Workspace.DescendantAdded:Connect(registerSound)
 
-    -- Sincronizador de volumes otimizado utilizando volumes estáticos de referência
     local lastCacheClear = os.clock()
     task.spawn(function()
         while task.wait(0.3) do
-            -- Re-categorização automática periódica a cada 4 segundos (Garante classificação correta ao trocar de times)
             if os.clock() - lastCacheClear > 4 then
                 lastCacheClear = os.clock()
                 table.clear(SoundCategories)
@@ -334,7 +319,6 @@ return function(env)
                             end
                         end
 
-                        -- Verifica se o som pertence ao LocalPlayer para aplicar o silenciador legítimo
                         if localChar and sound:IsDescendantOf(localChar) then
                             if category == "Footsteps" and muteSteps then
                                 multiplier = 0
@@ -354,11 +338,6 @@ return function(env)
         end
     end)
 
-    -- =========================================================================
-    -- LAYOUT HÍBRIDO (Top 2-Column, Bottom Full-Width)
-    -- =========================================================================
-    
-    -- Container das configurações com ajuste automático de tamanho para evitar gaps
     local SettingsContainer = Instance.new("Frame")
     SettingsContainer.Size = UDim2.new(1, -2, 0, 0)
     SettingsContainer.AutomaticSize = Enum.AutomaticSize.Y
@@ -371,7 +350,6 @@ return function(env)
     sLayout.Padding = UDim.new(0, 12)
     sLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
-    -- Volume Settings no Lado Esquerdo (LayoutOrder = 1)
     local VolumeBlock = Instance.new("Frame")
     VolumeBlock.Size = UDim2.new(0.5, -6, 0, 0)
     VolumeBlock.AutomaticSize = Enum.AutomaticSize.Y
@@ -395,7 +373,6 @@ return function(env)
     vPadding.PaddingLeft = UDim.new(0, 10)
     vPadding.PaddingRight = UDim.new(0, 10)
 
-    -- Mute Settings no Lado Direito (LayoutOrder = 2)
     local MuteBlock = Instance.new("Frame")
     MuteBlock.Size = UDim2.new(0.5, -6, 0, 0)
     MuteBlock.AutomaticSize = Enum.AutomaticSize.Y
@@ -419,7 +396,6 @@ return function(env)
     mPadding.PaddingLeft = UDim.new(0, 10)
     mPadding.PaddingRight = UDim.new(0, 10)
 
-    -- Componentes Compactos da UI com Réplica de Fidelidade 100% ao Hub Original
     local function CreateCompactToggle(parent, text, defaultVal, callback)
         local Tgl = Instance.new("TextButton")
         Tgl.Size = UDim2.new(1, 0, 0, 30)
@@ -616,7 +592,6 @@ return function(env)
         return BtnFrame
     end
 
-    -- Criando e Populando o Header Volume Settings (Esquerda)
     local VolHeader = Instance.new("Frame")
     VolHeader.Name = "HeaderContainer"
     VolHeader.Size = UDim2.new(1, 0, 0, 20)
@@ -659,7 +634,6 @@ return function(env)
         FallSlider.Set(1)
     end)
 
-    -- Criando e Populando o Header Mute Settings (Direita)
     local MuteHeader = Instance.new("Frame")
     MuteHeader.Name = "HeaderContainer"
     MuteHeader.Size = UDim2.new(1, 0, 0, 20)
@@ -730,22 +704,18 @@ return function(env)
         end
     end)
     
-    -- Toggle Mute Beast Sounds (Sincronizado nativamente no laço rápido global)
     CreateCompactToggle(MuteBlock, "Mute Beast Sounds", LegitSettings.MuteBeastSounds, function(state)
         LegitSettings.MuteBeastSounds = state
         UserConfigs["Legit_MuteBeastSounds"] = state
     end)
 
-    -- =========================================================================
-    -- MUSIC PLAYER (Design Elegante, Compacto com Dropdown Flutuante)
-    -- =========================================================================
     local MusicBlock = Instance.new("Frame")
-    MusicBlock.Size = UDim2.new(1, -2, 0, 95) -- Tamanho aumentado para 95px de segurança total contra colisões
+    MusicBlock.Size = UDim2.new(1, -2, 0, 95)
     MusicBlock.BackgroundColor3 = Color3.new(0, 0, 0)
     MusicBlock.BackgroundTransparency = 0.45
     MusicBlock.BorderSizePixel = 0
-    MusicBlock.ClipsDescendants = false -- Permite que a lista flutue perfeitamente sobre os cards
-    MusicBlock.ZIndex = 100 -- ZIndex muito alto para priorizar todos os herdeiros
+    MusicBlock.ClipsDescendants = false
+    MusicBlock.ZIndex = 100
     MusicBlock.Parent = Page
     
     local muStroke = Instance.new("UIStroke", MusicBlock)
@@ -760,9 +730,8 @@ return function(env)
 
     local muLayout = Instance.new("UIListLayout", MusicBlock)
     muLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    muLayout.Padding = UDim.new(0, 8) -- Espaçamento interno padronizado entre as linhas
+    muLayout.Padding = UDim.new(0, 8)
 
-    -- Linha de Título e Slider (Estilo Side-by-Side Integrado)
     local TopRow = Instance.new("Frame", MusicBlock)
     TopRow.Size = UDim2.new(1, 0, 0, 20)
     TopRow.BackgroundTransparency = 1
@@ -779,7 +748,6 @@ return function(env)
     MusicTitle.TextXAlignment = Enum.TextXAlignment.Left
     MusicTitle.ZIndex = 102
 
-    -- Slider de Volume Compacto alinhado no Topo Direito (Sem colisões)
     local sliderFrame = Instance.new("Frame", TopRow)
     sliderFrame.Size = UDim2.new(0.45, 0, 1, 15)
     sliderFrame.Position = UDim2.new(0.55, 0, 0, -4)
@@ -816,7 +784,7 @@ return function(env)
     Instance.new("UICorner", sliderBar).CornerRadius = UDim.new(1, 0)
 
     local sliderFill = Instance.new("Frame", sliderBar)
-    sliderFill.Size = UDim2.new(0.5, 0, 1, 0) -- default 50%
+    sliderFill.Size = UDim2.new(0.5, 0, 1, 0)
     sliderFill.BackgroundColor3 = Theme.Accent
     sliderFill.BorderSizePixel = 0
     sliderFill.ZIndex = 104
@@ -855,21 +823,19 @@ return function(env)
         end
     end)
 
-    -- Linha Inferior: TextBox, Dropdown e Play/Stop dispostos lado a lado com segurança horizontal
     local ControlsRow = Instance.new("Frame", MusicBlock)
     ControlsRow.Size = UDim2.new(1, 0, 0, 28)
     ControlsRow.BackgroundTransparency = 1
     ControlsRow.LayoutOrder = 2
     ControlsRow.ZIndex = 101
 
-    -- Entrada Customizada de ID (Fundo preto transparente integrado)
     local textBox = Instance.new("TextBox")
     textBox.Size = UDim2.new(0.32, -6, 1, 0)
     textBox.Position = UDim2.new(0, 0, 0, 0)
     textBox.PlaceholderText = "Insert ID..."
     textBox.Text = ""
-    textBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Fundo preto
-    textBox.BackgroundTransparency = 0.45 -- Transparência idêntica
+    textBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    textBox.BackgroundTransparency = 0.45
     textBox.TextColor3 = Theme.Text
     textBox.PlaceholderColor3 = Theme.TextDark
     textBox.Font = Theme.Font
@@ -881,12 +847,11 @@ return function(env)
     local tbStroke = Instance.new("UIStroke", textBox)
     tbStroke.Color = Color3.fromRGB(40, 40, 40)
 
-    -- Seletor Dropdown de Músicas (Fundo preto transparente integrado)
     local songDropdown = Instance.new("TextButton")
     songDropdown.Size = UDim2.new(0.32, -6, 1, 0)
     songDropdown.Position = UDim2.new(0.32, 6, 0, 0)
-    songDropdown.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Fundo preto
-    songDropdown.BackgroundTransparency = 0.45 -- Transparência idêntica
+    songDropdown.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    songDropdown.BackgroundTransparency = 0.45
     songDropdown.Text = "Select Song"
     songDropdown.Font = Theme.Font
     songDropdown.TextSize = 10
@@ -908,12 +873,11 @@ return function(env)
     sdArrow.ZIndex = 104
     sdArrow.Parent = songDropdown
 
-    -- Dropdown Flutuante de Alta Prioridade (Opaque Background, ZIndex = 200, Fundo preto transparente integrado)
     local SongMenu = Instance.new("Frame")
     SongMenu.Size = UDim2.new(1, 0, 0, 134)
     SongMenu.Position = UDim2.new(0, 0, 1, 4)
-    SongMenu.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Preto
-    SongMenu.BackgroundTransparency = 0.15 -- Transparente/Translúcido elegante
+    SongMenu.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    SongMenu.BackgroundTransparency = 0.15
     SongMenu.BorderSizePixel = 0
     SongMenu.Visible = false
     SongMenu.ZIndex = 200
@@ -975,7 +939,6 @@ return function(env)
         sdArrow.Text = SongMenu.Visible and "▲" or "▼"
     end)
 
-    -- Sincroniza o seletor quando o ID é colado manualmente
     textBox:GetPropertyChangedSignal("Text"):Connect(function()
         local currentText = textBox.Text
         local found = false
@@ -991,7 +954,6 @@ return function(env)
         end
     end)
 
-    -- Botão Play/Stop com espaçamento lateral seguro
     local playBtn = Instance.new("TextButton")
     playBtn.Size = UDim2.new(0.34, -12, 1, 0)
     playBtn.Position = UDim2.new(0.66, 12, 0, 0)
@@ -1044,9 +1006,6 @@ return function(env)
         end
     end)
 
-    -- =========================================================================
-    -- DESIGN CLÁSSICO DO SOUND CARD (Largura Inteira Original Restaurado)
-    -- =========================================================================
     Library:CreateSection(Page, "Custom Sound Packs")
 
     local WalkButtons = {}
@@ -1080,7 +1039,7 @@ return function(env)
         Card.BackgroundColor3 = Color3.new(0, 0, 0)
         Card.BackgroundTransparency = 0.45 
         Card.BorderSizePixel = 0
-        Card.ZIndex = 1 -- Definido como baixo para não competir com a lista de música
+        Card.ZIndex = 1
         Card.Parent = Parent
         
         local cardStroke = Instance.new("UIStroke", Card)
@@ -1172,10 +1131,10 @@ return function(env)
     ResetBtnFrame.BackgroundColor3 = Color3.new(0, 0, 0)
     ResetBtnFrame.BackgroundTransparency = 0.45
     ResetBtnFrame.Text = "Default Sounds (Reset All)"
-    ResetBtnFrame.TextColor3 = Color3.fromRGB(150, 150, 150) -- Cor cinza padrão legível
+    ResetBtnFrame.TextColor3 = Color3.fromRGB(150, 150, 150)
     ResetBtnFrame.Font = Enum.Font.GothamBold
     ResetBtnFrame.TextSize = 11
-    ResetBtnFrame.ZIndex = 1 -- Baixo ZIndex de segurança
+    ResetBtnFrame.ZIndex = 1
     ResetBtnFrame.Parent = Page
     Instance.new("UICorner", ResetBtnFrame).CornerRadius = UDim.new(0, 6)
     
@@ -1183,7 +1142,6 @@ return function(env)
     rbsStr.Color = Color3.fromRGB(40, 40, 40)
     rbsStr.Thickness = 1
 
-    -- Efeitos de hover extremamente legíveis e destacados
     ResetBtnFrame.MouseEnter:Connect(function() 
         TweenService:Create(ResetBtnFrame, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(255, 100, 100)}):Play()
         TweenService:Create(rbsStr, TweenInfo.new(0.2), {Color = Color3.fromRGB(220, 80, 80)}):Play() 
@@ -1206,7 +1164,6 @@ return function(env)
         RefreshAllSounds()
     end)
 
-    -- Inserindo a categoria de som "NorthDxv1Ces" com os botões normalizados (Walk, Jump, Fall)
     CreateSoundCard(Page, "NorthDxv1Ces", {
         {Name = "Walk", ID = "119933956036500", Type = "Walk"},
         {Name = "Jump", ID = "87683560682449", Type = "Jump"},
