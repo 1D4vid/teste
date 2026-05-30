@@ -13,25 +13,6 @@ return function(env)
     local SendNotification = env.SendNotification
     local UserInputService = env.UserInputService or game:GetService("UserInputService")
 
-    -- Lógica para buscar locais específicos no mapa atual
-    local function teleportToLandmark(nameQuery)
-        local char = LocalPlayer.Character
-        if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-        
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj:IsA("BasePart") or obj:IsA("Model") then
-                local objName = string.lower(obj.Name)
-                if string.find(objName, string.lower(nameQuery)) then
-                    local targetCFrame = obj:IsA("Model") and obj:GetPivot() or obj.CFrame
-                    char.HumanoidRootPart.CFrame = targetCFrame + Vector3.new(0, 4, 0)
-                    SendNotification("Teleported to " .. nameQuery .. "!", 2)
-                    return
-                end
-            end
-        end
-        SendNotification(nameQuery .. " not found on this map!", 2)
-    end
-
     -- Lógica para detectar a besta da partida
     local function getBeastRoot()
         local BEAST_WEAPON_NAMES = {["Hammer"] = true, ["Gemstone Hammer"] = true, ["Iron Hammer"] = true, ["Mallet"] = true}
@@ -59,7 +40,7 @@ return function(env)
     Library:CreateSection(TeleportPage, "Map Objects", "Left")
     
     local currentPCIndex = 0
-    Library:CreateButton(TeleportPage, "Teleport Computer", function()
+    Library:CreateButton(TeleportPage, "TP Computer", function()
         local char = LocalPlayer.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then return end
         local pcs = {}
@@ -79,7 +60,7 @@ return function(env)
     end)
 
     local currentDoorIndex = 0
-    Library:CreateButton(TeleportPage, "Teleport Exitdoor", function()
+    Library:CreateButton(TeleportPage, "TP Exitdoor", function()
         local char = LocalPlayer.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then return end
         local doors = {}
@@ -98,7 +79,7 @@ return function(env)
     end)
 
     local currentPodIndex = 0
-    Library:CreateButton(TeleportPage, "Teleport Freezepods", function()
+    Library:CreateButton(TeleportPage, "TP Freezepods", function()
         local char = LocalPlayer.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then return end
         local pods = {}
@@ -114,15 +95,32 @@ return function(env)
     end)
 
     Library:CreateButton(TeleportPage, "TP Crystal Cove", function()
-        teleportToLandmark("Crystal Cove")
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            char.HumanoidRootPart.CFrame = CFrame.new(-216.5, 1.5, -223.5)
+        end
     end)
 
     Library:CreateButton(TeleportPage, "TP Beast Cave", function()
-        teleportToLandmark("Beast Cave")
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            char.HumanoidRootPart.CFrame = CFrame.new(347.5, 51.0, -455.5)
+        end
     end)
 
     Library:CreateButton(TeleportPage, "Tp Map", function()
-        -- Implementação futura
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            for _, v in ipairs(Workspace:GetDescendants()) do
+                if v.Name == "ComputerTable" or v.Name == "FreezePod" or v.Name == "ExitGate" then
+                    local part = v:FindFirstChildWhichIsA("BasePart")
+                    if part then
+                        char.HumanoidRootPart.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+                        break
+                    end
+                end
+            end
+        end
     end)
 
     -- ==========================================
@@ -323,7 +321,7 @@ return function(env)
 
     local pLayout = Instance.new("UIListLayout", PlayersSection)
     pLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    pLayout.Padding = UDim.new(0, 4) -- Menor espaçamento vertical
+    pLayout.Padding = UDim.new(0, 4)
 
     local pPadding = Instance.new("UIPadding", PlayersSection)
     pPadding.PaddingTop = UDim.new(0, 8)
@@ -349,12 +347,12 @@ return function(env)
     HeaderLabel.TextXAlignment = Enum.TextXAlignment.Left
     HeaderLabel.Parent = HeaderContainer
 
-    -- Botão "Refresh" Integrado
+    -- Botão "Refresh" Customizado com Fundo Preto Transparente
     local RefreshBtn = Instance.new("TextButton")
     RefreshBtn.Name = "RefreshBtnStatic"
     RefreshBtn.Size = UDim2.new(1, 0, 0, 26)
-    RefreshBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    RefreshBtn.BackgroundTransparency = 0.45
+    RefreshBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Fundo preto puro
+    RefreshBtn.BackgroundTransparency = 0.55 -- Transparência aplicada
     RefreshBtn.Text = "Refresh"
     RefreshBtn.TextColor3 = Theme.Accent
     RefreshBtn.Font = Theme.Font
@@ -370,8 +368,8 @@ return function(env)
     local function CreateCustomPlayerRow(parent, player, layoutOrderIndex)
         local Row = Instance.new("Frame")
         Row.Name = "PlayerRow"
-        Row.Size = UDim2.new(1, 0, 0, 44) -- Altura mais compacta
-        Row.BackgroundTransparency = 1 -- Sem background
+        Row.Size = UDim2.new(1, 0, 0, 44)
+        Row.BackgroundTransparency = 1
         Row.BorderSizePixel = 0
         Row.LayoutOrder = layoutOrderIndex
         Row.Parent = parent
@@ -418,11 +416,11 @@ return function(env)
         local TpBtn = Instance.new("TextButton")
         TpBtn.Size = UDim2.new(0, 80, 0, 26)
         TpBtn.Position = UDim2.new(1, -84, 0.5, -13)
-        TpBtn.BackgroundColor3 = Color3.fromRGB(245, 245, 245) -- Fundo mais claro e nítido
+        TpBtn.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
         TpBtn.Text = "Teleport"
         TpBtn.Font = Enum.Font.GothamBold
         TpBtn.TextSize = 11
-        TpBtn.TextColor3 = Color3.fromRGB(15, 15, 15) -- Texto escuro para alto contraste
+        TpBtn.TextColor3 = Color3.fromRGB(15, 15, 15)
         TpBtn.Parent = Row
 
         Instance.new("UICorner", TpBtn).CornerRadius = UDim.new(0, 5)
