@@ -1,14 +1,21 @@
 return function(env)
     local Library = env.Library
-    local Page = env.Page
-    local Workspace = env.Workspace
+    local TeleportPage = env.Page
     local Players = env.Players
+    local Workspace = env.Workspace
     local LocalPlayer = env.LocalPlayer
-    local ScreenGui = env.ScreenGui
     local SendNotification = env.SendNotification
+    local ScreenGui = env.ScreenGui
     local UserInputService = env.UserInputService
 
     local TweenService = game:GetService("TweenService")
+
+    -- Fallback de segurança para o Theme caso não seja passado pelo host
+    local Theme = env.Theme or {
+        ItemStroke = Color3.fromRGB(60, 60, 60),
+        Accent = Color3.fromRGB(240, 240, 240),
+        Font = Enum.Font.GothamBold
+    }
 
     local savedCFrame = nil
     local checkpointMarker = nil
@@ -17,23 +24,12 @@ return function(env)
     local currentPodIndex = 0
     local tpKeybindConn = nil
 
-    -- Configuração de Cores para o Tema Preto Transparente e Botões Brancos
-    local Theme = {
-        Text = Color3.fromRGB(255, 255, 255),
-        TextDark = Color3.fromRGB(150, 150, 150),
-        CardBg = Color3.fromRGB(0, 0, 0),             -- Preto Puro
-        ItemBg = Color3.fromRGB(0, 0, 0),             -- Preto Puro para os itens
-        Stroke = Color3.fromRGB(45, 45, 45),
-        ButtonWhite = Color3.fromRGB(255, 255, 255),  -- Branco Sólido
-        ButtonWhiteHover = Color3.fromRGB(220, 220, 220)
-    }
-
     -- ==========================================
     -- COLUNA ESQUERDA: MAP OBJECTS
     -- ==========================================
-    Library:CreateSection(Page, "Map Objects", "Left")
+    Library:CreateSection(TeleportPage, "Map Objects", "Left")
 
-    Library:CreateButton(Page, "TP Computer", function() 
+    Library:CreateButton(TeleportPage, "TP Computer", function()
         local char = LocalPlayer.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then return end
         local pcs = {}
@@ -52,7 +48,7 @@ return function(env)
         if pcCFrame then char.HumanoidRootPart.CFrame = pcCFrame * CFrame.new(0, 3, -3) end
     end)
 
-    Library:CreateButton(Page, "TP Exitdoor", function() 
+    Library:CreateButton(TeleportPage, "TP Exitdoor", function()
         local char = LocalPlayer.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then return end
         local doors = {}
@@ -70,7 +66,7 @@ return function(env)
         if part then char.HumanoidRootPart.CFrame = part.CFrame + Vector3.new(0, 3, 0) end
     end)
 
-    Library:CreateButton(Page, "TP Freezepods", function() 
+    Library:CreateButton(TeleportPage, "TP Freezepods", function()
         local char = LocalPlayer.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then return end
         local pods = {}
@@ -85,14 +81,15 @@ return function(env)
         if base then char.HumanoidRootPart.CFrame = base.CFrame * CFrame.new(0, 1, -3) end
     end)
 
-    Library:CreateButton(Page, "Tp Map", function() end)
-    Library:CreateButton(Page, "TP Crystal Cove", function() end)
-    Library:CreateButton(Page, "TP Beast Cave", function() end)
+    Library:CreateButton(TeleportPage, "Tp Map", function() end)
+    Library:CreateButton(TeleportPage, "TP Crystal Cove", function() end)
+    Library:CreateButton(TeleportPage, "TP Beast Cave", function() end)
+
 
     -- ==========================================
     -- COLUNA DIREITA: EXTRAS
     -- ==========================================
-    Library:CreateSection(Page, "Extras", "Right")
+    Library:CreateSection(TeleportPage, "Extras", "Right")
 
     -- Lógica de suporte do Checkpoint
     local CheckpointFrame = ScreenGui:FindFirstChild("CheckpointFrame")
@@ -204,192 +201,157 @@ return function(env)
         toggleCheckpointLogic(state)
     end)
 
-    Library:CreateButton(Page, "Reset Character", function() end)
-    Library:CreateButton(Page, "Server Rejoin", function() end)
-    Library:CreateButton(Page, "Random Servers", function() end)
-    Library:CreateButton(Page, "Teleport to Beast", function() end)
+    Library:CreateButton(TeleportPage, "Reset Character", function() end)
+    Library:CreateButton(TeleportPage, "Server Rejoin", function() end)
+    Library:CreateButton(TeleportPage, "Random Servers", function() end)
+    Library:CreateButton(TeleportPage, "Teleport to Beast", function() end)
+
 
     -- ==========================================
-    -- DESIGN FIEL: LISTA VERTICAL DE CARDS DEITADOS (PRETO TRANSPARENTE E BOTÃO BRANCO)
+    -- COLUNA DIREITA: PLAYERS TELEPORT
     -- ==========================================
-    Library:CreateSection(Page, "Players Teleport", "Right")
-    local TargetCol = Library.CurrentSections[Page]
+    Library:CreateSection(TeleportPage, "Players Teleport", "Right")
+    
+    -- Obtém a caixa da seção recém-criada (o card da direita)
+    local targetSectionBox = Library.CurrentSections[TeleportPage]
 
-    if TargetCol then
-        -- Container Geral (Preto Transparente)
-        local UnifiedCard = Instance.new("Frame")
-        UnifiedCard.Name = "PlayersTeleportContainer"
-        UnifiedCard.Size = UDim2.new(1, 0, 0, 240)
-        UnifiedCard.BackgroundColor3 = Theme.CardBg
-        UnifiedCard.BackgroundTransparency = 0.55 -- Transparência idêntica à imagem de referência
-        UnifiedCard.BorderSizePixel = 0
-        UnifiedCard.Parent = TargetCol
+    if targetSectionBox then
+        -- Botão de Atualizar (Inserido de forma correta e limpa no topo do card)
+        local RefreshBtn = Instance.new("TextButton")
+        RefreshBtn.Name = "RefreshBtnStatic"
+        RefreshBtn.Size = UDim2.new(1, 0, 0, 32)
+        RefreshBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        RefreshBtn.BackgroundTransparency = 0.4
+        RefreshBtn.Text = "Refresh List"
+        RefreshBtn.TextColor3 = Theme.Accent
+        RefreshBtn.Font = Theme.Font
+        RefreshBtn.TextSize = 12
+        RefreshBtn.Parent = targetSectionBox
+        Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 6)
 
-        local CardCorner = Instance.new("UICorner", UnifiedCard)
-        CardCorner.CornerRadius = UDim.new(0, 8)
-        
-        local CardStroke = Instance.new("UIStroke", UnifiedCard)
-        CardStroke.Color = Theme.Stroke
-        CardStroke.Thickness = 1
-
-        -- Botão de Refresh Integrado (Preto Transparente)
-        local RefreshButton = Instance.new("TextButton")
-        RefreshButton.Name = "RefreshBtn"
-        RefreshButton.Size = UDim2.new(1, -16, 0, 30)
-        RefreshButton.Position = UDim2.new(0, 8, 0, 8)
-        RefreshButton.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-        RefreshButton.BackgroundTransparency = 0.4
-        RefreshButton.Text = "Refresh List"
-        RefreshButton.Font = Enum.Font.GothamBold
-        RefreshButton.TextSize = 12
-        RefreshButton.TextColor3 = Theme.Text
-        RefreshButton.Parent = UnifiedCard
-
-        Instance.new("UICorner", RefreshButton).CornerRadius = UDim.new(0, 5)
-        local btnStroke = Instance.new("UIStroke", RefreshButton)
-        btnStroke.Color = Theme.Stroke
+        local btnStroke = Instance.new("UIStroke", RefreshBtn)
+        btnStroke.Color = Theme.ItemStroke
         btnStroke.Thickness = 1
-        
-        RefreshButton.MouseEnter:Connect(function()
-            TweenService:Create(RefreshButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.1}):Play()
+
+        -- Efeito de transição de hover no botão de Refresh
+        RefreshButtonConn = RefreshBtn.MouseEnter:Connect(function()
+            TweenService:Create(RefreshBtn, TweenInfo.new(0.2), {BackgroundTransparency = 0.1}):Play()
         end)
-        RefreshButton.MouseLeave:Connect(function()
-            TweenService:Create(RefreshButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.4}):Play()
+        RefreshButtonLeaveConn = RefreshBtn.MouseLeave:Connect(function()
+            TweenService:Create(RefreshBtn, TweenInfo.new(0.2), {BackgroundTransparency = 0.4}):Play()
         end)
 
-        -- Lista Rolável (Vertical) para exibir os cards "deitados"
-        local ScrollList = Instance.new("ScrollingFrame")
-        ScrollList.Name = "PlayerScrollList"
-        ScrollList.Size = UDim2.new(1, -16, 1, -54)
-        ScrollList.Position = UDim2.new(0, 8, 0, 46)
-        ScrollList.BackgroundTransparency = 1
-        ScrollList.BorderSizePixel = 0
-        ScrollList.ScrollBarThickness = 3
-        ScrollList.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
-        ScrollList.Parent = UnifiedCard
+        -- Função auxiliar para criar as linhas de jogadores ("cards deitados")
+        local function CreateCustomPlayerCard(player, callback)
+            local Card = Instance.new("Frame")
+            Card.Name = "PlayerCard"
+            Card.Size = UDim2.new(1, 0, 0, 48)
+            Card.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            Card.BackgroundTransparency = 0.65 -- Fundo transparente
+            Card.BorderSizePixel = 0
+            Card.Parent = targetSectionBox
 
-        local ListLayout = Instance.new("UIListLayout")
-        ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        ListLayout.Padding = UDim.new(0, 6)
-        ListLayout.Parent = ScrollList
+            Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 6)
+            local cardStroke = Instance.new("UIStroke", Card)
+            cardStroke.Color = Color3.fromRGB(40, 40, 40)
+            cardStroke.Thickness = 1
 
-        local function BuildPlayerList()
-            for _, child in ipairs(ScrollList:GetChildren()) do
-                if child:IsA("Frame") then child:Destroy() end
-            end
+            -- Avatar
+            local Avatar = Instance.new("ImageLabel")
+            Avatar.Size = UDim2.new(0, 32, 0, 32)
+            Avatar.Position = UDim2.new(0, 8, 0.5, -16)
+            Avatar.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+            Avatar.BackgroundTransparency = 0.5
+            Avatar.BorderSizePixel = 0
+            Avatar.Parent = Card
+            Instance.new("UICorner", Avatar).CornerRadius = UDim.new(0, 6)
 
-            local players = Players:GetPlayers()
-            local addedCount = 0
+            task.spawn(function()
+                local content, isReady = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+                if isReady then Avatar.Image = content end
+            end)
 
-            for _, player in ipairs(players) do
-                if player ~= LocalPlayer then
-                    addedCount = addedCount + 1
+            -- Informações do Jogador
+            local LabelContainer = Instance.new("Frame")
+            LabelContainer.Size = UDim2.new(1, -135, 1, 0)
+            LabelContainer.Position = UDim2.new(0, 48, 0, 0)
+            LabelContainer.BackgroundTransparency = 1
+            LabelContainer.Parent = Card
 
-                    -- Card Deitado (Horizontal)
-                    local Row = Instance.new("Frame")
-                    Row.Name = "PlayerRow_" .. player.Name
-                    Row.Size = UDim2.new(1, -6, 0, 48) -- Deitado / Retangular ocupando a largura total
-                    Row.BackgroundColor3 = Theme.ItemBg
-                    Row.BackgroundTransparency = 0.6 -- Transparência interna uniforme
-                    Row.BorderSizePixel = 0
-                    Row.Parent = ScrollList
+            local DisplayName = Instance.new("TextLabel")
+            DisplayName.Size = UDim2.new(1, 0, 0, 18)
+            DisplayName.Position = UDim2.new(0, 0, 0.5, -15)
+            DisplayName.BackgroundTransparency = 1
+            DisplayName.Text = player.DisplayName
+            DisplayName.Font = Enum.Font.GothamBold
+            DisplayName.TextSize = 12
+            DisplayName.TextColor3 = Color3.fromRGB(255, 255, 255)
+            DisplayName.TextXAlignment = Enum.TextXAlignment.Left
+            DisplayName.Parent = LabelContainer
 
-                    Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 6)
-                    local rowStroke = Instance.new("UIStroke", Row)
-                    rowStroke.Color = Color3.fromRGB(35, 35, 35)
-                    rowStroke.Thickness = 1
+            local Username = Instance.new("TextLabel")
+            Username.Size = UDim2.new(1, 0, 0, 14)
+            Username.Position = UDim2.new(0, 0, 0.5, 2)
+            Username.BackgroundTransparency = 1
+            Username.Text = "@" .. player.Name
+            Username.Font = Enum.Font.Gotham
+            Username.TextSize = 10
+            Username.TextColor3 = Color3.fromRGB(150, 150, 150)
+            Username.TextXAlignment = Enum.TextXAlignment.Left
+            Username.Parent = LabelContainer
 
-                    -- Avatar Redondo (Esquerda)
-                    local Avatar = Instance.new("ImageLabel")
-                    Avatar.Size = UDim2.new(0, 32, 0, 32)
-                    Avatar.Position = UDim2.new(0, 8, 0.5, -16)
-                    Avatar.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-                    Avatar.BorderSizePixel = 0
-                    Avatar.Image = "rbxassetid://0"
-                    Avatar.Parent = Row
-                    Instance.new("UICorner", Avatar).CornerRadius = UDim.new(0, 6)
+            -- Botão de Teleporte (Branco Sólido com Texto Escuro)
+            local TpBtn = Instance.new("TextButton")
+            TpBtn.Size = UDim2.new(0, 70, 0, 24)
+            TpBtn.Position = UDim2.new(1, -78, 0.5, -12)
+            TpBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255) -- Branco sólido
+            TpBtn.Text = "Teleport"
+            TpBtn.Font = Enum.Font.GothamBold
+            TpBtn.TextSize = 10
+            TpBtn.TextColor3 = Color3.fromRGB(15, 15, 15) -- Texto escuro
+            TpBtn.Parent = Card
 
-                    task.spawn(function()
-                        local content, isReady = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
-                        if isReady then Avatar.Image = content end
-                    end)
+            Instance.new("UICorner", TpBtn).CornerRadius = UDim.new(0, 5)
+            local tpStroke = Instance.new("UIStroke", TpBtn)
+            tpStroke.Color = Color3.fromRGB(200, 200, 200)
+            tpStroke.Thickness = 1
 
-                    -- Container das Informações de Texto
-                    local LabelContainer = Instance.new("Frame")
-                    LabelContainer.Size = UDim2.new(1, -135, 1, 0)
-                    LabelContainer.Position = UDim2.new(0, 48, 0, 0)
-                    LabelContainer.BackgroundTransparency = 1
-                    LabelContainer.Parent = Row
+            -- Transição Hover Suave para o botão branco
+            TpBtn.MouseEnter:Connect(function()
+                TweenService:Create(TpBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(220, 220, 220)}):Play()
+            end)
+            TpBtn.MouseLeave:Connect(function()
+                TweenService:Create(TpBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+            end)
 
-                    -- DisplayName
-                    local DisplayName = Instance.new("TextLabel")
-                    DisplayName.Size = UDim2.new(1, 0, 0, 18)
-                    DisplayName.Position = UDim2.new(0, 0, 0.5, -15)
-                    DisplayName.BackgroundTransparency = 1
-                    DisplayName.Text = player.DisplayName
-                    DisplayName.Font = Enum.Font.GothamBold
-                    DisplayName.TextSize = 12
-                    DisplayName.TextColor3 = Theme.Text
-                    DisplayName.TextXAlignment = Enum.TextXAlignment.Left
-                    DisplayName.Parent = LabelContainer
-
-                    -- Username
-                    local Username = Instance.new("TextLabel")
-                    Username.Size = UDim2.new(1, 0, 0, 14)
-                    Username.Position = UDim2.new(0, 0, 0.5, 2)
-                    Username.BackgroundTransparency = 1
-                    Username.Text = "@" .. player.Name
-                    Username.Font = Enum.Font.Gotham
-                    Username.TextSize = 10
-                    Username.TextColor3 = Theme.TextDark
-                    Username.TextXAlignment = Enum.TextXAlignment.Left
-                    Username.Parent = LabelContainer
-
-                    -- Botão de Teleporte (Branco Sólido com Texto Escuro)
-                    local TpBtn = Instance.new("TextButton")
-                    TpBtn.Size = UDim2.new(0, 70, 0, 24)
-                    TpBtn.Position = UDim2.new(1, -78, 0.5, -12)
-                    TpBtn.BackgroundColor3 = Theme.ButtonWhite
-                    TpBtn.Text = "Teleport"
-                    TpBtn.Font = Enum.Font.GothamBold
-                    TpBtn.TextSize = 10
-                    TpBtn.TextColor3 = Color3.fromRGB(15, 15, 15)
-                    TpBtn.Parent = Row
-
-                    Instance.new("UICorner", TpBtn).CornerRadius = UDim.new(0, 5)
-                    local tpStroke = Instance.new("UIStroke", TpBtn)
-                    tpStroke.Color = Color3.fromRGB(200, 200, 200)
-                    tpStroke.Thickness = 1
-
-                    -- Efeito Hover no botão branco
-                    TpBtn.MouseEnter:Connect(function()
-                        TweenService:Create(TpBtn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.ButtonWhiteHover}):Play()
-                    end)
-                    TpBtn.MouseLeave:Connect(function()
-                        TweenService:Create(TpBtn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.ButtonWhite}):Play()
-                    end)
-
-                    TpBtn.MouseButton1Click:Connect(function()
-                        local char = LocalPlayer.Character
-                        local targetChar = player.Character
-                        if char and char:FindFirstChild("HumanoidRootPart") and targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
-                            char.HumanoidRootPart.CFrame = targetChar.HumanoidRootPart.CFrame + Vector3.new(0, 2, 0)
-                            SendNotification("Teleported to " .. player.DisplayName, 2)
-                        else
-                            SendNotification("Player character not loaded!", 2)
-                        end
-                    end)
-                end
-            end
-
-            ScrollList.CanvasSize = UDim2.new(0, 0, 0, addedCount * 54)
+            TpBtn.MouseButton1Click:Connect(callback)
         end
 
-        RefreshButton.MouseButton1Click:Connect(function()
-            BuildPlayerList()
-            SendNotification("Player list updated!", 2)
+        -- Atualização dinâmica da lista de jogadores
+        local function UpdateTeleportList()
+            for _, child in pairs(targetSectionBox:GetChildren()) do 
+                if child.Name == "PlayerCard" then 
+                    child:Destroy() 
+                end 
+            end
+            for _, player in pairs(Players:GetPlayers()) do 
+                if player ~= LocalPlayer then 
+                    CreateCustomPlayerCard(player, function()
+                        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then 
+                            LocalPlayer.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame + Vector3.new(0, 2, 0) 
+                            SendNotification("Teleported to " .. player.DisplayName, 2)
+                        else
+                            SendNotification("Character not loaded!", 2)
+                        end
+                    end)
+                end 
+            end
+        end
+
+        RefreshBtn.MouseButton1Click:Connect(function() 
+            UpdateTeleportList() 
         end)
 
-        BuildPlayerList()
+        UpdateTeleportList()
     end
 end
