@@ -15,106 +15,10 @@ return function(env)
     local currentPodIndex = 0
     local tpKeybindConn = nil
 
+    -- ==========================================
+    -- COLUNA ESQUERDA: MAP OBJECTS
+    -- ==========================================
     Library:CreateSection(Page, "Map Objects", "Left")
-    
-    local CheckpointFrame = Instance.new("Frame")
-    CheckpointFrame.Name = "CheckpointFrame"
-    CheckpointFrame.Size = UDim2.new(0, 40, 0, 90)
-    CheckpointFrame.Position = UDim2.new(0, 2, 0.5, -45)
-    CheckpointFrame.BackgroundTransparency = 1
-    CheckpointFrame.Visible = false
-    CheckpointFrame.ZIndex = 50
-    CheckpointFrame.Parent = ScreenGui
-
-    local CPListLayout = Instance.new("UIListLayout")
-    CPListLayout.Parent = CheckpointFrame
-    CPListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    CPListLayout.Padding = UDim.new(0, 8)
-
-    local SetBtn = Instance.new("ImageButton")
-    SetBtn.Size = UDim2.new(1, 0, 0, 40)
-    SetBtn.BackgroundTransparency = 1
-    SetBtn.Image = "rbxassetid://6723742952"
-    SetBtn.Parent = CheckpointFrame
-
-    local TpBtn = Instance.new("ImageButton")
-    TpBtn.Size = UDim2.new(1, 0, 0, 40)
-    TpBtn.BackgroundTransparency = 1
-    TpBtn.Image = "rbxassetid://6723921202"
-    TpBtn.Parent = CheckpointFrame
-
-    local function createMarker(cframe)
-        if checkpointMarker and checkpointMarker.Parent then
-            checkpointMarker:Destroy()
-        end
-        checkpointMarker = Instance.new("Part")
-        checkpointMarker.Name = "FleeCheckpointMarker"
-        checkpointMarker.Shape = Enum.PartType.Cylinder
-        checkpointMarker.Size = Vector3.new(0.2, 4, 4)
-        checkpointMarker.CFrame = cframe * CFrame.new(0, -2.5, 0) * CFrame.Angles(0, 0, math.rad(90))
-        checkpointMarker.Anchored = true
-        checkpointMarker.CanCollide = false
-        checkpointMarker.Material = Enum.Material.Neon
-        checkpointMarker.Color = Color3.fromRGB(0, 255, 128)
-        checkpointMarker.Transparency = 0.4
-        checkpointMarker.Parent = Workspace
-        
-        local light = Instance.new("PointLight")
-        light.Color = checkpointMarker.Color
-        light.Range = 8
-        light.Brightness = 2
-        light.Parent = checkpointMarker
-    end
-
-    local function teleportToCheckpoint()
-        if savedCFrame then
-            local char = LocalPlayer.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                char.HumanoidRootPart.CFrame = savedCFrame
-                TpBtn.ImageColor3 = Color3.fromRGB(150, 150, 150)
-                task.delay(0.15, function() TpBtn.ImageColor3 = Color3.fromRGB(255, 255, 255) end)
-            end
-        else
-            SendNotification("No checkpoint set!", 2)
-        end
-    end
-
-    SetBtn.MouseButton1Click:Connect(function()
-        local char = LocalPlayer.Character
-        if char and char:FindFirstChild("HumanoidRootPart") then
-            savedCFrame = char.HumanoidRootPart.CFrame
-            createMarker(savedCFrame)
-            SetBtn.ImageColor3 = Color3.fromRGB(150, 150, 150)
-            task.delay(0.15, function() SetBtn.ImageColor3 = Color3.fromRGB(255, 255, 255) end)
-            SendNotification("Checkpoint Set!", 2)
-        end
-    end)
-
-    TpBtn.MouseButton1Click:Connect(teleportToCheckpoint)
-
-    Library:CreateToggle(Page, "Checkpoint (UI+R)", false, function(state) 
-        CheckpointFrame.Visible = state 
-        if state then
-            if not tpKeybindConn then
-                tpKeybindConn = UserInputService.InputBegan:Connect(function(input, gp)
-                    if gp then return end
-                    if input.KeyCode == Enum.KeyCode.R then
-                        teleportToCheckpoint()
-                    end
-                end)
-            end
-        else
-            if tpKeybindConn then 
-                tpKeybindConn:Disconnect() 
-                tpKeybindConn = nil 
-            end
-            if checkpointMarker then
-                checkpointMarker:Destroy()
-                checkpointMarker = nil
-            end
-            savedCFrame = nil
-        end
-    end)
 
     Library:CreateButton(Page, "TP Computer", function() 
         local char = LocalPlayer.Character
@@ -168,33 +72,137 @@ return function(env)
         if base then char.HumanoidRootPart.CFrame = base.CFrame * CFrame.new(0, 1, -3) end
     end)
 
-    Library:CreateSection(Page, "Players", "Right")
-    local TargetContainer = Library.CurrentSections[Page]
+    -- Botão novo (Vazio por enquanto)
+    Library:CreateButton(Page, "Tp Map", function()
+        -- Implementação futura
+    end)
 
-    local function UpdateTeleportList()
-        if not TargetContainer then return end
-        for _, child in pairs(TargetContainer:GetChildren()) do 
-            if child.Name == "PlayerCard" then 
-                child:Destroy() 
-            end 
+    -- ==========================================
+    -- COLUNA DIREITA: EXTRAS
+    -- ==========================================
+    Library:CreateSection(Page, "Extras", "Right")
+
+    -- Lógica de suporte do Checkpoint (Instanciação de UI)
+    local CheckpointFrame = ScreenGui:FindFirstChild("CheckpointFrame")
+    if not CheckpointFrame then
+        CheckpointFrame = Instance.new("Frame")
+        CheckpointFrame.Name = "CheckpointFrame"
+        CheckpointFrame.Size = UDim2.new(0, 40, 0, 90)
+        CheckpointFrame.Position = UDim2.new(0, 2, 0.5, -45)
+        CheckpointFrame.BackgroundTransparency = 1
+        CheckpointFrame.Visible = false
+        CheckpointFrame.ZIndex = 50
+        CheckpointFrame.Parent = ScreenGui
+
+        local CPListLayout = Instance.new("UIListLayout")
+        CPListLayout.Parent = CheckpointFrame
+        CPListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        CPListLayout.Padding = UDim.new(0, 8)
+
+        local SetBtn = Instance.new("ImageButton")
+        SetBtn.Size = UDim2.new(1, 0, 0, 40)
+        SetBtn.BackgroundTransparency = 1
+        SetBtn.Image = "rbxassetid://6723742952"
+        SetBtn.Parent = CheckpointFrame
+
+        local TpBtn = Instance.new("ImageButton")
+        TpBtn.Size = UDim2.new(1, 0, 0, 40)
+        TpBtn.BackgroundTransparency = 1
+        TpBtn.Image = "rbxassetid://6723921202"
+        TpBtn.Parent = CheckpointFrame
+
+        local function createMarker(cframe)
+            if checkpointMarker and checkpointMarker.Parent then
+                checkpointMarker:Destroy()
+            end
+            checkpointMarker = Instance.new("Part")
+            checkpointMarker.Name = "FleeCheckpointMarker"
+            checkpointMarker.Shape = Enum.PartType.Cylinder
+            checkpointMarker.Size = Vector3.new(0.2, 4, 4)
+            checkpointMarker.CFrame = cframe * CFrame.new(0, -2.5, 0) * CFrame.Angles(0, 0, math.rad(90))
+            checkpointMarker.Anchored = true
+            checkpointMarker.CanCollide = false
+            checkpointMarker.Material = Enum.Material.Neon
+            checkpointMarker.Color = Color3.fromRGB(0, 255, 128)
+            checkpointMarker.Transparency = 0.4
+            checkpointMarker.Parent = Workspace
+            
+            local light = Instance.new("PointLight")
+            light.Color = checkpointMarker.Color
+            light.Range = 8
+            light.Brightness = 2
+            light.Parent = checkpointMarker
         end
 
-        for _, player in pairs(Players:GetPlayers()) do 
-            if player ~= LocalPlayer then 
-                Library.CurrentSections[Page] = TargetContainer
-                Library:CreatePlayerCard(Page, player, function()
-                    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then 
-                        LocalPlayer.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame + Vector3.new(0, 2, 0) 
+        local function teleportToCheckpoint()
+            if savedCFrame then
+                local char = LocalPlayer.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    char.HumanoidRootPart.CFrame = savedCFrame
+                    TpBtn.ImageColor3 = Color3.fromRGB(150, 150, 150)
+                    task.delay(0.15, function() TpBtn.ImageColor3 = Color3.fromRGB(255, 255, 255) end)
+                end
+            else
+                SendNotification("No checkpoint set!", 2)
+            end
+        end
+
+        SetBtn.MouseButton1Click:Connect(function()
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                savedCFrame = char.HumanoidRootPart.CFrame
+                createMarker(savedCFrame)
+                SetBtn.ImageColor3 = Color3.fromRGB(150, 150, 150)
+                task.delay(0.15, function() SetBtn.ImageColor3 = Color3.fromRGB(255, 255, 255) end)
+                SendNotification("Checkpoint Set!", 2)
+            end
+        end)
+
+        TpBtn.MouseButton1Click:Connect(teleportToCheckpoint)
+    end
+
+    local function toggleCheckpointLogic(state)
+        CheckpointFrame.Visible = state 
+        if state then
+            if not tpKeybindConn then
+                tpKeybindConn = UserInputService.InputBegan:Connect(function(input, gp)
+                    if gp then return end
+                    if input.KeyCode == Enum.KeyCode.R then
+                        local char = LocalPlayer.Character
+                        if char and char:FindFirstChild("HumanoidRootPart") and savedCFrame then
+                            char.HumanoidRootPart.CFrame = savedCFrame
+                        end
                     end
-                end) 
-            end 
+                end)
+            end
+        else
+            if tpKeybindConn then 
+                tpKeybindConn:Disconnect() 
+                tpKeybindConn = nil 
+            end
+            if checkpointMarker then
+                checkpointMarker:Destroy()
+                checkpointMarker = nil
+            end
+            savedCFrame = nil
         end
     end
 
-    Library:CreateButton(Page, "Refresh List", function()
-        UpdateTeleportList()
-        SendNotification("Player list updated!", 2)
+    -- Toggle Checkpoint movida para a seção Extras (Coluna Direita)
+    Library:CreateToggle(Page, "Checkpoint (UI+R)", false, function(state)
+        toggleCheckpointLogic(state)
     end)
-    
-    UpdateTeleportList()
+
+    -- Botões novos (Vazios por enquanto)
+    Library:CreateButton(Page, "Reset Character", function()
+        -- Implementação futura
+    end)
+
+    Library:CreateButton(Page, "Server Rejoin", function()
+        -- Implementação futura
+    end)
+
+    Library:CreateButton(Page, "Random Servers", function()
+        -- Implementação futura
+    end)
 end
