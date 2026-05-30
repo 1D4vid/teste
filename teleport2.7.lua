@@ -9,6 +9,7 @@ return function(env)
         ItemStroke = Color3.fromRGB(60, 60, 60),
         Font = Enum.Font.GothamBold
     }
+    local ScreenGui = env.ScreenGui
     local SendNotification = env.SendNotification
     local UserInputService = env.UserInputService or game:GetService("UserInputService")
 
@@ -53,7 +54,7 @@ return function(env)
     end
 
     -- ==========================================
-    -- COLUNA ESQUERDA: MAP OBJECTS (PADRÃO LIBRARY)
+    -- COLUNA ESQUERDA: MAP OBJECTS (DESIGN ORIGINAL)
     -- ==========================================
     Library:CreateSection(TeleportPage, "Map Objects", "Left")
     
@@ -125,7 +126,7 @@ return function(env)
     end)
 
     -- ==========================================
-    -- COLUNA DIREITA: EXTRAS (PADRÃO LIBRARY)
+    -- COLUNA DIREITA: EXTRAS (DESIGN ORIGINAL)
     -- ==========================================
     Library:CreateSection(TeleportPage, "Extras", "Right")
 
@@ -134,75 +135,75 @@ return function(env)
     local tpKeybindConn = nil
 
     local CheckpointFrame = ScreenGui:FindFirstChild("CheckpointFrame")
-    if not CheckpointFrame then
-        CheckpointFrame = Instance.new("Frame")
-        CheckpointFrame.Name = "CheckpointFrame"
-        CheckpointFrame.Size = UDim2.new(0, 40, 0, 90)
-        CheckpointFrame.Position = UDim2.new(0, 2, 0.5, -45)
-        CheckpointFrame.BackgroundTransparency = 1
-        CheckpointFrame.Visible = false
-        CheckpointFrame.ZIndex = 50
-        CheckpointFrame.Parent = ScreenGui
+    if CheckpointFrame then CheckpointFrame:Destroy() end
 
-        local CPListLayout = Instance.new("UIListLayout")
-        CPListLayout.Parent = CheckpointFrame
-        CPListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        CPListLayout.Padding = UDim.new(0, 8)
+    CheckpointFrame = Instance.new("Frame")
+    CheckpointFrame.Name = "CheckpointFrame"
+    CheckpointFrame.Size = UDim2.new(0, 40, 0, 90)
+    CheckpointFrame.Position = UDim2.new(0, 2, 0.5, -45)
+    CheckpointFrame.BackgroundTransparency = 1
+    CheckpointFrame.Visible = false
+    CheckpointFrame.ZIndex = 50
+    CheckpointFrame.Parent = ScreenGui
 
-        local SetBtn = Instance.new("ImageButton")
-        SetBtn.Size = UDim2.new(1, 0, 0, 40)
-        SetBtn.BackgroundTransparency = 1
-        SetBtn.Image = "rbxassetid://6723742952"
-        SetBtn.Parent = CheckpointFrame
+    local CPListLayout = Instance.new("UIListLayout")
+    CPListLayout.Parent = CheckpointFrame
+    CPListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    CPListLayout.Padding = UDim.new(0, 8)
 
-        local TpBtn = Instance.new("ImageButton")
-        TpBtn.Size = UDim2.new(1, 0, 0, 40)
-        TpBtn.BackgroundTransparency = 1
-        TpBtn.Image = "rbxassetid://6723921202"
-        TpBtn.Parent = CheckpointFrame
+    local SetBtn = Instance.new("ImageButton")
+    SetBtn.Size = UDim2.new(1, 0, 0, 40)
+    SetBtn.BackgroundTransparency = 1
+    SetBtn.Image = "rbxassetid://6723742952"
+    SetBtn.Parent = CheckpointFrame
 
-        SetBtn.MouseButton1Click:Connect(function()
+    local TpBtn = Instance.new("ImageButton")
+    TpBtn.Size = UDim2.new(1, 0, 0, 40)
+    TpBtn.BackgroundTransparency = 1
+    TpBtn.Image = "rbxassetid://6723921202"
+    TpBtn.Parent = CheckpointFrame
+
+    SetBtn.MouseButton1Click:Connect(function()
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            savedCFrame = char.HumanoidRootPart.CFrame
+            if checkpointMarker then checkpointMarker:Destroy() end
+            checkpointMarker = Instance.new("Part")
+            checkpointMarker.Name = "FleeCheckpointMarker"
+            checkpointMarker.Shape = Enum.PartType.Cylinder
+            checkpointMarker.Size = Vector3.new(0.2, 4, 4)
+            checkpointMarker.CFrame = savedCFrame * CFrame.new(0, -2.5, 0) * CFrame.Angles(0, 0, math.rad(90))
+            checkpointMarker.Anchored = true
+            checkpointMarker.CanCollide = false
+            checkpointMarker.Material = Enum.Material.Neon
+            checkpointMarker.Color = Color3.fromRGB(0, 255, 128)
+            checkpointMarker.Transparency = 0.4
+            checkpointMarker.Parent = Workspace
+            
+            local light = Instance.new("PointLight")
+            light.Color = checkpointMarker.Color
+            light.Range = 8
+            light.Brightness = 2
+            light.Parent = checkpointMarker
+
+            SetBtn.ImageColor3 = Color3.fromRGB(150, 150, 150)
+            task.delay(0.15, function() SetBtn.ImageColor3 = Color3.fromRGB(255, 255, 255) end)
+            SendNotification("Checkpoint Set!", 2)
+        end
+    end)
+
+    TpBtn.MouseButton1Click:Connect(function()
+        if savedCFrame then
             local char = LocalPlayer.Character
             if char and char:FindFirstChild("HumanoidRootPart") then
-                savedCFrame = char.HumanoidRootPart.CFrame
-                if checkpointMarker then checkpointMarker:Destroy() end
-                checkpointMarker = Instance.new("Part")
-                checkpointMarker.Name = "FleeCheckpointMarker"
-                checkpointMarker.Shape = Enum.PartType.Cylinder
-                checkpointMarker.Size = Vector3.new(0.2, 4, 4)
-                checkpointMarker.CFrame = savedCFrame * CFrame.new(0, -2.5, 0) * CFrame.Angles(0, 0, math.rad(90))
-                checkpointMarker.Anchored = true
-                checkpointMarker.CanCollide = false
-                checkpointMarker.Material = Enum.Material.Neon
-                checkpointMarker.Color = Color3.fromRGB(0, 255, 128)
-                checkpointMarker.Transparency = 0.4
-                checkpointMarker.Parent = Workspace
-                
-                local light = Instance.new("PointLight")
-                light.Color = checkpointMarker.Color
-                light.Range = 8
-                light.Brightness = 2
-                light.Parent = checkpointMarker
-
-                SetBtn.ImageColor3 = Color3.fromRGB(150, 150, 150)
-                task.delay(0.15, function() SetBtn.ImageColor3 = Color3.fromRGB(255, 255, 255) end)
-                SendNotification("Checkpoint Set!", 2)
+                char.HumanoidRootPart.CFrame = savedCFrame
+                TpBtn.ImageColor3 = Color3.fromRGB(150, 150, 150)
+                task.delay(0.15, function() TpBtn.ImageColor3 = Color3.fromRGB(255, 255, 255) end)
             end
-        end)
-
-        TpBtn.MouseButton1Click:Connect(function()
-            if savedCFrame then
-                local char = LocalPlayer.Character
-                if char and char:FindFirstChild("HumanoidRootPart") then
-                    char.HumanoidRootPart.CFrame = savedCFrame
-                    TpBtn.ImageColor3 = Color3.fromRGB(150, 150, 150)
-                    task.delay(0.15, function() TpBtn.ImageColor3 = Color3.fromRGB(255, 255, 255) end)
-                end
-            else
-                SendNotification("No checkpoint set!", 2)
-            end
-        end)
-    end
+        else
+            SendNotification("No checkpoint set!", 2)
+        end
+    end)
 
     Library:CreateToggle(TeleportPage, "Checkpoint (UI+R)", false, function(state)
         CheckpointFrame.Visible = state 
@@ -262,30 +263,30 @@ return function(env)
     end)
 
     -- ==========================================
-    -- SEÇÃO: PLAYERS TELEPORT (APENAS ESTA SEÇÃO COM O NOVO DESIGN)
+    -- SEÇÃO EXCLUSIVA: PLAYERS TELEPORT (SISTEMA SEPARADO)
     -- ==========================================
     Library:CreateSection(TeleportPage, "Players Teleport", "Right")
     
-    -- Obtém o contêiner interno gerado para esta seção na coluna da direita
-    local targetSectionBox = Library.CurrentSections[TeleportPage]
+    -- Captura a caixa de seção (SectionBox) recém-criada para abrigar nossos elementos customizados
+    local playersBox = Library.CurrentSections[TeleportPage]
 
-    -- Botão "Refresh" customizado
+    -- Botão "Refresh" Customizado (Desenhado manualmente dentro do contêiner)
     local RefreshBtn = Instance.new("TextButton")
     RefreshBtn.Name = "RefreshBtnStatic"
-    RefreshBtn.Size = UDim2.new(1, 0, 0, 28)
-    RefreshBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    RefreshBtn.BackgroundTransparency = 0.45
+    RefreshBtn.Size = UDim2.new(1, 0, 0, 26)
+    RefreshBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    RefreshBtn.BackgroundTransparency = 0.2
     RefreshBtn.Text = "Refresh"
-    RefreshBtn.TextColor3 = Theme.Accent
-    RefreshBtn.Font = Theme.Font
-    RefreshBtn.TextSize = 11
-    RefreshBtn.Parent = targetSectionBox
-    Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 5)
+    RefreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    RefreshBtn.Font = Enum.Font.GothamBold
+    RefreshBtn.TextSize = 10
+    RefreshBtn.Parent = playersBox
+    Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 4)
     local rStr = Instance.new("UIStroke", RefreshBtn)
-    rStr.Color = Color3.fromRGB(60, 60, 60)
+    rStr.Color = Color3.fromRGB(50, 50, 50)
     rStr.Thickness = 1
 
-    -- Construtor do card customizado exatamente igual à foto
+    -- Renderização dos Cards do jogador de forma independente do Hub Principal
     local function CreateCustomPlayerCard(parent, player)
         local Card = Instance.new("Frame")
         Card.Name = "PlayerCard"
@@ -302,7 +303,7 @@ return function(env)
         Stroke.Thickness = 1
         Stroke.Parent = Card
 
-        -- Avatar do Jogador (Arredondado)
+        -- Avatar Redondo
         local Avatar = Instance.new("ImageLabel")
         Avatar.Size = UDim2.new(0, 32, 0, 32)
         Avatar.Position = UDim2.new(0, 6, 0.5, -16)
@@ -316,11 +317,11 @@ return function(env)
             if isReady then Avatar.Image = content end
         end)
 
-        -- Nome Exibido
+        -- Nome de Exibição
         local Display = Instance.new("TextLabel")
         Display.Text = player.DisplayName
         Display.Size = UDim2.new(1, -115, 0, 15)
-        Display.Position = UDim2.new(0, 44, 0, 8)
+        Display.Position = UDim2.new(0, 44, 0, 6)
         Display.BackgroundTransparency = 1
         Display.Font = Enum.Font.GothamBold
         Display.TextSize = 11
@@ -328,11 +329,11 @@ return function(env)
         Display.TextXAlignment = Enum.TextXAlignment.Left
         Display.Parent = Card
 
-        -- @User
+        -- @NomeDeUsuario
         local User = Instance.new("TextLabel")
         User.Text = "@" .. player.Name
         User.Size = UDim2.new(1, -115, 0, 13)
-        User.Position = UDim2.new(0, 44, 0, 24)
+        User.Position = UDim2.new(0, 44, 0, 22)
         User.BackgroundTransparency = 1
         User.Font = Enum.Font.Gotham
         User.TextSize = 9
@@ -340,7 +341,7 @@ return function(env)
         User.TextXAlignment = Enum.TextXAlignment.Left
         User.Parent = Card
 
-        -- Botão de Teleporte Estilizado com Degradê
+        -- Botão de Teleporte Estilizado
         local TpBtn = Instance.new("TextButton")
         TpBtn.Size = UDim2.new(0, 55, 0, 24)
         TpBtn.Position = UDim2.new(1, -61, 0.5, -12)
@@ -353,6 +354,7 @@ return function(env)
 
         Instance.new("UICorner", TpBtn).CornerRadius = UDim.new(0, 4)
 
+        -- Gradiente do Botão
         local btnGrad = Instance.new("UIGradient")
         btnGrad.Color = ColorSequence.new{
             ColorSequenceKeypoint.new(0, Color3.fromRGB(240, 240, 240)),
@@ -373,15 +375,16 @@ return function(env)
         end)
     end
 
+    -- Atualização dinâmica dos cards dentro da categoria
     local function UpdateTeleportList()
-        for _, child in pairs(targetSectionBox:GetChildren()) do 
+        for _, child in pairs(playersBox:GetChildren()) do 
             if child.Name == "PlayerCard" then 
                 child:Destroy() 
             end 
         end
         for _, player in pairs(Players:GetPlayers()) do 
             if player ~= LocalPlayer then 
-                CreateCustomPlayerCard(targetSectionBox, player)
+                CreateCustomPlayerCard(playersBox, player)
             end 
         end
     end
