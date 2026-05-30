@@ -54,7 +54,7 @@ return function(env)
     end
 
     -- ==========================================
-    -- COLUNA ESQUERDA: MAP OBJECTS (DESIGN ORIGINAL)
+    -- CRIAÇÃO DAS SEÇÕES DO TOPO (DUAS COLUNAS)
     -- ==========================================
     Library:CreateSection(TeleportPage, "Map Objects", "Left")
     
@@ -125,9 +125,6 @@ return function(env)
         -- Implementação futura
     end)
 
-    -- ==========================================
-    -- COLUNA DIREITA: EXTRAS (DESIGN ORIGINAL)
-    -- ==========================================
     Library:CreateSection(TeleportPage, "Extras", "Right")
 
     local savedCFrame = nil
@@ -262,99 +259,184 @@ return function(env)
         end
     end)
 
-    -- ==========================================
-    -- SEÇÃO EXCLUSIVA: PLAYERS TELEPORT (SISTEMA SEPARADO)
-    -- ==========================================
-    Library:CreateSection(TeleportPage, "Players Teleport", "Right")
-    
-    -- Captura a caixa de seção (SectionBox) recém-criada para abrigar nossos elementos customizados
-    local playersBox = Library.CurrentSections[TeleportPage]
+    -- ==========================================================
+    -- REORGANIZAÇÃO DINÂMICA DO LAYOUT (COLUNAS NO TOPO / FULL-WIDTH ABAIXO)
+    -- ==========================================================
+    local LeftCol = TeleportPage:FindFirstChild("LeftCol")
+    local RightCol = TeleportPage:FindFirstChild("RightCol")
 
-    -- Botão "Refresh" Customizado (Desenhado manualmente dentro do contêiner)
+    if LeftCol and RightCol then
+        -- Remove o layout de lista horizontal original do TeleportPage
+        local origLayout = TeleportPage:FindFirstChildOfClass("UIListLayout")
+        if origLayout then origLayout:Destroy() end
+
+        -- Aplica um novo layout de lista vertical diretamente na página de teleporte
+        local pageListLayout = Instance.new("UIListLayout")
+        pageListLayout.FillDirection = Enum.FillDirection.Vertical
+        pageListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        pageListLayout.Padding = UDim.new(0, 10)
+        pageListLayout.Parent = TeleportPage
+
+        -- Cria um contêiner horizontal para manter "Map Objects" e "Extras" lado a lado no topo
+        local TopColumnsContainer = Instance.new("Frame")
+        TopColumnsContainer.Name = "TopColumnsContainer"
+        TopColumnsContainer.Size = UDim2.new(1, 0, 0, 0)
+        TopColumnsContainer.AutomaticSize = Enum.AutomaticSize.Y
+        TopColumnsContainer.BackgroundTransparency = 1
+        TopColumnsContainer.LayoutOrder = 1
+        TopColumnsContainer.Parent = TeleportPage
+
+        local hLayout = Instance.new("UIListLayout")
+        hLayout.FillDirection = Enum.FillDirection.Horizontal
+        hLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        hLayout.Padding = UDim.new(0, 12)
+        hLayout.Parent = TopColumnsContainer
+
+        -- Move e ajusta as duas colunas originais do topo para dentro do contêiner horizontal
+        LeftCol.Size = UDim2.new(0.5, -6, 0, 0)
+        LeftCol.AutomaticSize = Enum.AutomaticSize.Y
+        LeftCol.Parent = TopColumnsContainer
+        LeftCol.LayoutOrder = 1
+
+        RightCol.Size = UDim2.new(0.5, -6, 0, 0)
+        RightCol.AutomaticSize = Enum.AutomaticSize.Y
+        RightCol.Parent = TopColumnsContainer
+        RightCol.LayoutOrder = 2
+    end
+
+    -- ==========================================
+    -- SEÇÃO EXCLUSIVA DE LARGURA TOTAL (FULL-WIDTH) EMBAIXO
+    -- ==========================================
+    local PlayersSection = Instance.new("Frame")
+    PlayersSection.Name = "PlayersTeleportSection"
+    PlayersSection.Size = UDim2.new(1, -2, 0, 0)
+    PlayersSection.AutomaticSize = Enum.AutomaticSize.Y
+    PlayersSection.BackgroundColor3 = Color3.new(0, 0, 0)
+    PlayersSection.BackgroundTransparency = 0.45
+    PlayersSection.BorderSizePixel = 0
+    PlayersSection.LayoutOrder = 2
+    PlayersSection.Parent = TeleportPage
+
+    Instance.new("UICorner", PlayersSection).CornerRadius = UDim.new(0, 6)
+    local pStroke = Instance.new("UIStroke", PlayersSection)
+    pStroke.Color = Color3.fromRGB(40, 40, 40)
+    pStroke.Thickness = 1
+
+    local pLayout = Instance.new("UIListLayout", PlayersSection)
+    pLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    pLayout.Padding = UDim.new(0, 6)
+
+    local pPadding = Instance.new("UIPadding", PlayersSection)
+    pPadding.PaddingTop = UDim.new(0, 8)
+    pPadding.PaddingBottom = UDim.new(0, 8)
+    pPadding.PaddingLeft = UDim.new(0, 10)
+    pPadding.PaddingRight = UDim.new(0, 10)
+
+    -- Título da Seção (Players Teleport)
+    local HeaderContainer = Instance.new("Frame")
+    HeaderContainer.Name = "HeaderContainer"
+    HeaderContainer.Size = UDim2.new(1, 0, 0, 20)
+    HeaderContainer.BackgroundTransparency = 1
+    HeaderContainer.LayoutOrder = 1
+    HeaderContainer.Parent = PlayersSection
+
+    local HeaderLabel = Instance.new("TextLabel")
+    HeaderLabel.Size = UDim2.new(1, 0, 1, 0)
+    HeaderLabel.BackgroundTransparency = 1
+    HeaderLabel.Text = "Players Teleport"
+    HeaderLabel.Font = Theme.Font
+    HeaderLabel.TextSize = 12
+    HeaderLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    HeaderLabel.TextXAlignment = Enum.TextXAlignment.Left
+    HeaderLabel.Parent = HeaderContainer
+
+    -- Botão "Refresh" Customizado de Largura Total
     local RefreshBtn = Instance.new("TextButton")
     RefreshBtn.Name = "RefreshBtnStatic"
-    RefreshBtn.Size = UDim2.new(1, 0, 0, 26)
-    RefreshBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    RefreshBtn.BackgroundTransparency = 0.2
+    RefreshBtn.Size = UDim2.new(1, 0, 0, 28)
+    RefreshBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    RefreshBtn.BackgroundTransparency = 0.45
     RefreshBtn.Text = "Refresh"
-    RefreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    RefreshBtn.Font = Enum.Font.GothamBold
-    RefreshBtn.TextSize = 10
-    RefreshBtn.Parent = playersBox
-    Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 4)
+    RefreshBtn.TextColor3 = Theme.Accent
+    RefreshBtn.Font = Theme.Font
+    RefreshBtn.TextSize = 11
+    RefreshBtn.LayoutOrder = 2
+    RefreshBtn.Parent = PlayersSection
+    Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 5)
     local rStr = Instance.new("UIStroke", RefreshBtn)
-    rStr.Color = Color3.fromRGB(50, 50, 50)
+    rStr.Color = Color3.fromRGB(60, 60, 60)
     rStr.Thickness = 1
 
-    -- Renderização dos Cards do jogador de forma independente do Hub Principal
-    local function CreateCustomPlayerCard(parent, player)
+    -- Construtor de Cards do Jogador em Largura Total (Full-Width)
+    local function CreateCustomPlayerCard(parent, player, layoutOrderIndex)
         local Card = Instance.new("Frame")
         Card.Name = "PlayerCard"
-        Card.Size = UDim2.new(1, 0, 0, 50)
+        Card.Size = UDim2.new(1, 0, 0, 55)
         Card.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
         Card.BackgroundTransparency = 0.55
         Card.BorderSizePixel = 0
+        Card.LayoutOrder = layoutOrderIndex
         Card.Parent = parent
 
-        Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 6)
+        Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 8)
         
         local Stroke = Instance.new("UIStroke")
         Stroke.Color = Color3.fromRGB(45, 45, 45)
         Stroke.Thickness = 1
         Stroke.Parent = Card
 
-        -- Avatar Redondo
+        -- Thumbnail do Avatar (Esquerda)
         local Avatar = Instance.new("ImageLabel")
-        Avatar.Size = UDim2.new(0, 32, 0, 32)
-        Avatar.Position = UDim2.new(0, 6, 0.5, -16)
+        Avatar.Size = UDim2.new(0, 40, 0, 40)
+        Avatar.Position = UDim2.new(0, 8, 0.5, -20)
         Avatar.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
         Avatar.BackgroundTransparency = 0.3
         Avatar.Parent = Card
-        Instance.new("UICorner", Avatar).CornerRadius = UDim.new(0, 6)
+        Instance.new("UICorner", Avatar).CornerRadius = UDim.new(0, 8)
 
         task.spawn(function()
             local content, isReady = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
             if isReady then Avatar.Image = content end
         end)
 
-        -- Nome de Exibição
+        -- Nome de Exibição (Display Name)
         local Display = Instance.new("TextLabel")
         Display.Text = player.DisplayName
-        Display.Size = UDim2.new(1, -115, 0, 15)
-        Display.Position = UDim2.new(0, 44, 0, 6)
+        Display.Size = UDim2.new(1, -160, 0, 18)
+        Display.Position = UDim2.new(0, 56, 0, 10)
         Display.BackgroundTransparency = 1
         Display.Font = Enum.Font.GothamBold
-        Display.TextSize = 11
+        Display.TextSize = 13
         Display.TextColor3 = Color3.fromRGB(255, 255, 255)
         Display.TextXAlignment = Enum.TextXAlignment.Left
         Display.Parent = Card
 
-        -- @NomeDeUsuario
+        -- Username com @
         local User = Instance.new("TextLabel")
         User.Text = "@" .. player.Name
-        User.Size = UDim2.new(1, -115, 0, 13)
-        User.Position = UDim2.new(0, 44, 0, 22)
+        User.Size = UDim2.new(1, -160, 0, 14)
+        User.Position = UDim2.new(0, 56, 0, 28)
         User.BackgroundTransparency = 1
         User.Font = Enum.Font.Gotham
-        User.TextSize = 9
+        User.TextSize = 11
         User.TextColor3 = Color3.fromRGB(150, 150, 150)
         User.TextXAlignment = Enum.TextXAlignment.Left
         User.Parent = Card
 
-        -- Botão de Teleporte Estilizado
+        -- Botão "Teleport" (Direita)
         local TpBtn = Instance.new("TextButton")
-        TpBtn.Size = UDim2.new(0, 55, 0, 24)
-        TpBtn.Position = UDim2.new(1, -61, 0.5, -12)
+        TpBtn.Size = UDim2.new(0, 100, 0, 32)
+        TpBtn.Position = UDim2.new(1, -108, 0.5, -16)
         TpBtn.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
         TpBtn.Text = "Teleport"
         TpBtn.Font = Enum.Font.GothamBold
-        TpBtn.TextSize = 9
+        TpBtn.TextSize = 11
         TpBtn.TextColor3 = Color3.fromRGB(20, 20, 20)
         TpBtn.Parent = Card
 
-        Instance.new("UICorner", TpBtn).CornerRadius = UDim.new(0, 4)
+        Instance.new("UICorner", TpBtn).CornerRadius = UDim.new(0, 6)
 
-        -- Gradiente do Botão
+        -- Efeito de Degradê Metálico
         local btnGrad = Instance.new("UIGradient")
         btnGrad.Color = ColorSequence.new{
             ColorSequenceKeypoint.new(0, Color3.fromRGB(240, 240, 240)),
@@ -375,16 +457,17 @@ return function(env)
         end)
     end
 
-    -- Atualização dinâmica dos cards dentro da categoria
     local function UpdateTeleportList()
-        for _, child in pairs(playersBox:GetChildren()) do 
+        for _, child in pairs(PlayersSection:GetChildren()) do 
             if child.Name == "PlayerCard" then 
                 child:Destroy() 
             end 
         end
+        local index = 3
         for _, player in pairs(Players:GetPlayers()) do 
             if player ~= LocalPlayer then 
-                CreateCustomPlayerCard(playersBox, player)
+                CreateCustomPlayerCard(PlayersSection, player, index)
+                index = index + 1
             end 
         end
     end
