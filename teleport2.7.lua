@@ -8,12 +8,7 @@ return function(env)
     local SendNotification = env.SendNotification
     local UserInputService = env.UserInputService
 
-    -- Fallback seguro caso o Theme não seja passado no ambiente
-    local Theme = env.Theme or {
-        ItemStroke = Color3.fromRGB(40, 40, 40),
-        Accent = Color3.fromRGB(240, 240, 240),
-        Font = Enum.Font.GothamBold
-    }
+    local TweenService = game:GetService("TweenService")
 
     local savedCFrame = nil
     local checkpointMarker = nil
@@ -204,44 +199,132 @@ return function(env)
     Library:CreateButton(Page, "Teleport to Beast", function() end)
 
     -- ==========================================
-    -- SISTEMA NATAL DE TELEPORTE DE JOGADORES (Fidelidade ao teleport.txt)
+    -- SISTEMA EXCLUSIVO E INDEPENDENTE DE CARDS DE TELEPORTE
     -- ==========================================
     Library:CreateSection(Page, "Players Teleport", "Right")
     local TargetBox = Library.CurrentSections[Page]
 
+    -- Função local para desenhar o Card Horizontal idêntico ao modelo
+    local function CreateCustomPlayerCard(parent, player, callback)
+        local Card = Instance.new("Frame")
+        Card.Name = "CustomPlayerCard"
+        Card.Size = UDim2.new(1, 0, 0, 48) -- Retangular e totalmente deitado
+        Card.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        Card.BackgroundTransparency = 0.45 -- Transparência idêntica
+        Card.BorderSizePixel = 0
+        Card.Parent = parent
+
+        local CardCorner = Instance.new("UICorner", Card)
+        CardCorner.CornerRadius = UDim.new(0, 6)
+
+        local CardStroke = Instance.new("UIStroke", Card)
+        CardStroke.Color = Color3.fromRGB(45, 45, 45) -- Borda cinza escura
+        CardStroke.Thickness = 1
+
+        -- Imagem do Avatar
+        local Avatar = Instance.new("ImageLabel")
+        Avatar.Size = UDim2.new(0, 30, 0, 30)
+        Avatar.Position = UDim2.new(0, 8, 0.5, -15)
+        Avatar.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+        Avatar.BorderSizePixel = 0
+        Avatar.Image = "rbxassetid://0"
+        Avatar.Parent = Card
+        Instance.new("UICorner", Avatar).CornerRadius = UDim.new(0, 6)
+
+        task.spawn(function()
+            local content, isReady = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+            if isReady then Avatar.Image = content end
+        end)
+
+        -- Nome de Exibição (Display Name)
+        local DisplayName = Instance.new("TextLabel")
+        DisplayName.Text = player.DisplayName
+        DisplayName.Size = UDim2.new(1, -125, 0, 16)
+        DisplayName.Position = UDim2.new(0, 46, 0.5, -15)
+        DisplayName.BackgroundTransparency = 1
+        DisplayName.Font = Enum.Font.GothamBold
+        DisplayName.TextColor3 = Color3.fromRGB(255, 255, 255)
+        DisplayName.TextXAlignment = Enum.TextXAlignment.Left
+        DisplayName.TextSize = 12
+        DisplayName.Parent = Card
+
+        -- Nome de Usuário (Username com @)
+        local Username = Instance.new("TextLabel")
+        Username.Text = "@" .. player.Name
+        Username.Size = UDim2.new(1, -125, 0, 12)
+        Username.Position = UDim2.new(0, 46, 0.5, 2)
+        Username.BackgroundTransparency = 1
+        Username.Font = Enum.Font.Gotham
+        Username.TextColor3 = Color3.fromRGB(150, 150, 150)
+        Username.TextXAlignment = Enum.TextXAlignment.Left
+        Username.TextSize = 10
+        Username.Parent = Card
+
+        -- Botão de Teleporte Branco Sólido
+        local ActionBtn = Instance.new("TextButton")
+        ActionBtn.Size = UDim2.new(0, 55, 0, 24)
+        ActionBtn.Position = UDim2.new(1, -63, 0.5, -12)
+        ActionBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255) -- Branco Puro
+        ActionBtn.Text = "TP"
+        ActionBtn.Font = Enum.Font.GothamBold
+        ActionBtn.TextSize = 11
+        ActionBtn.TextColor3 = Color3.fromRGB(15, 15, 15) -- Texto Escuro
+        ActionBtn.Parent = Card
+        Instance.new("UICorner", ActionBtn).CornerRadius = UDim.new(0, 5)
+
+        local btnStroke = Instance.new("UIStroke", ActionBtn)
+        btnStroke.Color = Color3.fromRGB(200, 200, 200)
+        btnStroke.Thickness = 1
+
+        -- Efeito Hover Suave no Botão Branco
+        ActionBtn.MouseEnter:Connect(function()
+            TweenService:Create(ActionBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(220, 220, 220)}):Play()
+        end)
+        ActionBtn.MouseLeave:Connect(function()
+            TweenService:Create(ActionBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+        end)
+
+        ActionBtn.MouseButton1Click:Connect(function()
+            pcall(callback)
+        end)
+    end
+
     if TargetBox then
-        -- Botão de Atualização Nativo no SectionBox
+        -- Botão de Refresh
         local RefreshBtn = Instance.new("TextButton")
         RefreshBtn.Name = "RefreshBtnStatic"
         RefreshBtn.Size = UDim2.new(1, 0, 0, 32)
-        RefreshBtn.BackgroundColor3 = Theme.ItemStroke
+        RefreshBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
         RefreshBtn.Text = "Refresh List"
-        RefreshBtn.TextColor3 = Theme.Accent
-        RefreshBtn.Font = Theme.Font
-        RefreshBtn.TextSize = 13
+        RefreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        RefreshBtn.Font = Enum.Font.GothamBold
+        RefreshBtn.TextSize = 12
         RefreshBtn.Parent = TargetBox
         Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 6)
+        
+        local refStroke = Instance.new("UIStroke", RefreshBtn)
+        refStroke.Color = Color3.fromRGB(45, 45, 45)
 
-        -- Espaçador nativo
+        -- Espaçador
         local Spacer = Instance.new("Frame")
         Spacer.Name = "SpacerStatic"
         Spacer.Size = UDim2.new(1, 0, 0, 5)
         Spacer.BackgroundTransparency = 1
         Spacer.Parent = TargetBox
 
-        -- Função para atualizar a lista utilizando a API nativa da Library
+        -- Função para gerenciar e reconstruir a lista de forma isolada
         local function UpdateTeleportList()
-            -- Limpa os cards de jogadores anteriores de dentro do container da seção
-            for _, child in pairs(TargetBox:GetChildren()) do 
-                if child.Name == "PlayerCard" then 
+            -- Limpar apenas os cards customizados
+            for _, child in ipairs(TargetBox:GetChildren()) do 
+                if child.Name == "CustomPlayerCard" then 
                     child:Destroy() 
                 end 
             end
             
-            -- Cria os novos cards utilizando a função nativa do Hub principal
-            for _, player in pairs(Players:GetPlayers()) do 
+            -- Recriar os cards deitados usando a nova renderização local
+            for _, player in ipairs(Players:GetPlayers()) do 
                 if player ~= LocalPlayer then 
-                    Library:CreatePlayerCard(Page, player, function()
+                    CreateCustomPlayerCard(TargetBox, player, function()
                         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then 
                             LocalPlayer.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame + Vector3.new(0, 2, 0) 
                         end
@@ -252,9 +335,9 @@ return function(env)
 
         RefreshBtn.MouseButton1Click:Connect(function() 
             UpdateTeleportList() 
+            SendNotification("Player list updated!", 2)
         end)
 
-        -- Executa uma vez na inicialização
         UpdateTeleportList()
     end
 end
