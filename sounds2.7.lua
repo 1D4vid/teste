@@ -25,7 +25,7 @@ return function(env)
     local JumpVolMultiplier = UserConfigs["Vol_JumpMultiplier"] or 1
     local FallVolMultiplier = UserConfigs["Vol_FallMultiplier"] or 1
 
-    -- Carregando estado do Silenciador da Beast (Test Beast Mute)
+    -- Carregando estado do Silenciador da Beast (Mute Beast Sounds)
     local BeastMuteEnabled = UserConfigs["Legit_BeastMute"]
     if BeastMuteEnabled == nil then BeastMuteEnabled = false end
 
@@ -254,8 +254,11 @@ return function(env)
         end
     end
     
+    -- Varredura e escuta estendidas ao SoundService para interceptar a música de aviso/perseguição
     for _, obj in ipairs(Workspace:GetDescendants()) do registerSound(obj) end
+    for _, obj in ipairs(SoundService:GetDescendants()) do registerSound(obj) end
     Workspace.DescendantAdded:Connect(registerSound)
+    SoundService.DescendantAdded:Connect(registerSound)
 
     -- Identifica de forma segura se o jogador é a Beast
     local function checkIsBeast(player)
@@ -284,19 +287,18 @@ return function(env)
         return false
     end
 
-    -- Identifica se o som se origina de dentro do personagem da Beast em tempo de execução
-    local function isSoundFromBeast(sound)
+    local BeastCharacter = nil
+    local function updateBeastCharacter()
         for _, player in ipairs(Players:GetPlayers()) do
-            if player.Character and sound:IsDescendantOf(player.Character) then
-                if checkIsBeast(player) then
-                    return true
-                end
+            if checkIsBeast(player) then
+                BeastCharacter = player.Character
+                return
             end
         end
-        return false
+        BeastCharacter = nil
     end
 
-    -- Sincronizador de volumes otimizado de alto desempenho (Sem loops infinitos ou zombie connections)
+    -- Sincronizador de volumes otimizado de altíssimo desempenho (Consumo ~0% de CPU)
     task.spawn(function()
         while task.wait(0.3) do
             local enabled = VolumesEnabled
@@ -307,6 +309,9 @@ return function(env)
             local muteJumps = LegitSettings.MuteJumps
             local muteBeast = BeastMuteEnabled
             local localChar = LocalPlayer.Character
+            
+            -- Pré-calcula a Beast ativa uma única vez por ciclo
+            updateBeastCharacter()
 
             for sound in pairs(ActiveSounds) do
                 local category = SoundCategories[sound]
@@ -342,8 +347,8 @@ return function(env)
                             end
                         end
 
-                        -- Silenciador global de barulhos físicos da Beast
-                        if muteBeast and isSoundFromBeast(sound) then
+                        -- Silenciador global de barulhos físicos vindos do personagem da Beast
+                        if muteBeast and BeastCharacter and sound:IsDescendantOf(BeastCharacter) then
                             multiplier = 0
                         end
                     end
@@ -732,7 +737,9 @@ return function(env)
             noHitSoundSignals = {}
         end
     end)
-    CreateCompactToggle(MuteBlock, "Test Beast Mute", BeastMuteEnabled, function(state)
+    
+    -- Seletor Corrigido para Mute Beast Sounds
+    CreateCompactToggle(MuteBlock, "Mute Beast Sounds", BeastMuteEnabled, function(state)
         BeastMuteEnabled = state
         UserConfigs["Legit_BeastMute"] = state
     end)
@@ -741,12 +748,12 @@ return function(env)
     -- MUSIC PLAYER (Design Elegante, Compacto com Dropdown Flutuante)
     -- =========================================================================
     local MusicBlock = Instance.new("Frame")
-    MusicBlock.Size = UDim2.new(1, -2, 0, 95) -- Tamanho aumentado para 95px de segurança total contra colisões
+    MusicBlock.Size = UDim2.new(1, -2, 0, 95) -- Tamanho de segurança de 95px contra colisões
     MusicBlock.BackgroundColor3 = Color3.new(0, 0, 0)
     MusicBlock.BackgroundTransparency = 0.45
     MusicBlock.BorderSizePixel = 0
-    MusicBlock.ClipsDescendants = false -- Permite que a lista flutue perfeitamente sobre os cards
-    MusicBlock.ZIndex = 100 -- ZIndex muito alto para priorizar todos os herdeiros
+    MusicBlock.ClipsDescendants = false -- Permite o dropdown flutuar sem problemas
+    MusicBlock.ZIndex = 100 -- ZIndex prioritário
     MusicBlock.Parent = Page
     
     local muStroke = Instance.new("UIStroke", MusicBlock)
@@ -773,11 +780,11 @@ return function(env)
     -- Entrada Customizada de ID (Fundo preto transparente integrado)
     local textBox = Instance.new("TextBox")
     textBox.Size = UDim2.new(0.32, -6, 0, 28)
-    textBox.Position = UDim2.new(0, 0, 0, 42) -- Alinhado perfeitamente na parte inferior
+    textBox.Position = UDim2.new(0, 0, 0, 42)
     textBox.PlaceholderText = "Insert ID..."
     textBox.Text = ""
     textBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Fundo preto
-    textBox.BackgroundTransparency = 0.45 -- Transparência idêntica
+    textBox.BackgroundTransparency = 0.45 -- Transparente
     textBox.TextColor3 = Theme.Text
     textBox.PlaceholderColor3 = Theme.TextDark
     textBox.Font = Theme.Font
@@ -792,9 +799,9 @@ return function(env)
     -- Botão Seletor de Faixas (Pre-seleções) (Fundo preto transparente integrado)
     local songDropdown = Instance.new("TextButton")
     songDropdown.Size = UDim2.new(0.32, -6, 0, 28)
-    songDropdown.Position = UDim2.new(0.32, 6, 0, 42) -- Alinhado no centro inferior
+    songDropdown.Position = UDim2.new(0.32, 6, 0, 42)
     songDropdown.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Fundo preto
-    songDropdown.BackgroundTransparency = 0.45 -- Transparência idêntica
+    songDropdown.BackgroundTransparency = 0.45 -- Transparente
     songDropdown.Text = "Select Song"
     songDropdown.Font = Theme.Font
     songDropdown.TextSize = 10
@@ -902,7 +909,7 @@ return function(env)
     -- Botão Play/Stop de Canto Inferior Direito sem colisão de Y
     local playBtn = Instance.new("TextButton")
     playBtn.Size = UDim2.new(0.34, -12, 0, 28)
-    playBtn.Position = UDim2.new(0.66, 12, 0, 42) -- Alinhado à direita inferior (Sem colisão com o slider que fica em Y = -4)
+    playBtn.Position = UDim2.new(0.66, 12, 0, 42)
     playBtn.BackgroundColor3 = Color3.new(0, 0, 0)
     playBtn.BackgroundTransparency = 0.45
     playBtn.Text = "Play"
@@ -955,7 +962,7 @@ return function(env)
     -- Slider de Volume da Música (Y = -4 para espaçamento de folga)
     local sliderFrame = Instance.new("Frame")
     sliderFrame.Size = UDim2.new(0.4, 0, 0, 35)
-    sliderFrame.Position = UDim2.new(0.6, 0, 0, -4) -- Posicionado no topo direito do bloco
+    sliderFrame.Position = UDim2.new(0.6, 0, 0, -4)
     sliderFrame.BackgroundTransparency = 1
     sliderFrame.ZIndex = 101
     sliderFrame.Parent = MusicBlock
