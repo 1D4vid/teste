@@ -17,25 +17,16 @@ return function(env)
     local currentPodIndex = 0
     local tpKeybindConn = nil
 
-    -- Paleta de Cores Local (para combinar perfeitamente com o tema)
+    -- Paleta de Cores Alinhada com a Nova Estética
     local Theme = {
-        Accent = Color3.fromRGB(240, 240, 240),
-        AccentDark = Color3.fromRGB(160, 160, 160),
         Text = Color3.fromRGB(255, 255, 255),
-        TextDark = Color3.fromRGB(150, 150, 150),
-        CardBg = Color3.fromRGB(14, 14, 14),
-        ItemBg = Color3.fromRGB(22, 22, 22),
-        Stroke = Color3.fromRGB(45, 45, 45),
-        ButtonBg = Color3.fromRGB(30, 30, 30)
+        TextDark = Color3.fromRGB(160, 160, 160),
+        CardBg = Color3.fromRGB(0, 0, 0), -- Fundo Preto
+        ItemBg = Color3.fromRGB(15, 15, 15), -- Preto suave para itens
+        Stroke = Color3.fromRGB(50, 50, 50),
+        ButtonWhite = Color3.fromRGB(255, 255, 255), -- Botão Branco
+        ButtonWhiteHover = Color3.fromRGB(220, 220, 220)
     }
-
-    local function ApplyGradient(instance, color1, color2, rotation)
-        local gradient = instance:FindFirstChildOfClass("UIGradient") or Instance.new("UIGradient")
-        gradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0.00, color1), ColorSequenceKeypoint.new(1.00, color2)}
-        gradient.Rotation = rotation or 45
-        gradient.Parent = instance
-        return gradient
-    end
 
     -- ==========================================
     -- COLUNA ESQUERDA: MAP OBJECTS
@@ -219,17 +210,18 @@ return function(env)
     Library:CreateButton(Page, "Teleport to Beast", function() end)
 
     -- ==========================================
-    -- DESIGN EXCLUSIVO: CARD UNIFICADO DE PLAYERS
+    -- NOVO DESIGN: CARROSSEL HORIZONTAL DE PLAYERS (GLASSMORPHISM)
     -- ==========================================
     Library:CreateSection(Page, "Players Teleport", "Right")
     local TargetCol = Library.CurrentSections[Page]
 
     if TargetCol then
-        -- Container Unificado (O "Card Único")
+        -- Card Principal (Preto Transparente)
         local UnifiedCard = Instance.new("Frame")
         UnifiedCard.Name = "PlayersTeleportContainer"
-        UnifiedCard.Size = UDim2.new(1, 0, 0, 240)
+        UnifiedCard.Size = UDim2.new(1, 0, 0, 185) -- Altura otimizada para carrossel
         UnifiedCard.BackgroundColor3 = Theme.CardBg
+        UnifiedCard.BackgroundTransparency = 0.55 -- Transparência elegante
         UnifiedCard.BorderSizePixel = 0
         UnifiedCard.Parent = TargetCol
 
@@ -240,52 +232,50 @@ return function(env)
         CardStroke.Color = Theme.Stroke
         CardStroke.Thickness = 1
 
-        -- Botão de Refresh Integrado ao Card
+        -- Botão de Refresh
         local RefreshButton = Instance.new("TextButton")
         RefreshButton.Name = "RefreshBtn"
-        RefreshButton.Size = UDim2.new(1, -16, 0, 32)
+        RefreshButton.Size = UDim2.new(1, -16, 0, 26)
         RefreshButton.Position = UDim2.new(0, 8, 0, 8)
-        RefreshButton.BackgroundColor3 = Theme.ButtonBg
+        RefreshButton.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        RefreshButton.BackgroundTransparency = 0.4
         RefreshButton.Text = "Refresh List"
         RefreshButton.Font = Enum.Font.GothamBold
-        RefreshButton.TextSize = 12
+        RefreshButton.TextSize = 11
         RefreshButton.TextColor3 = Theme.Text
         RefreshButton.Parent = UnifiedCard
 
-        Instance.new("UICorner", RefreshButton).CornerRadius = UDim.new(0, 6)
+        Instance.new("UICorner", RefreshButton).CornerRadius = UDim.new(0, 5)
         local btnStroke = Instance.new("UIStroke", RefreshButton)
         btnStroke.Color = Theme.Stroke
         btnStroke.Thickness = 1
         
-        -- Efeito Hover no botão de Refresh
         RefreshButton.MouseEnter:Connect(function()
-            TweenService:Create(RefreshButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(45, 45, 45)}):Play()
-            TweenService:Create(btnStroke, TweenInfo.new(0.2), {Color = Theme.AccentDark}):Play()
+            TweenService:Create(RefreshButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.1}):Play()
         end)
         RefreshButton.MouseLeave:Connect(function()
-            TweenService:Create(RefreshButton, TweenInfo.new(0.2), {BackgroundColor3 = Theme.ButtonBg}):Play()
-            TweenService:Create(btnStroke, TweenInfo.new(0.2), {Color = Theme.Stroke}):Play()
+            TweenService:Create(RefreshButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.4}):Play()
         end)
 
-        -- Lista Interna Rolável para os Players
+        -- Lista com Rolagem Horizontal (Carrossel)
         local ScrollList = Instance.new("ScrollingFrame")
         ScrollList.Name = "PlayerScrollList"
-        ScrollList.Size = UDim2.new(1, -16, 1, -56)
-        ScrollList.Position = UDim2.new(0, 8, 0, 48)
+        ScrollList.Size = UDim2.new(1, -16, 1, -48)
+        ScrollList.Position = UDim2.new(0, 8, 0, 40)
         ScrollList.BackgroundTransparency = 1
         ScrollList.BorderSizePixel = 0
         ScrollList.ScrollBarThickness = 3
-        ScrollList.ScrollBarImageColor3 = Theme.Accent
+        ScrollList.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
+        ScrollList.ScrollingDirection = Enum.ScrollingDirection.Horizontal -- DIREÇÃO HORIZONTAL
         ScrollList.Parent = UnifiedCard
 
         local ListLayout = Instance.new("UIListLayout")
+        ListLayout.FillDirection = Enum.FillDirection.Horizontal -- ITENS ALINHADOS LADO A LADO
         ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        ListLayout.Padding = UDim.new(0, 6)
+        ListLayout.Padding = UDim.new(0, 8)
         ListLayout.Parent = ScrollList
 
-        -- Função interna para atualizar a lista
         local function BuildPlayerList()
-            -- Limpar itens anteriores
             for _, child in ipairs(ScrollList:GetChildren()) do
                 if child:IsA("Frame") then child:Destroy() end
             end
@@ -297,10 +287,12 @@ return function(env)
                 if player ~= LocalPlayer then
                     addedCount = addedCount + 1
 
+                    -- Mini Card Individual para cada Player
                     local Row = Instance.new("Frame")
-                    Row.Name = "PlayerRow_" .. player.Name
-                    Row.Size = UDim2.new(1, -6, 0, 46)
+                    Row.Name = "PlayerCard_" .. player.Name
+                    Row.Size = UDim2.new(0, 105, 1, -10) -- Tamanho quadrado/verticalizado para o carrossel
                     Row.BackgroundColor3 = Theme.ItemBg
+                    Row.BackgroundTransparency = 0.45 -- Fundo interno sutilmente transparente
                     Row.BorderSizePixel = 0
                     Row.Parent = ScrollList
 
@@ -309,13 +301,13 @@ return function(env)
                     rowStroke.Color = Color3.fromRGB(35, 35, 35)
                     rowStroke.Thickness = 1
 
-                    -- Thumbnail do Avatar
+                    -- Avatar Centralizado
                     local Avatar = Instance.new("ImageLabel")
-                    Avatar.Size = UDim2.new(0, 32, 0, 32)
-                    Avatar.Position = UDim2.new(0, 8, 0.5, -16)
-                    Avatar.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+                    Avatar.Size = UDim2.new(0, 38, 0, 38)
+                    Avatar.Position = UDim2.new(0.5, -19, 0, 10)
+                    Avatar.BackgroundColor3 = Color3.fromRGB(5, 5, 5)
                     Avatar.BorderSizePixel = 0
-                    Avatar.Image = "rbxassetid://0" -- Fallback vazio inicial
+                    Avatar.Image = "rbxassetid://0"
                     Avatar.Parent = Row
                     Instance.new("UICorner", Avatar).CornerRadius = UDim.new(0, 6)
 
@@ -324,55 +316,57 @@ return function(env)
                         if isReady then Avatar.Image = content end
                     end)
 
-                    -- Área de Texto (Display Name & Username)
-                    local LabelContainer = Instance.new("Frame")
-                    LabelContainer.Size = UDim2.new(1, -135, 1, 0)
-                    LabelContainer.Position = UDim2.new(0, 48, 0, 0)
-                    LabelContainer.BackgroundTransparency = 1
-                    LabelContainer.Parent = Row
-
+                    -- Textos (Display Name & Username)
                     local DisplayName = Instance.new("TextLabel")
-                    DisplayName.Size = UDim2.new(1, 0, 0, 20)
-                    DisplayName.Position = UDim2.new(0, 0, 0.5, -16)
+                    DisplayName.Size = UDim2.new(1, -10, 0, 16)
+                    DisplayName.Position = UDim2.new(0, 5, 0, 52)
                     DisplayName.BackgroundTransparency = 1
                     DisplayName.Text = player.DisplayName
                     DisplayName.Font = Enum.Font.GothamBold
-                    DisplayName.TextSize = 12
+                    DisplayName.TextSize = 10
+                    DisplayName.TextScaled = true
                     DisplayName.TextColor3 = Theme.Text
-                    DisplayName.TextXAlignment = Enum.TextXAlignment.Left
-                    DisplayName.Parent = LabelContainer
+                    DisplayName.TextXAlignment = Enum.TextXAlignment.Center
+                    DisplayName.Parent = Row
+                    local dConst = Instance.new("UITextSizeConstraint", DisplayName)
+                    dConst.MaxTextSize = 10
 
                     local Username = Instance.new("TextLabel")
-                    Username.Size = UDim2.new(1, 0, 0, 14)
-                    Username.Position = UDim2.new(0, 0, 0.5, 2)
+                    Username.Size = UDim2.new(1, -10, 0, 12)
+                    Username.Position = UDim2.new(0, 5, 0, 68)
                     Username.BackgroundTransparency = 1
                     Username.Text = "@" .. player.Name
                     Username.Font = Enum.Font.Gotham
-                    Username.TextSize = 10
+                    Username.TextSize = 8
+                    Username.TextScaled = true
                     Username.TextColor3 = Theme.TextDark
-                    Username.TextXAlignment = Enum.TextXAlignment.Left
-                    Username.Parent = LabelContainer
+                    Username.TextXAlignment = Enum.TextXAlignment.Center
+                    Username.Parent = Row
+                    local uConst = Instance.new("UITextSizeConstraint", Username)
+                    uConst.MaxTextSize = 8
 
-                    -- Botão Moderno de Teleporte
+                    -- Botão de Teleporte (Branco Sólido)
                     local TpBtn = Instance.new("TextButton")
-                    TpBtn.Size = UDim2.new(0, 75, 0, 26)
-                    TpBtn.Position = UDim2.new(1, -83, 0.5, -13)
-                    TpBtn.BackgroundColor3 = Theme.Accent
+                    TpBtn.Size = UDim2.new(1, -16, 0, 22)
+                    TpBtn.Position = UDim2.new(0, 8, 1, -30)
+                    TpBtn.BackgroundColor3 = Theme.ButtonWhite -- Branco limpo
                     TpBtn.Text = "Teleport"
                     TpBtn.Font = Enum.Font.GothamBold
-                    TpBtn.TextSize = 11
-                    TpBtn.TextColor3 = Color3.fromRGB(15, 15, 15)
+                    TpBtn.TextSize = 9
+                    TpBtn.TextColor3 = Color3.fromRGB(10, 10, 10) -- Texto escuro para contraste
                     TpBtn.Parent = Row
 
-                    Instance.new("UICorner", TpBtn).CornerRadius = UDim.new(0, 5)
-                    local btnGrad = ApplyGradient(TpBtn, Theme.Accent, Theme.AccentDark, 90)
+                    Instance.new("UICorner", TpBtn).CornerRadius = UDim.new(0, 4)
+                    local tpStroke = Instance.new("UIStroke", TpBtn)
+                    tpStroke.Color = Color3.fromRGB(200, 200, 200)
+                    tpStroke.Thickness = 1
 
-                    -- Efeito Hover no botão de Teleporte
+                    -- Efeito Hover Suave (Esbranquiçado/Cinza claro)
                     TpBtn.MouseEnter:Connect(function()
-                        TweenService:Create(TpBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+                        TweenService:Create(TpBtn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.ButtonWhiteHover}):Play()
                     end)
                     TpBtn.MouseLeave:Connect(function()
-                        TweenService:Create(TpBtn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Accent}):Play()
+                        TweenService:Create(TpBtn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.ButtonWhite}):Play()
                     end)
 
                     TpBtn.MouseButton1Click:Connect(function()
@@ -388,7 +382,8 @@ return function(env)
                 end
             end
 
-            ScrollList.CanvasSize = UDim2.new(0, 0, 0, addedCount * 52)
+            -- Ajustar dinamicamente a área interna de rolagem na horizontal (largura do item + espaçamento)
+            ScrollList.CanvasSize = UDim2.new(0, addedCount * 113, 0, 0)
         end
 
         RefreshButton.MouseButton1Click:Connect(function()
@@ -396,7 +391,6 @@ return function(env)
             SendNotification("Player list updated!", 2)
         end)
 
-        -- Carregar automaticamente na inicialização
         BuildPlayerList()
     end
 end
