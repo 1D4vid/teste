@@ -12,37 +12,6 @@ return function(env)
     local SendNotification = env.SendNotification
     local UserInputService = env.UserInputService or game:GetService("UserInputService")
 
-    -- ==========================================
-    -- ADAPTAÇÃO DINÂMICA DE LAYOUT (COLUNA ÚNICA)
-    -- ==========================================
-    TeleportPage:SetAttribute("OldStyle", true)
-    local LeftCol = TeleportPage:FindFirstChild("LeftCol")
-    local RightCol = TeleportPage:FindFirstChild("RightCol")
-    if LeftCol then LeftCol:Destroy() end
-    if RightCol then RightCol:Destroy() end
-
-    local layout = TeleportPage:FindFirstChildOfClass("UIListLayout")
-    if layout then
-        layout.FillDirection = Enum.FillDirection.Vertical
-        layout.Padding = UDim.new(0, 6)
-    else
-        layout = Instance.new("UIListLayout")
-        layout.FillDirection = Enum.FillDirection.Vertical
-        layout.Padding = UDim.new(0, 6)
-        layout.SortOrder = Enum.SortOrder.LayoutOrder
-        layout.Parent = TeleportPage
-    end
-
-    local pad = TeleportPage:FindFirstChildOfClass("UIPadding")
-    if not pad then
-        pad = Instance.new("UIPadding")
-        pad.PaddingLeft = UDim.new(0, 10)
-        pad.PaddingRight = UDim.new(0, 10)
-        pad.PaddingTop = UDim.new(0, 5)
-        pad.PaddingBottom = UDim.new(0, 10)
-        pad.Parent = TeleportPage
-    end
-
     -- Lógica para buscar locais específicos no mapa atual
     local function teleportToLandmark(nameQuery)
         local char = LocalPlayer.Character
@@ -84,9 +53,9 @@ return function(env)
     end
 
     -- ==========================================
-    -- SEÇÃO: MAP OBJECTS TELEPORT
+    -- COLUNA ESQUERDA: MAP OBJECTS (PADRÃO LIBRARY)
     -- ==========================================
-    Library:CreateSection(TeleportPage, "Map Objects Teleport")
+    Library:CreateSection(TeleportPage, "Map Objects", "Left")
     
     local currentPCIndex = 0
     Library:CreateButton(TeleportPage, "Teleport Computer", function()
@@ -151,10 +120,14 @@ return function(env)
         teleportToLandmark("Beast Cave")
     end)
 
+    Library:CreateButton(TeleportPage, "Tp Map", function()
+        -- Implementação futura
+    end)
+
     -- ==========================================
-    -- SEÇÃO: EXTRAS
+    -- COLUNA DIREITA: EXTRAS (PADRÃO LIBRARY)
     -- ==========================================
-    Library:CreateSection(TeleportPage, "Extras")
+    Library:CreateSection(TeleportPage, "Extras", "Right")
 
     local savedCFrame = nil
     local checkpointMarker = nil
@@ -289,98 +262,96 @@ return function(env)
     end)
 
     -- ==========================================
-    -- SEÇÃO: PLAYERS TELEPORT (DESIGN PERSONALIZADO)
+    -- SEÇÃO: PLAYERS TELEPORT (APENAS ESTA SEÇÃO COM O NOVO DESIGN)
     -- ==========================================
-    Library:CreateSection(TeleportPage, "Players Teleport")
+    Library:CreateSection(TeleportPage, "Players Teleport", "Right")
+    
+    -- Obtém o contêiner interno gerado para esta seção na coluna da direita
+    local targetSectionBox = Library.CurrentSections[TeleportPage]
 
+    -- Botão "Refresh" customizado
     local RefreshBtn = Instance.new("TextButton")
     RefreshBtn.Name = "RefreshBtnStatic"
-    RefreshBtn.Size = UDim2.new(1, -2, 0, 32)
+    RefreshBtn.Size = UDim2.new(1, 0, 0, 28)
     RefreshBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     RefreshBtn.BackgroundTransparency = 0.45
     RefreshBtn.Text = "Refresh"
     RefreshBtn.TextColor3 = Theme.Accent
     RefreshBtn.Font = Theme.Font
-    RefreshBtn.TextSize = 13
-    RefreshBtn.Parent = TeleportPage
-    Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 6)
+    RefreshBtn.TextSize = 11
+    RefreshBtn.Parent = targetSectionBox
+    Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 5)
     local rStr = Instance.new("UIStroke", RefreshBtn)
     rStr.Color = Color3.fromRGB(60, 60, 60)
     rStr.Thickness = 1
 
-    local Spacer = Instance.new("Frame")
-    Spacer.Name = "SpacerStatic"
-    Spacer.Size = UDim2.new(1, 0, 0, 2)
-    Spacer.BackgroundTransparency = 1
-    Spacer.Parent = TeleportPage
-
-    -- Função interna para construir o card de acordo com a foto
+    -- Construtor do card customizado exatamente igual à foto
     local function CreateCustomPlayerCard(parent, player)
         local Card = Instance.new("Frame")
         Card.Name = "PlayerCard"
-        Card.Size = UDim2.new(1, -2, 0, 55)
+        Card.Size = UDim2.new(1, 0, 0, 50)
         Card.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
         Card.BackgroundTransparency = 0.55
         Card.BorderSizePixel = 0
         Card.Parent = parent
 
-        Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 8)
+        Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 6)
         
         local Stroke = Instance.new("UIStroke")
         Stroke.Color = Color3.fromRGB(45, 45, 45)
         Stroke.Thickness = 1
         Stroke.Parent = Card
 
-        -- Thumbnail redonda do jogador
+        -- Avatar do Jogador (Arredondado)
         local Avatar = Instance.new("ImageLabel")
-        Avatar.Size = UDim2.new(0, 40, 0, 40)
-        Avatar.Position = UDim2.new(0, 8, 0.5, -20)
+        Avatar.Size = UDim2.new(0, 32, 0, 32)
+        Avatar.Position = UDim2.new(0, 6, 0.5, -16)
         Avatar.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
         Avatar.BackgroundTransparency = 0.3
         Avatar.Parent = Card
-        Instance.new("UICorner", Avatar).CornerRadius = UDim.new(0, 8)
+        Instance.new("UICorner", Avatar).CornerRadius = UDim.new(0, 6)
 
         task.spawn(function()
             local content, isReady = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
             if isReady then Avatar.Image = content end
         end)
 
-        -- Nome Exibido (Display Name)
+        -- Nome Exibido
         local Display = Instance.new("TextLabel")
         Display.Text = player.DisplayName
-        Display.Size = UDim2.new(1, -160, 0, 18)
-        Display.Position = UDim2.new(0, 56, 0, 10)
+        Display.Size = UDim2.new(1, -115, 0, 15)
+        Display.Position = UDim2.new(0, 44, 0, 8)
         Display.BackgroundTransparency = 1
         Display.Font = Enum.Font.GothamBold
-        Display.TextSize = 13
+        Display.TextSize = 11
         Display.TextColor3 = Color3.fromRGB(255, 255, 255)
         Display.TextXAlignment = Enum.TextXAlignment.Left
         Display.Parent = Card
 
-        -- Username com @
+        -- @User
         local User = Instance.new("TextLabel")
         User.Text = "@" .. player.Name
-        User.Size = UDim2.new(1, -160, 0, 14)
-        User.Position = UDim2.new(0, 56, 0, 28)
+        User.Size = UDim2.new(1, -115, 0, 13)
+        User.Position = UDim2.new(0, 44, 0, 24)
         User.BackgroundTransparency = 1
         User.Font = Enum.Font.Gotham
-        User.TextSize = 11
+        User.TextSize = 9
         User.TextColor3 = Color3.fromRGB(150, 150, 150)
         User.TextXAlignment = Enum.TextXAlignment.Left
         User.Parent = Card
 
-        -- Botão de Teleporte Estilizado (Degradê Cinza)
+        -- Botão de Teleporte Estilizado com Degradê
         local TpBtn = Instance.new("TextButton")
-        TpBtn.Size = UDim2.new(0, 100, 0, 32)
-        TpBtn.Position = UDim2.new(1, -108, 0.5, -16)
+        TpBtn.Size = UDim2.new(0, 55, 0, 24)
+        TpBtn.Position = UDim2.new(1, -61, 0.5, -12)
         TpBtn.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
         TpBtn.Text = "Teleport"
         TpBtn.Font = Enum.Font.GothamBold
-        TpBtn.TextSize = 11
+        TpBtn.TextSize = 9
         TpBtn.TextColor3 = Color3.fromRGB(20, 20, 20)
         TpBtn.Parent = Card
 
-        Instance.new("UICorner", TpBtn).CornerRadius = UDim.new(0, 6)
+        Instance.new("UICorner", TpBtn).CornerRadius = UDim.new(0, 4)
 
         local btnGrad = Instance.new("UIGradient")
         btnGrad.Color = ColorSequence.new{
@@ -403,14 +374,14 @@ return function(env)
     end
 
     local function UpdateTeleportList()
-        for _, child in pairs(TeleportPage:GetChildren()) do 
+        for _, child in pairs(targetSectionBox:GetChildren()) do 
             if child.Name == "PlayerCard" then 
                 child:Destroy() 
             end 
         end
         for _, player in pairs(Players:GetPlayers()) do 
             if player ~= LocalPlayer then 
-                CreateCustomPlayerCard(TeleportPage, player)
+                CreateCustomPlayerCard(targetSectionBox, player)
             end 
         end
     end
