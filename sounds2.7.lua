@@ -709,6 +709,24 @@ return function(env)
         UserConfigs["Legit_MuteBeastSounds"] = state
     end)
 
+    local noticeFrame = Instance.new("Frame")
+    noticeFrame.Size = UDim2.new(1, 0, 0, 24)
+    noticeFrame.BackgroundTransparency = 1
+    noticeFrame.ZIndex = MuteBlock.ZIndex + 1
+    noticeFrame.Parent = MuteBlock
+
+    local noticeLabel = Instance.new("TextLabel")
+    noticeLabel.Size = UDim2.new(1, -10, 1, 0)
+    noticeLabel.Position = UDim2.new(0, 5, 0, 0)
+    noticeLabel.BackgroundTransparency = 1
+    noticeLabel.Text = "Mute sounds is local only."
+    noticeLabel.Font = Theme.Font
+    noticeLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
+    noticeLabel.TextSize = 9
+    noticeLabel.TextXAlignment = Enum.TextXAlignment.Left
+    noticeLabel.ZIndex = noticeFrame.ZIndex + 1
+    noticeLabel.Parent = noticeFrame
+
     local MusicBlock = Instance.new("Frame")
     MusicBlock.Size = UDim2.new(1, -2, 0, 95)
     MusicBlock.BackgroundColor3 = Color3.new(0, 0, 0)
@@ -957,26 +975,29 @@ return function(env)
     local playBtn = Instance.new("TextButton")
     playBtn.Size = UDim2.new(0.34, -12, 1, 0)
     playBtn.Position = UDim2.new(0.66, 12, 0, 0)
-    playBtn.BackgroundColor3 = Color3.new(0, 0, 0)
-    playBtn.BackgroundTransparency = 0.45
-    playBtn.Text = "Play"
-    playBtn.Font = Theme.Font
-    playBtn.TextSize = 10
-    playBtn.TextColor3 = Theme.TextDark
+    playBtn.BackgroundTransparency = 1
+    playBtn.Text = ""
     playBtn.ZIndex = 102
     playBtn.Parent = ControlsRow
-    Instance.new("UICorner", playBtn).CornerRadius = UDim.new(0, 4)
-    local pbStroke = Instance.new("UIStroke", playBtn)
-    pbStroke.Color = Color3.fromRGB(40, 40, 40)
+
+    local playLabel = Instance.new("TextLabel")
+    playLabel.Size = UDim2.new(1, -10, 1, 0)
+    playLabel.Position = UDim2.new(0, 5, 0, 0)
+    playLabel.BackgroundTransparency = 1
+    playLabel.Text = "Play"
+    playLabel.Font = Theme.Font
+    playLabel.TextSize = 11
+    playLabel.TextColor3 = Theme.TextDark
+    playLabel.TextXAlignment = Enum.TextXAlignment.Left
+    playLabel.ZIndex = 103
+    playLabel.Parent = playBtn
 
     playBtn.MouseEnter:Connect(function()
-        TweenService:Create(pbStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
-        TweenService:Create(playBtn, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
+        TweenService:Create(playLabel, TweenInfo.new(0.2), {TextColor3 = Theme.Accent}):Play()
     end)
     playBtn.MouseLeave:Connect(function()
-        if playBtn.Text ~= "Stop" then
-            TweenService:Create(pbStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
-            TweenService:Create(playBtn, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
+        if playLabel.Text ~= "Stop" then
+            TweenService:Create(playLabel, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
         end
     end)
 
@@ -985,9 +1006,8 @@ return function(env)
         if isPlaying then
             MusicSound:Stop()
             isPlaying = false
-            playBtn.Text = "Play"
-            TweenService:Create(pbStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
-            TweenService:Create(playBtn, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
+            playLabel.Text = "Play"
+            TweenService:Create(playLabel, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
         else
             local text = textBox.Text
             local cleanId = text:match("%d+")
@@ -996,9 +1016,8 @@ return function(env)
                 MusicSound.SoundId = "rbxassetid://" .. cleanId
                 MusicSound:Play()
                 isPlaying = true
-                playBtn.Text = "Stop"
-                TweenService:Create(pbStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
-                TweenService:Create(playBtn, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
+                playLabel.Text = "Stop"
+                TweenService:Create(playLabel, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
             else
                 textBox.Text = ""
                 textBox.PlaceholderText = "Invalid ID!"
@@ -1127,27 +1146,33 @@ return function(env)
 
     local ResetBtnFrame = Instance.new("TextButton")
     ResetBtnFrame.Size = UDim2.new(1, -2, 0, 30)
-    ResetBtnFrame.Position = UDim2.new(0, 1, 0, 0)
-    ResetBtnFrame.BackgroundColor3 = Color3.new(0, 0, 0)
-    ResetBtnFrame.BackgroundTransparency = 0.45
-    ResetBtnFrame.Text = "Default Sounds (Reset All)"
-    ResetBtnFrame.TextColor3 = Color3.fromRGB(150, 150, 150)
-    ResetBtnFrame.Font = Enum.Font.GothamBold
-    ResetBtnFrame.TextSize = 11
+    ResetBtnFrame.BackgroundTransparency = 1
+    ResetBtnFrame.Text = ""
     ResetBtnFrame.ZIndex = 1
     ResetBtnFrame.Parent = Page
-    Instance.new("UICorner", ResetBtnFrame).CornerRadius = UDim.new(0, 6)
-    
+
+    local rbLabel = Instance.new("TextLabel")
+    rbLabel.Size = UDim2.new(1, -10, 1, 0)
+    rbLabel.Position = UDim2.new(0, 10, 0, 0)
+    rbLabel.BackgroundTransparency = 1
+    rbLabel.Text = "Default Sounds (Reset All)"
+    rbLabel.Font = Theme.Font
+    rbLabel.TextSize = 11
+    rbLabel.TextColor3 = Theme.TextDark
+    rbLabel.TextXAlignment = Enum.TextXAlignment.Left
+    rbLabel.ZIndex = 2
+    rbLabel.Parent = ResetBtnFrame
+
     local rbsStr = Instance.new("UIStroke", ResetBtnFrame)
     rbsStr.Color = Color3.fromRGB(40, 40, 40)
     rbsStr.Thickness = 1
 
     ResetBtnFrame.MouseEnter:Connect(function() 
-        TweenService:Create(ResetBtnFrame, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(255, 100, 100)}):Play()
+        TweenService:Create(rbLabel, TweenInfo.new(0.2), {TextColor3 = Theme.Accent}):Play()
         TweenService:Create(rbsStr, TweenInfo.new(0.2), {Color = Color3.fromRGB(220, 80, 80)}):Play() 
     end)
     ResetBtnFrame.MouseLeave:Connect(function() 
-        TweenService:Create(ResetBtnFrame, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(150, 150, 150)}):Play()
+        TweenService:Create(rbLabel, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
         TweenService:Create(rbsStr, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play() 
     end)
     
