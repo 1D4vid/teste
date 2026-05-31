@@ -5,8 +5,8 @@ return function(env)
     local RunService = env.RunService
     local SendNotification = env.SendNotification
 
-    -- [ COLUNA ESQUERDA: Color Calibrator ] --
-    Library:CreateSection(Page, "Color Calibrator", "Left")
+    -- [ COLUNA DIREITA: Color Calibrator ] --
+    Library:CreateSection(Page, "Color Calibrator", "Right")
     
     local CalibratorState = { enabled = false, fullbright = false, contrast = 0, brightness = 0, saturation = 0, hue = 0, opacity = 1 }
     local origAmbient = Lighting.Ambient
@@ -94,8 +94,8 @@ return function(env)
         SendNotification("Color Calibrator Reset!", 2)
     end)
 
-    -- [ COLUNA DIREITA: Fog Settings ] --
-    Library:CreateSection(Page, "Fog Settings", "Right")
+    -- [ COLUNA ESQUERDA: Fog ] --
+    Library:CreateSection(Page, "Fog", "Left")
     
     local noFogEnabled = false
     local originalAtmos = setmetatable({}, {__mode = "k"})
@@ -254,4 +254,7 @@ return function(env)
             Lighting.FogEnd = origFogEnd
         end
     end)
+
+    -- [ COLUNA ESQUERDA: Fog Setting ] --
+    Library:CreateSection(Page, "Fog Setting", "Left")
 end
