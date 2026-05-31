@@ -257,4 +257,31 @@ return function(env)
 
     -- [ COLUNA ESQUERDA: Fog Setting ] --
     Library:CreateSection(Page, "Fog Setting", "Left")
+
+    Library:CreateColorPicker(Page, "Fog Color", Color3.fromRGB(128, 128, 128), function(color)
+        pcall(function()
+            Lighting.FogColor = color
+            local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+            if atm then
+                atm.Color = color
+                atm.Decay = color
+            end
+        end)
+    end)
+
+    Library:CreateSlider(Page, "Fog Power", 0, 100, 50, function(val)
+        pcall(function()
+            -- Sistema moderno (Atmosphere)
+            local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+            if atm then
+                atm.Density = val / 100
+            end
+            
+            -- Sistema clássico (FogEnd)
+            -- 0% de força = Neblina muito distante (100000)
+            -- 100% de força = Neblina muito próxima (100)
+            local classicFog = 100000 - (val * 999)
+            Lighting.FogEnd = math.max(100, classicFog)
+        end)
+    end)
 end
