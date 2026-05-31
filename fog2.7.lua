@@ -5,6 +5,11 @@ return function(env)
     local RunService = env.RunService
     local SendNotification = env.SendNotification
 
+    -- Cache de valores constantes para poupar memória
+    local COLOR_WHITE = Color3.new(1, 1, 1)
+    local COLOR_BLACK = Color3.new(0, 0, 0)
+    local COLOR_GRAY = Color3.fromRGB(128, 128, 128)
+
     -- [ COLUNA DIREITA: Color Calibrator ] --
     Library:CreateSection(Page, "Color Calibrator", "Right")
     
@@ -26,11 +31,21 @@ return function(env)
     end)
 
     local EFFECT_NAME = "NexVoid_ColorCalibrator"
+    local cachedEffect = nil
+
     local function getOrCreateEffect()
+        if cachedEffect and cachedEffect.Parent == Lighting then
+            return cachedEffect
+        end
         local eff = Lighting:FindFirstChild(EFFECT_NAME)
         if not eff then
-            pcall(function() eff = Instance.new("ColorCorrectionEffect"); eff.Name = EFFECT_NAME; eff.Parent = Lighting end)
+            pcall(function() 
+                eff = Instance.new("ColorCorrectionEffect")
+                eff.Name = EFFECT_NAME
+                eff.Parent = Lighting 
+            end)
         end
+        cachedEffect = eff
         return eff
     end
 
@@ -38,21 +53,29 @@ return function(env)
         local eff = getOrCreateEffect()
         if not eff then return end
         
-        if not CalibratorState.enabled then
-            eff.Enabled = false
-            return
+        local isEnabled = CalibratorState.enabled
+        if eff.Enabled ~= isEnabled then
+            eff.Enabled = isEnabled
         end
+        if not isEnabled then return end
 
         local op = math.clamp(CalibratorState.opacity, 0, 1)
-        eff.Brightness = CalibratorState.brightness * op
-        eff.Contrast = CalibratorState.contrast * op
-        eff.Saturation = CalibratorState.saturation * op
+        local targetBrightness = CalibratorState.brightness * op
+        local targetContrast = CalibratorState.contrast * op
+        local targetSaturation = CalibratorState.saturation * op
+
+        if eff.Brightness ~= targetBrightness then eff.Brightness = targetBrightness end
+        if eff.Contrast ~= targetContrast then eff.Contrast = targetContrast end
+        if eff.Saturation ~= targetSaturation then eff.Saturation = targetSaturation end
         
         local hueUnit = (((CalibratorState.hue % 360) + 360) % 360) / 360
         local tintSat = math.clamp(math.abs(CalibratorState.hue) / 180 * 0.5, 0, 1)
         local tintCol = Color3.fromHSV(hueUnit, tintSat, 1)
-        eff.TintColor = Color3.new(1 + (tintCol.R - 1)*op, 1 + (tintCol.G - 1)*op, 1 + (tintCol.B - 1)*op)
-        eff.Enabled = true
+        local targetTintColor = Color3.new(1 + (tintCol.R - 1)*op, 1 + (tintCol.G - 1)*op, 1 + (tintCol.B - 1)*op)
+        
+        if eff.TintColor ~= targetTintColor then
+            eff.TintColor = targetTintColor
+        end
     end
 
     Library:CreateToggle(Page, "Enable Calibrator", false, function(state)
@@ -109,12 +132,13 @@ return function(env)
                 Color = atm.Color, Glare = atm.Glare, Haze = atm.Haze, Decay = atm.Decay, Density = atm.Density, Offset = atm.Offset
             }
         end
-        atm.Color = Color3.fromRGB(0, 0, 0)
-        atm.Glare = 0
-        atm.Haze = 10
-        atm.Decay = Color3.fromRGB(0, 0, 0)
-        atm.Density = 0
-        atm.Offset = 0
+        if atm.Color ~= COLOR_BLACK then atm.Color = COLOR_BLACK end
+        if atm.Glare ~= 0 then atm.Glare = 0 end
+        if atm.Haze ~= 10 then atm.Haze = 10 end
+        if atm.Decay ~= COLOR_BLACK then atm.Decay = COLOR_BLACK end
+        if atm.Density ~= 0 then atm.Density = 0 end
+        if atm.Offset ~= 0 then atm.Offset = 0 end
+        
         if not atm:FindFirstChild("NoFogLock") then
             local lock = Instance.new("Folder")
             lock.Name = "NoFogLock"
@@ -132,8 +156,8 @@ return function(env)
         if not originalSky[sky] then
             originalSky[sky] = { MoonAngularSize = sky.MoonAngularSize, StarCount = sky.StarCount }
         end
-        sky.MoonAngularSize = 10
-        sky.StarCount = 0
+        if sky.MoonAngularSize ~= 10 then sky.MoonAngularSize = 10 end
+        if sky.StarCount ~= 0 then sky.StarCount = 0 end
     end
 
     Library:CreateToggle(Page, "No fog", false, function(state)
@@ -186,20 +210,19 @@ return function(env)
             end
             BlackFogLoop = task.spawn(function()
                 while state do
-                    task.wait(1)
                     local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
                     if not atmosphere then
                         atmosphere = Instance.new("Atmosphere")
                         atmosphere.Parent = Lighting
                     end
-                    if atmosphere.Density ~= 0.75 or atmosphere.Haze ~= 2.46 then
-                        atmosphere.Color = Color3.fromRGB(0, 0, 0)
-                        atmosphere.Glare = 0
-                        atmosphere.Haze = 2.46
-                        atmosphere.Decay = Color3.fromRGB(0, 0, 0)
-                        atmosphere.Density = 0.75
-                        atmosphere.Offset = 0
-                    end
+                    -- Apenas reescreve propriedades se forem alteradas por outros scripts
+                    if atmosphere.Color ~= COLOR_BLACK then atmosphere.Color = COLOR_BLACK end
+                    if atmosphere.Glare ~= 0 then atmosphere.Glare = 0 end
+                    if atmosphere.Haze ~= 2.46 then atmosphere.Haze = 2.46 end
+                    if atmosphere.Decay ~= COLOR_BLACK then atmosphere.Decay = COLOR_BLACK end
+                    if atmosphere.Density ~= 0.75 then atmosphere.Density = 0.75 end
+                    if atmosphere.Offset ~= 0 then atmosphere.Offset = 0 end
+                    task.wait(1)
                 end
             end)
         else
@@ -221,11 +244,16 @@ return function(env)
     local flashlightLoop = nil
     Library:CreateToggle(Page, "FlashLight", false, function(state)
         if state then
-            pcall(function() Lighting.ExposureCompensation = 2.8 end)
+            if Lighting.ExposureCompensation ~= 2.8 then
+                pcall(function() Lighting.ExposureCompensation = 2.8 end)
+            end
             flashlightLoop = task.spawn(function()
                 while true do
-                    pcall(function() Lighting.ExposureCompensation = 2.8 end)
-                    task.wait(1)
+                    -- Verifica antes de gravar para poupar processamento
+                    if Lighting.ExposureCompensation ~= 2.8 then
+                        pcall(function() Lighting.ExposureCompensation = 2.8 end)
+                    end
+                    task.wait(1.5)
                 end
             end)
         else
@@ -234,19 +262,27 @@ return function(env)
         end
     end)
 
-    local FullbrightLoopPro = nil
+    local FullbrightConn = nil
+    local function enforceFullbright()
+        if Lighting.Ambient ~= COLOR_WHITE then Lighting.Ambient = COLOR_WHITE end
+        if Lighting.ColorShift_Bottom ~= COLOR_WHITE then Lighting.ColorShift_Bottom = COLOR_WHITE end
+        if Lighting.ColorShift_Top ~= COLOR_WHITE then Lighting.ColorShift_Top = COLOR_WHITE end
+        if Lighting.GlobalShadows ~= false then Lighting.GlobalShadows = false end
+        if Lighting.FogEnd ~= 100000 then Lighting.FogEnd = 100000 end
+    end
+
     Library:CreateToggle(Page, "Enable FullBright", false, function(state)
         CalibratorState.fullbright = state
         if state then
-            FullbrightLoopPro = RunService.RenderStepped:Connect(function()
-                Lighting.Ambient = Color3.new(1, 1, 1)
-                Lighting.ColorShift_Bottom = Color3.new(1, 1, 1)
-                Lighting.ColorShift_Top = Color3.new(1, 1, 1)
-                Lighting.GlobalShadows = false
-                Lighting.FogEnd = 100000
+            enforceFullbright()
+            -- Event-driven: Só executa se algo mudar o Lighting (0% de uso de CPU quando parado)
+            FullbrightConn = Lighting.Changed:Connect(function()
+                if CalibratorState.fullbright then
+                    enforceFullbright()
+                end
             end)
         else
-            if FullbrightLoopPro then FullbrightLoopPro:Disconnect(); FullbrightLoopPro = nil end
+            if FullbrightConn then FullbrightConn:Disconnect(); FullbrightConn = nil end
             Lighting.Ambient = origAmbient
             Lighting.ColorShift_Bottom = origColorShiftBottom
             Lighting.ColorShift_Top = origColorShiftTop
@@ -260,7 +296,7 @@ return function(env)
 
     local CustomFogState = {
         enabled = false,
-        color = Color3.fromRGB(128, 128, 128),
+        color = COLOR_GRAY,
         power = 50
     }
     local OriginalCustomFogData = nil
@@ -270,24 +306,27 @@ return function(env)
         if not CustomFogState.enabled then return end
         pcall(function()
             local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+            local targetDensity = CustomFogState.power / 100
+            local targetColor = CustomFogState.color
+            
             if atm then
-                atm.Color = CustomFogState.color
-                atm.Decay = CustomFogState.color
-                atm.Glare = 0
-                atm.Haze = 2.46
-                atm.Density = CustomFogState.power / 100
-                atm.Offset = 0
+                if atm.Color ~= targetColor then atm.Color = targetColor end
+                if atm.Decay ~= targetColor then atm.Decay = targetColor end
+                if atm.Glare ~= 0 then atm.Glare = 0 end
+                if atm.Haze ~= 2.46 then atm.Haze = 2.46 end
+                if atm.Density ~= targetDensity then atm.Density = targetDensity end
+                if atm.Offset ~= 0 then atm.Offset = 0 end
             end
-            Lighting.FogColor = CustomFogState.color
-            local classicFog = 100000 - (CustomFogState.power * 999)
-            Lighting.FogEnd = math.max(100, classicFog)
+            
+            if Lighting.FogColor ~= targetColor then Lighting.FogColor = targetColor end
+            local classicFog = math.max(100, 100000 - (CustomFogState.power * 999))
+            if Lighting.FogEnd ~= classicFog then Lighting.FogEnd = classicFog end
         end)
     end
 
     Library:CreateToggle(Page, "Enable Custom Fog", false, function(state)
         CustomFogState.enabled = state
         if state then
-            -- Salva os dados originais antes de aplicar as modificações
             local atm = Lighting:FindFirstChildOfClass("Atmosphere")
             if atm then
                 OriginalCustomFogData = {
@@ -302,7 +341,6 @@ return function(env)
                 }
             end
 
-            -- Loop de força permanente idêntico ao Black Fog
             CustomFogLoop = task.spawn(function()
                 while CustomFogState.enabled do
                     pcall(function()
@@ -315,24 +353,21 @@ return function(env)
                         local targetDensity = CustomFogState.power / 100
                         local targetColor = CustomFogState.color
                         
-                        if atmosphere.Color ~= targetColor or atmosphere.Density ~= targetDensity or atmosphere.Haze ~= 2.46 then
-                            atmosphere.Color = targetColor
-                            atmosphere.Decay = targetColor
-                            atmosphere.Glare = 0
-                            atmosphere.Haze = 2.46
-                            atmosphere.Density = targetDensity
-                            atmosphere.Offset = 0
-                        end
+                        if atmosphere.Color ~= targetColor then atmosphere.Color = targetColor end
+                        if atmosphere.Decay ~= targetColor then atmosphere.Decay = targetColor end
+                        if atmosphere.Glare ~= 0 then atmosphere.Glare = 0 end
+                        if atmosphere.Haze ~= 2.46 then atmosphere.Haze = 2.46 end
+                        if atmosphere.Density ~= targetDensity then atmosphere.Density = targetDensity end
+                        if atmosphere.Offset ~= 0 then atmosphere.Offset = 0 end
                         
-                        Lighting.FogColor = targetColor
-                        local classicFog = 100000 - (CustomFogState.power * 999)
-                        Lighting.FogEnd = math.max(100, classicFog)
+                        if Lighting.FogColor ~= targetColor then Lighting.FogColor = targetColor end
+                        local classicFog = math.max(100, 100000 - (CustomFogState.power * 999))
+                        if Lighting.FogEnd ~= classicFog then Lighting.FogEnd = classicFog end
                     end)
                     task.wait(1)
                 end
             end)
         else
-            -- Para o loop e restaura a atmosfera padrão de fábrica do jogo
             if CustomFogLoop then task.cancel(CustomFogLoop); CustomFogLoop = nil end
             if OriginalCustomFogData then
                 pcall(function()
@@ -354,7 +389,7 @@ return function(env)
         end
     end)
 
-    Library:CreateColorPicker(Page, "Fog Color", Color3.fromRGB(128, 128, 128), function(color)
+    Library:CreateColorPicker(Page, "Fog Color", COLOR_GRAY, function(color)
         CustomFogState.color = color
         ApplyCustomFog()
     end)
