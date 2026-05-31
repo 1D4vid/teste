@@ -258,30 +258,109 @@ return function(env)
     -- [ COLUNA ESQUERDA: Fog Setting ] --
     Library:CreateSection(Page, "Fog Setting", "Left")
 
-    Library:CreateColorPicker(Page, "Fog Color", Color3.fromRGB(128, 128, 128), function(color)
+    local CustomFogState = {
+        enabled = false,
+        color = Color3.fromRGB(128, 128, 128),
+        power = 50
+    }
+    local OriginalCustomFogData = nil
+    local CustomFogLoop = nil
+
+    local function ApplyCustomFog()
+        if not CustomFogState.enabled then return end
         pcall(function()
-            Lighting.FogColor = color
             local atm = Lighting:FindFirstChildOfClass("Atmosphere")
             if atm then
-                atm.Color = color
-                atm.Decay = color
+                atm.Color = CustomFogState.color
+                atm.Decay = CustomFogState.color
+                atm.Glare = 0
+                atm.Haze = 2.46
+                atm.Density = CustomFogState.power / 100
+                atm.Offset = 0
             end
+            Lighting.FogColor = CustomFogState.color
+            local classicFog = 100000 - (CustomFogState.power * 999)
+            Lighting.FogEnd = math.max(100, classicFog)
         end)
+    end
+
+    Library:CreateToggle(Page, "Enable Custom Fog", false, function(state)
+        CustomFogState.enabled = state
+        if state then
+            -- Salva os dados originais antes de aplicar as modificações
+            local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+            if atm then
+                OriginalCustomFogData = {
+                    Color = atm.Color, Glare = atm.Glare, Haze = atm.Haze,
+                    Decay = atm.Decay, Density = atm.Density, Offset = atm.Offset,
+                    FogColor = Lighting.FogColor, FogEnd = Lighting.FogEnd
+                }
+            else
+                OriginalCustomFogData = {
+                    FogColor = Lighting.FogColor, FogEnd = Lighting.FogEnd,
+                    None = true
+                }
+            end
+
+            -- Loop de força permanente idêntico ao Black Fog
+            CustomFogLoop = task.spawn(function()
+                while CustomFogState.enabled do
+                    pcall(function()
+                        local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+                        if not atmosphere then
+                            atmosphere = Instance.new("Atmosphere")
+                            atmosphere.Parent = Lighting
+                        end
+                        
+                        local targetDensity = CustomFogState.power / 100
+                        local targetColor = CustomFogState.color
+                        
+                        if atmosphere.Color ~= targetColor or atmosphere.Density ~= targetDensity or atmosphere.Haze ~= 2.46 then
+                            atmosphere.Color = targetColor
+                            atmosphere.Decay = targetColor
+                            atmosphere.Glare = 0
+                            atmosphere.Haze = 2.46
+                            atmosphere.Density = targetDensity
+                            atmosphere.Offset = 0
+                        end
+                        
+                        Lighting.FogColor = targetColor
+                        local classicFog = 100000 - (CustomFogState.power * 999)
+                        Lighting.FogEnd = math.max(100, classicFog)
+                    end)
+                    task.wait(1)
+                end
+            end)
+        else
+            -- Para o loop e restaura a atmosfera padrão de fábrica do jogo
+            if CustomFogLoop then task.cancel(CustomFogLoop); CustomFogLoop = nil end
+            if OriginalCustomFogData then
+                pcall(function()
+                    local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+                    if OriginalCustomFogData.None then
+                        if atm then atm:Destroy() end
+                    elseif atm then
+                        atm.Color = OriginalCustomFogData.Color
+                        atm.Glare = OriginalCustomFogData.Glare
+                        atm.Haze = OriginalCustomFogData.Haze
+                        atm.Decay = OriginalCustomFogData.Decay
+                        atm.Density = OriginalCustomFogData.Density
+                        atm.Offset = OriginalCustomFogData.Offset
+                    end
+                    Lighting.FogColor = OriginalCustomFogData.FogColor
+                    Lighting.FogEnd = OriginalCustomFogData.FogEnd
+                end)
+            end
+        end
+    end)
+
+    Library:CreateColorPicker(Page, "Fog Color", Color3.fromRGB(128, 128, 128), function(color)
+        CustomFogState.color = color
+        ApplyCustomFog()
     end)
 
     Library:CreateSlider(Page, "Fog Power", 0, 100, 50, function(val)
-        pcall(function()
-            -- Sistema moderno (Atmosphere)
-            local atm = Lighting:FindFirstChildOfClass("Atmosphere")
-            if atm then
-                atm.Density = val / 100
-            end
-            
-            -- Sistema clássico (FogEnd)
-            -- 0% de força = Neblina muito distante (100000)
-            -- 100% de força = Neblina muito próxima (100)
-            local classicFog = 100000 - (val * 999)
-            Lighting.FogEnd = math.max(100, classicFog)
-        end)
+        CustomFogState.power = val
+        ApplyCustomFog()
     end)
 end
