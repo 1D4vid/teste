@@ -18,11 +18,12 @@ return function(env)
     local currentModalAction = nil
     getgenv().FixLoop = nil
 
-    -- Variáveis de controle de estado ativo (Previne Race Conditions)
-    local headlessActive = false
-    local korbloxActive = false
-    local skeletonActive = false
-    local scepterActive = false
+    -- IDs de Época para prevenção absoluta de Race Conditions
+    local headlessEpoch = 0
+    local korbloxEpoch = 0
+    local skeletonEpoch = 0
+    local zombieEpoch = 0
+    local scepterEpoch = 0
 
     -- Funções Core de Auxílio
     local function loadAsset(id)
@@ -328,14 +329,15 @@ return function(env)
         return true
     end
 
+    -- SISTEMA DE APLICAÇÃO PREVENIDO DE RACE CONDITIONS
     local cachedHeadlessMesh = nil
     local headlessConn = nil
     local headlessBackups = {}
 
-    local function ApplyHeadless(char)
-        if not char or not headlessActive or not cachedHeadlessMesh then return end
+    local function ApplyHeadless(char, epoch)
+        if not char or not cachedHeadlessMesh then return end
         task.wait(0.5)
-        if not headlessActive then return end
+        if epoch ~= headlessEpoch then return end -- Aborta se mudou de estado
         local head = char:FindFirstChild("Head")
         if head then
             if not headlessBackups[char] then
@@ -375,10 +377,10 @@ return function(env)
     local korbloxConn = nil
     local korbloxBackups = {}
 
-    local function ApplyKorblox(char)
-        if not char or not korbloxActive or not cachedKorbloxLeg then return end
+    local function ApplyKorblox(char, epoch)
+        if not char or not cachedKorbloxLeg then return end
         task.wait(0.5)
-        if not korbloxActive then return end
+        if epoch ~= korbloxEpoch then return end -- Aborta se mudou de estado
         if not korbloxBackups[char] then
             korbloxBackups[char] = {}
             for _, v in pairs(char:GetChildren()) do
@@ -414,10 +416,10 @@ return function(env)
     local skeletonConn = nil
     local skeletonBackups = {}
 
-    local function ApplySkeletonLeg(char)
-        if not char or not skeletonActive or not cachedSkeletonLeg then return end
+    local function ApplySkeletonLeg(char, epoch)
+        if not char or not cachedSkeletonLeg then return end
         task.wait(0.5)
-        if not skeletonActive then return end
+        if epoch ~= skeletonEpoch then return end -- Aborta se mudou de estado
         if not skeletonBackups[char] then
             skeletonBackups[char] = {}
             for _, v in pairs(char:GetChildren()) do
@@ -449,21 +451,56 @@ return function(env)
         end
     end
 
-    local scepterAccessory = nil
-    local scepterConn = nil
+    local cachedZombieLeg = nil
+    local zombieConn = nil
+    local zombieBackups = {}
 
-    local function ApplyScepter(char)
-        if not char or not scepterActive then return end
+    local function ApplyZombieLeg(char, epoch)
+        if not char or not cachedZombieLeg then return end
         task.wait(0.5)
-        if not scepterActive then return end
+        if epoch ~= zombieEpoch then return end -- Aborta se mudou de estado
+        if not zombieBackups[char] then
+            zombieBackups[char] = {}
+            for _, v in pairs(char:GetChildren()) do
+                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                    table.insert(zombieBackups[char], v:Clone())
+                end
+            end
+        end
+        for _, v in pairs(char:GetChildren()) do
+            if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                v:Destroy()
+            end
+        end
+        cachedZombieLeg:Clone().Parent = char
+    end
+
+    local function RestoreZombieLeg(char)
+        if not char then return end
+        local backup = zombieBackups[char]
+        if backup then
+            for _, v in pairs(char:GetChildren()) do
+                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                    v:Destroy()
+                end
+            end
+            for _, v in ipairs(backup) do
+                v:Clone().Parent = char
+            end
+        end
+    end
+
+    local function ApplyScepter(char, epoch)
+        if not char then return end
+        task.wait(0.5)
+        if epoch ~= scepterEpoch then return end
         local obj = loadAsset(123021068422074)
-        if not scepterActive then
+        if epoch ~= scepterEpoch then 
             if obj then obj:Destroy() end
-            return
+            return 
         end
         if obj then
             obj.Name = "RoyalScepterAccessory"
-            scepterAccessory = obj
             SmartWeld(char, obj)
         end
     end
@@ -871,7 +908,7 @@ return function(env)
     end
 
 
-    -- [COLUNA DIREITA] - PARTS AND ACCESSORIES PACKAGES (SÉRIE CORRIGIDA DE RACE CONDITIONS)
+    -- [COLUNA DIREITA] - PARTS AND ACCESSORIES PACKAGES (CONECTADA VIA EPOCH CONTROL)
     local ExclusiveSection = Instance.new("Frame")
     ExclusiveSection.Name = "CategoryBox_PartsAndAccessories"
     ExclusiveSection.Size = UDim2.new(1, 0, 0, 0)
@@ -993,13 +1030,16 @@ return function(env)
     GridTgl.SortOrder = Enum.SortOrder.LayoutOrder
     GridTgl.Parent = TogglesGridContainer
 
-    -- Botões de Toggles Seguros de Race Conditions
+    -- Botões de Toggles Seguros de Race Conditions (Epoch-Safe)
     CreateGridToggle(TogglesGridContainer, "Headless", "rbxthumb://type=BundleThumbnail&id=201&w=150&h=150", false, function(state)
-        headlessActive = state
+        headlessEpoch = headlessEpoch + 1
+        local currentEpoch = headlessEpoch
+        
         if state then
             task.spawn(function()
                 if not cachedHeadlessMesh then
                     local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(201) end)
+                    if currentEpoch ~= headlessEpoch then return end
                     if success and bundleDetails then
                         local targetDesc = nil
                         for _, item in ipairs(bundleDetails.Items) do
@@ -1020,16 +1060,12 @@ return function(env)
                     end
                 end
                 
-                if not headlessActive then return end -- Checagem Crítica
+                if currentEpoch ~= headlessEpoch then return end
 
                 if cachedHeadlessMesh then
-                    if LocalPlayer.Character then ApplyHeadless(LocalPlayer.Character) end
-                    if not headlessActive then 
-                        if LocalPlayer.Character then RestoreHeadless(LocalPlayer.Character) end
-                        return 
-                    end
+                    if LocalPlayer.Character then ApplyHeadless(LocalPlayer.Character, currentEpoch) end
                     if headlessConn then headlessConn:Disconnect() end
-                    headlessConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyHeadless(char) end)
+                    headlessConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyHeadless(char, currentEpoch) end)
                 else
                     SendNotification("Failed to load Headless", 3)
                 end
@@ -1041,11 +1077,14 @@ return function(env)
     end)
     
     CreateGridToggle(TogglesGridContainer, "Korblox", "rbxthumb://type=BundleThumbnail&id=192&w=150&h=150", false, function(state)
-        korbloxActive = state
+        korbloxEpoch = korbloxEpoch + 1
+        local currentEpoch = korbloxEpoch
+        
         if state then
             task.spawn(function()
                 if not cachedKorbloxLeg then
                     local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(192) end)
+                    if currentEpoch ~= korbloxEpoch then return end
                     if success and bundleDetails then
                         local targetDesc = nil
                         for _, item in ipairs(bundleDetails.Items) do
@@ -1067,16 +1106,12 @@ return function(env)
                     end
                 end
                 
-                if not korbloxActive then return end -- Checagem Crítica
+                if currentEpoch ~= korbloxEpoch then return end
 
                 if cachedKorbloxLeg then
-                    if LocalPlayer.Character then ApplyKorblox(LocalPlayer.Character) end
-                    if not korbloxActive then 
-                        if LocalPlayer.Character then RestoreKorblox(LocalPlayer.Character) end
-                        return 
-                    end
+                    if LocalPlayer.Character then ApplyKorblox(LocalPlayer.Character, currentEpoch) end
                     if korbloxConn then korbloxConn:Disconnect() end
-                    korbloxConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyKorblox(char) end)
+                    korbloxConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyKorblox(char, currentEpoch) end)
                 else
                     SendNotification("Failed to load Korblox", 3)
                 end
@@ -1088,11 +1123,14 @@ return function(env)
     end)
 
     CreateGridToggle(TogglesGridContainer, "Skeleton Leg", "rbxthumb://type=BundleThumbnail&id=295&w=150&h=150", false, function(state)
-        skeletonActive = state
+        skeletonEpoch = skeletonEpoch + 1
+        local currentEpoch = skeletonEpoch
+        
         if state then
             task.spawn(function()
                 if not cachedSkeletonLeg then
                     local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(295) end)
+                    if currentEpoch ~= skeletonEpoch then return end
                     if success and bundleDetails then
                         local targetDesc = nil
                         for _, item in ipairs(bundleDetails.Items) do
@@ -1114,16 +1152,12 @@ return function(env)
                     end
                 end
                 
-                if not skeletonActive then return end -- Checagem Crítica
+                if currentEpoch ~= skeletonEpoch then return end
 
                 if cachedSkeletonLeg then
-                    if LocalPlayer.Character then ApplySkeletonLeg(LocalPlayer.Character) end
-                    if not skeletonActive then 
-                        if LocalPlayer.Character then RestoreSkeletonLeg(LocalPlayer.Character) end
-                        return 
-                    end
+                    if LocalPlayer.Character then ApplySkeletonLeg(LocalPlayer.Character, currentEpoch) end
                     if skeletonConn then skeletonConn:Disconnect() end
-                    skeletonConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplySkeletonLeg(char) end)
+                    skeletonConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplySkeletonLeg(char, currentEpoch) end)
                 else
                     SendNotification("Failed to load Skeleton Leg", 3)
                 end
@@ -1134,15 +1168,64 @@ return function(env)
         end
     end)
 
+    -- Novo Toggle: Zombie Leg (Aplica apenas a perna direita do pacote Zombie ID 291)
+    CreateGridToggle(TogglesGridContainer, "Zombie Leg", "rbxthumb://type=BundleThumbnail&id=291&w=150&h=150", false, function(state)
+        zombieEpoch = zombieEpoch + 1
+        local currentEpoch = zombieEpoch
+        
+        if state then
+            task.spawn(function()
+                if not cachedZombieLeg then
+                    local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(291) end)
+                    if currentEpoch ~= zombieEpoch then return end
+                    if success and bundleDetails then
+                        local targetDesc = nil
+                        for _, item in ipairs(bundleDetails.Items) do
+                            if item.Type == "UserOutfit" then
+                                local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
+                                if s and desc then targetDesc = desc break end
+                            end
+                        end
+                        if targetDesc then
+                            local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
+                            for _, item in pairs(dummy:GetChildren()) do
+                                if item:IsA("CharacterMesh") and item.BodyPart == Enum.BodyPart.RightLeg then
+                                    cachedZombieLeg = item:Clone()
+                                    break
+                                end
+                            end
+                            dummy:Destroy()
+                        end
+                    end
+                end
+                
+                if currentEpoch ~= zombieEpoch then return end
+
+                if cachedZombieLeg then
+                    if LocalPlayer.Character then ApplyZombieLeg(LocalPlayer.Character, currentEpoch) end
+                    if zombieConn then zombieConn:Disconnect() end
+                    zombieConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyZombieLeg(char, currentEpoch) end)
+                else
+                    SendNotification("Failed to load Zombie Leg", 3)
+                end
+            end)
+        else
+            if zombieConn then zombieConn:Disconnect() zombieConn = nil end
+            if LocalPlayer.Character then RestoreZombieLeg(LocalPlayer.Character) end
+        end
+    end)
+
     CreateGridToggle(TogglesGridContainer, "Royal Scepter", "rbxthumb://type=Asset&id=123021068422074&w=150&h=150", false, function(state)
-        scepterActive = state
+        scepterEpoch = scepterEpoch + 1
+        local currentEpoch = scepterEpoch
+        
         if state then
             task.spawn(function()
                 task.wait(0.5)
-                if not scepterActive then return end -- Checagem Crítica
+                if currentEpoch ~= scepterEpoch then return end
 
                 local obj = loadAsset(123021068422074)
-                if not scepterActive then 
+                if currentEpoch ~= scepterEpoch then 
                     if obj then obj:Destroy() end
                     return 
                 end
@@ -1155,7 +1238,7 @@ return function(env)
                 end
 
                 if scepterConn then scepterConn:Disconnect() end
-                scepterConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyScepter(char) end)
+                scepterConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyScepter(char, currentEpoch) end)
             end)
         else
             if scepterConn then scepterConn:Disconnect() scepterConn = nil end
