@@ -17,38 +17,6 @@ return function(env)
     local currentModalAction = nil
     getgenv().FixLoop = nil
 
-    -- Reconfigurando o layout da página para usar duas colunas (igual ao Hub principal)
-    local defaultLayout = Page:FindFirstChildOfClass("UIListLayout")
-    if defaultLayout then defaultLayout:Destroy() end
-
-    local PageLayout = Instance.new("UIListLayout")
-    PageLayout.FillDirection = Enum.FillDirection.Horizontal
-    PageLayout.Padding = UDim.new(0, 12) 
-    PageLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    PageLayout.Parent = Page
-
-    local LeftCol = Instance.new("Frame")
-    LeftCol.Name = "LeftCol"
-    LeftCol.Size = UDim2.new(0.5, -6, 0, 0)
-    LeftCol.AutomaticSize = Enum.AutomaticSize.Y
-    LeftCol.BackgroundTransparency = 1
-    LeftCol.Parent = Page
-    local LL = Instance.new("UIListLayout")
-    LL.Padding = UDim.new(0, 10)
-    LL.SortOrder = Enum.SortOrder.LayoutOrder
-    LL.Parent = LeftCol
-
-    local RightCol = Instance.new("Frame")
-    RightCol.Name = "RightCol"
-    RightCol.Size = UDim2.new(0.5, -6, 0, 0)
-    RightCol.AutomaticSize = Enum.AutomaticSize.Y
-    RightCol.BackgroundTransparency = 1
-    RightCol.Parent = Page
-    local RL = Instance.new("UIListLayout")
-    RL.Padding = UDim.new(0, 10)
-    RL.SortOrder = Enum.SortOrder.LayoutOrder
-    RL.Parent = RightCol
-
     -- Funções Core
     local function SmartWeld(char, accessory)
         local handle = accessory:FindFirstChild("Handle")
@@ -546,60 +514,17 @@ return function(env)
     end
 
     -- =======================================================
-    -- MONTAGEM DOS ELEMENTOS NAS DUAS COLUNAS
+    -- [1] SKIN CHANGER (TOTALMENTE IGUAL AO ORIGINAL, LARGURA TOTAL)
     -- =======================================================
-
-    -- [COLUNA ESQUERDA] - CONTAINER: SKIN CHANGER
-    local SkinChangerSection = Instance.new("Frame")
-    SkinChangerSection.Name = "CategoryBox_SkinChanger"
-    SkinChangerSection.Size = UDim2.new(1, 0, 0, 0)
-    SkinChangerSection.AutomaticSize = Enum.AutomaticSize.Y
-    SkinChangerSection.BackgroundColor3 = Color3.new(0, 0, 0)
-    SkinChangerSection.BackgroundTransparency = 0.45
-    SkinChangerSection.BorderSizePixel = 0
-    SkinChangerSection.Parent = LeftCol
-
-    Instance.new("UICorner", SkinChangerSection).CornerRadius = UDim.new(0, 6)
-    local SCStroke = Instance.new("UIStroke")
-    SCStroke.Color = Color3.fromRGB(40, 40, 40)
-    SCStroke.Thickness = 1
-    SCStroke.Parent = SkinChangerSection
-
-    local SCLayout = Instance.new("UIListLayout")
-    SCLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    SCLayout.Padding = UDim.new(0, 8)
-    SCLayout.Parent = SkinChangerSection
-
-    local SCPadding = Instance.new("UIPadding")
-    SCPadding.PaddingTop = UDim.new(0, 8)
-    SCPadding.PaddingBottom = UDim.new(0, 8)
-    SCPadding.PaddingLeft = UDim.new(0, 10)
-    SCPadding.PaddingRight = UDim.new(0, 10)
-    SCPadding.Parent = SkinChangerSection
-
-    local SCHeader = Instance.new("Frame")
-    SCHeader.Name = "HeaderContainer"
-    SCHeader.Size = UDim2.new(1, 0, 0, 20)
-    SCHeader.BackgroundTransparency = 1
-    SCHeader.Parent = SkinChangerSection
-
-    local SCLabel = Instance.new("TextLabel")
-    SCLabel.Size = UDim2.new(1, 0, 1, 0)
-    SCLabel.BackgroundTransparency = 1
-    SCLabel.Text = "Skin Changer"
-    SCLabel:SetAttribute("OriginalText", "Skin Changer")
-    SCLabel.Font = Theme.Font
-    SCLabel.TextSize = 12
-    SCLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SCLabel.TextXAlignment = Enum.TextXAlignment.Left
-    SCLabel.Parent = SCHeader
+    Library:CreateSection(Page, "Skin Changer")
 
     -- Input Box do Skin Changer
     local InputContainer = Instance.new("Frame")
-    InputContainer.Size = UDim2.new(1, 0, 0, 35)
+    InputContainer.Size = UDim2.new(1, -2, 0, 35)
+    InputContainer.Position = UDim2.new(0, 1, 0, 0)
     InputContainer.BackgroundColor3 = Color3.new(0, 0, 0)
     InputContainer.BackgroundTransparency = 0.45
-    InputContainer.Parent = SkinChangerSection
+    InputContainer.Parent = Page
     Instance.new("UICorner", InputContainer).CornerRadius = UDim.new(0, 6)
     local icStr = Instance.new("UIStroke", InputContainer)
     icStr.Color = Color3.fromRGB(40,40,40)
@@ -631,7 +556,7 @@ return function(env)
     PresetsContainer.Size = UDim2.new(1, 0, 0, 0)
     PresetsContainer.BackgroundTransparency = 1
     PresetsContainer.AutomaticSize = Enum.AutomaticSize.Y
-    PresetsContainer.Parent = SkinChangerSection
+    PresetsContainer.Parent = Page
 
     local Grid = Instance.new("UIGridLayout")
     Grid.CellSize = UDim2.new(0.5, -4, 0, 42) 
@@ -719,8 +644,47 @@ return function(env)
         Btn.MouseButton1Click:Connect(function() PerformSearch(name) end)
     end
 
+    -- =======================================================
+    -- [2] CRIAÇÃO DAS COLUNAS (ABAIXO DO SKIN CHANGER)
+    -- =======================================================
+    local ColumnsContainer = Instance.new("Frame")
+    ColumnsContainer.Name = "ColumnsContainer"
+    ColumnsContainer.Size = UDim2.new(1, 0, 0, 0)
+    ColumnsContainer.AutomaticSize = Enum.AutomaticSize.Y
+    ColumnsContainer.BackgroundTransparency = 1
+    ColumnsContainer.Parent = Page
 
-    -- [COLUNA ESQUERDA] - CONTAINER: BUNDLE CHANGER
+    local CCLayout = Instance.new("UIListLayout")
+    CCLayout.FillDirection = Enum.FillDirection.Horizontal
+    CCLayout.Padding = UDim.new(0, 12)
+    CCLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    CCLayout.Parent = ColumnsContainer
+
+    local LeftCol = Instance.new("Frame")
+    LeftCol.Name = "LeftCol"
+    LeftCol.Size = UDim2.new(0.5, -6, 0, 0)
+    LeftCol.AutomaticSize = Enum.AutomaticSize.Y
+    LeftCol.BackgroundTransparency = 1
+    LeftCol.Parent = ColumnsContainer
+    local LL = Instance.new("UIListLayout")
+    LL.Padding = UDim.new(0, 10)
+    LL.SortOrder = Enum.SortOrder.LayoutOrder
+    LL.Parent = LeftCol
+
+    local RightCol = Instance.new("Frame")
+    RightCol.Name = "RightCol"
+    RightCol.Size = UDim2.new(0.5, -6, 0, 0)
+    RightCol.AutomaticSize = Enum.AutomaticSize.Y
+    RightCol.BackgroundTransparency = 1
+    RightCol.Parent = ColumnsContainer
+    local RL = Instance.new("UIListLayout")
+    RL.Padding = UDim.new(0, 10)
+    RL.SortOrder = Enum.SortOrder.LayoutOrder
+    RL.Parent = RightCol
+
+    -- =======================================================
+    -- [COLUNA ESQUERDA] - BUNDLE CHANGER (DENTRO DA COLUNA)
+    -- =======================================================
     local BundleChangerSection = Instance.new("Frame")
     BundleChangerSection.Name = "CategoryBox_BundleChanger"
     BundleChangerSection.Size = UDim2.new(1, 0, 0, 0)
@@ -891,7 +855,9 @@ return function(env)
     end
 
 
-    -- [COLUNA DIREITA] - CONTAINER: EXCLUSIVE BUNDLES (TOGGLES)
+    -- =======================================================
+    -- [COLUNA DIREITA] - EXCLUSIVE BUNDLES (DENTRO DA COLUNA)
+    -- =======================================================
     local ExclusiveSection = Instance.new("Frame")
     ExclusiveSection.Name = "CategoryBox_ExclusiveBundles"
     ExclusiveSection.Size = UDim2.new(1, 0, 0, 0)
