@@ -13,6 +13,7 @@ return function(env)
     local ApplyGradient = env.ApplyGradient
 
     local AssetService = game:GetService("AssetService")
+    local MarketplaceService = game:GetService("MarketplaceService")
     local selectedModalId = nil
     local currentModalAction = nil
     getgenv().FixLoop = nil
@@ -61,6 +62,58 @@ return function(env)
             end 
         end
         if weld.Part0 then weld.Parent = handle end
+    end
+
+    -- Equipamento universal "Independente do que seja vai equipar"
+    local function EquipAccessoryByID(id)
+        local char = LocalPlayer.Character
+        if not char then return end
+        
+        local asset = loadAsset(id)
+        if not asset then
+            SendNotification("Failed to load item ID: " .. tostring(id), 3)
+            return
+        end
+        
+        local function handleEquip(obj)
+            if obj:IsA("Accessory") or obj:IsA("Hat") then
+                SmartWeld(char, obj)
+                SendNotification("Accessory Equipped!", 3)
+            elseif obj:IsA("Tool") then
+                obj.Parent = char
+                SendNotification("Tool Equipped!", 3)
+            elseif obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") or obj:IsA("BodyColors") or obj:IsA("CharacterMesh") then
+                local existing = char:FindFirstChildOfClass(obj.ClassName)
+                if existing then existing:Destroy() end
+                obj.Parent = char
+                SendNotification("Clothing Equipped!", 3)
+            elseif obj:IsA("Model") then
+                local hasEquipped = false
+                for _, child in ipairs(obj:GetChildren()) do
+                    if child:IsA("Accessory") or child:IsA("Hat") or child:IsA("Tool") or child:IsA("Shirt") or child:IsA("Pants") then
+                        handleEquip(child)
+                        hasEquipped = true
+                    end
+                end
+                if not hasEquipped then
+                    obj.Parent = char
+                    local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                    if primary then
+                        primary.Anchored = false
+                        primary.CanCollide = false
+                        local weld = Instance.new("Weld")
+                        weld.Part0 = char:FindFirstChild("Head") or char.PrimaryPart
+                        weld.Part1 = primary
+                        weld.C0 = CFrame.new(0, 0, 0)
+                        weld.Parent = primary
+                    end
+                    SendNotification("Model Attached!", 3)
+                end
+            else
+                obj.Parent = char
+            end
+        end
+        handleEquip(asset)
     end
 
     local function StartFixLoop(char, colorTable, originalHeadTextureId)
@@ -349,7 +402,6 @@ return function(env)
         end
     end
 
-    -- Novas Variáveis Core para o Skeleton Leg e Cetro
     local cachedSkeletonLeg = nil
     local skeletonConn = nil
     local skeletonBackups = {}
@@ -397,7 +449,6 @@ return function(env)
         local obj = loadAsset(123021068422074)
         if obj then
             obj.Name = "RoyalScepterAccessory"
-            scepterAccessory = obj
             SmartWeld(char, obj)
         end
     end
@@ -497,6 +548,8 @@ return function(env)
                 TransformarSkin(selectedModalId)
             elseif currentModalAction == "Bundle" then
                 AplicarBundle(selectedModalId)
+            elseif currentModalAction == "Accessory" then
+                EquipAccessoryByID(selectedModalId)
             end
             ModalOverlay.Visible = false
             PreviewBox.Visible = false
@@ -578,7 +631,7 @@ return function(env)
     end
 
     -- =======================================================
-    -- [1] COLUNA SPLIT (BUNDLE CHANGER + EXCLUSIVE BUNDLES) - TOPO
+    -- [1] COLUNA SPLIT (BUNDLE CHANGER + PARTS & ACCESSORIES) - TOPO
     -- =======================================================
     local ColumnsContainer = Instance.new("Frame")
     ColumnsContainer.Name = "ColumnsContainer"
@@ -616,7 +669,7 @@ return function(env)
     RL.SortOrder = Enum.SortOrder.LayoutOrder
     RL.Parent = RightCol
 
-    -- [COLUNA ESQUERDA] - BUNDLE CHANGER (DENTRO DA COLUNA)
+    -- [COLUNA ESQUERDA] - BUNDLE CHANGER
     local BundleChangerSection = Instance.new("Frame")
     BundleChangerSection.Name = "CategoryBox_BundleChanger"
     BundleChangerSection.Size = UDim2.new(1, 0, 0, 0)
@@ -789,9 +842,9 @@ return function(env)
     end
 
 
-    -- [COLUNA DIREITA] - EXCLUSIVE BUNDLES (DENTRO DA COLUNA)
+    -- [COLUNA DIREITA] - PARTS AND ACCESSORIES PACKAGES (ANTIGO EXCLUSIVE BUNDLES)
     local ExclusiveSection = Instance.new("Frame")
-    ExclusiveSection.Name = "CategoryBox_ExclusiveBundles"
+    ExclusiveSection.Name = "CategoryBox_PartsAndAccessories"
     ExclusiveSection.Size = UDim2.new(1, 0, 0, 0)
     ExclusiveSection.AutomaticSize = Enum.AutomaticSize.Y
     ExclusiveSection.BackgroundColor3 = Color3.new(0, 0, 0)
@@ -827,15 +880,15 @@ return function(env)
     local ESLabel = Instance.new("TextLabel")
     ESLabel.Size = UDim2.new(1, 0, 1, 0)
     ESLabel.BackgroundTransparency = 1
-    ESLabel.Text = "Exclusive Bundles"
-    ESLabel:SetAttribute("OriginalText", "Exclusive Bundles")
+    ESLabel.Text = "Parts and accessories packages"
+    ESLabel:SetAttribute("OriginalText", "Parts and accessories packages")
     ESLabel.Font = Theme.Font
     ESLabel.TextSize = 12
     ESLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     ESLabel.TextXAlignment = Enum.TextXAlignment.Left
     ESLabel.Parent = ESHeader
     
-    -- Toggles Modernos aplicados na Coluna da Direita
+    -- Toggles de Pacotes e Partes
     CreateModernToggle(ExclusiveSection, "Headless", false, function(state)
         if state then
             task.spawn(function()
@@ -913,7 +966,6 @@ return function(env)
         end
     end)
 
-    -- Toggle 3: Skeleton Right Leg (Perna do Esqueleto ID 295)
     CreateModernToggle(ExclusiveSection, "Skeleton Leg", false, function(state)
         if state then
             task.spawn(function()
@@ -953,7 +1005,6 @@ return function(env)
         end
     end)
 
-    -- Toggle 4: Red Royal Scepter Holdable (ID 123021068422074)
     CreateModernToggle(ExclusiveSection, "Royal Scepter", false, function(state)
         if state then
             if LocalPlayer.Character then ApplyScepter(LocalPlayer.Character) end
@@ -967,6 +1018,76 @@ return function(env)
             end
         end
     end)
+
+    -- Divisor visual para o Campo de Input de ID
+    local FormSpacer = Instance.new("Frame")
+    FormSpacer.Name = "FormSpacer"
+    FormSpacer.Size = UDim2.new(1, 0, 0, 6)
+    FormSpacer.BackgroundTransparency = 1
+    FormSpacer.Parent = ExclusiveSection
+
+    -- Campo de Input para equipar QUALQUER item por ID
+    local CustomAssetInputContainer = Instance.new("Frame")
+    CustomAssetInputContainer.Name = "CustomAssetInputContainer"
+    CustomAssetInputContainer.Size = UDim2.new(1, 0, 0, 32)
+    CustomAssetInputContainer.BackgroundColor3 = Color3.new(0, 0, 0)
+    CustomAssetInputContainer.BackgroundTransparency = 0.45
+    CustomAssetInputContainer.Parent = ExclusiveSection
+    Instance.new("UICorner", CustomAssetInputContainer).CornerRadius = UDim.new(0, 6)
+    local caiStr = Instance.new("UIStroke", CustomAssetInputContainer)
+    caiStr.Color = Color3.fromRGB(40,40,40)
+
+    local CustomAssetInputBox = Instance.new("TextBox")
+    CustomAssetInputBox.Size = UDim2.new(1, -36, 1, 0)
+    CustomAssetInputBox.Position = UDim2.new(0, 8, 0, 0)
+    CustomAssetInputBox.BackgroundTransparency = 1
+    CustomAssetInputBox.Text = ""
+    CustomAssetInputBox.PlaceholderText = "Asset/Accessory ID..."
+    CustomAssetInputBox.TextColor3 = Theme.Text
+    CustomAssetInputBox.PlaceholderColor3 = Theme.TextDark
+    CustomAssetInputBox.Font = Theme.Font
+    CustomAssetInputBox.TextSize = 11
+    CustomAssetInputBox.TextXAlignment = Enum.TextXAlignment.Left
+    CustomAssetInputBox.Parent = CustomAssetInputContainer
+
+    local CustomAssetSearchBtnIcon = Instance.new("ImageButton")
+    CustomAssetSearchBtnIcon.Size = UDim2.new(0, 18, 0, 18)
+    CustomAssetSearchBtnIcon.Position = UDim2.new(1, -24, 0.5, -9)
+    CustomAssetSearchBtnIcon.BackgroundTransparency = 1
+    CustomAssetSearchBtnIcon.Image = "rbxassetid://104986431790017"
+    CustomAssetSearchBtnIcon.ImageColor3 = Theme.Accent
+    CustomAssetSearchBtnIcon.ScaleType = Enum.ScaleType.Fit
+    CustomAssetSearchBtnIcon.Parent = CustomAssetInputContainer
+
+    -- Processa o ID inserido e mostra a tela de confirmação
+    local function ProcessCustomAsset()
+        local inputId = tonumber(CustomAssetInputBox.Text)
+        if inputId then
+            task.spawn(function()
+                local name = "Catalog Item"
+                local success, info = pcall(function()
+                    return MarketplaceService:GetProductInfo(inputId)
+                end)
+                if success and info then
+                    name = info.Name
+                end
+                
+                selectedModalId = inputId
+                currentModalAction = "Accessory"
+                PTitle.Text = "EQUIP ITEM"
+                PName.Text = name
+                PApplyBtn.Text = "Equip"
+                PImage.Image = "rbxthumb://type=Asset&id=" .. inputId .. "&w=150&h=150"
+                ModalOverlay.Visible = true
+                PreviewBox.Visible = true
+            end)
+        else
+            SendNotification("Por favor, insira um ID válido.", 3)
+        end
+    end
+
+    CustomAssetInputBox.FocusLost:Connect(function(enter) if enter then ProcessCustomAsset() end end)
+    CustomAssetSearchBtnIcon.MouseButton1Click:Connect(ProcessCustomAsset)
 
 
     -- =======================================================
