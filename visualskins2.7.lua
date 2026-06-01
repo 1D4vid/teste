@@ -24,6 +24,7 @@ return function(env)
     local skeletonEpoch = 0
     local zombieEpoch = 0
     local scepterEpoch = 0
+    local arrowEpoch = 0
 
     -- Funções Core de Auxílio
     local function loadAsset(id)
@@ -505,6 +506,24 @@ return function(env)
         end
     end
 
+    local arrowAccessory = nil
+    local arrowConn = nil
+
+    local function ApplyArrow(char, epoch)
+        if not char then return end
+        task.wait(0.5)
+        if epoch ~= arrowEpoch then return end
+        local obj = loadAsset(100766397788633)
+        if epoch ~= arrowEpoch then 
+            if obj then obj:Destroy() end
+            return 
+        end
+        if obj then
+            obj.Name = "MysteriousArrowAccessory"
+            SmartWeld(char, obj)
+        end
+    end
+
     -- Criação do Modal de Confirmação
     local PreviewBox = Instance.new("Frame")
     PreviewBox.Size = UDim2.new(0, 260, 0, 130)
@@ -862,7 +881,8 @@ return function(env)
         {Name = "Korblox", Id = 192},
         {Name = "Skeleton", Id = 295},
         {Name = "Ice General", Id = 194},
-        {Name = "Gnomo", Id = 652}
+        {Name = "Gnomo", Id = 652},
+        {Name = "Dr. Fia Tyfoid", Id = 512}
     }
 
     for _, bndl in pairs(BundlePresets) do
@@ -1168,7 +1188,6 @@ return function(env)
         end
     end)
 
-    -- Novo Toggle: Zombie Leg (Aplica apenas a perna direita do pacote Zombie ID 291)
     CreateGridToggle(TogglesGridContainer, "Zombie Leg", "rbxthumb://type=BundleThumbnail&id=291&w=150&h=150", false, function(state)
         zombieEpoch = zombieEpoch + 1
         local currentEpoch = zombieEpoch
@@ -1245,6 +1264,42 @@ return function(env)
             if scepterAccessory then scepterAccessory:Destroy() scepterAccessory = nil end
             if LocalPlayer.Character then
                 local existing = LocalPlayer.Character:FindFirstChild("RoyalScepterAccessory")
+                if existing then existing:Destroy() end
+            end
+        end
+    end)
+
+    -- Novo Toggle: Mysterious Arrow (Holdable R6 ID 100766397788633)
+    CreateGridToggle(TogglesGridContainer, "Mysterious Arrow", "rbxthumb://type=Asset&id=100766397788633&w=150&h=150", false, function(state)
+        arrowEpoch = arrowEpoch + 1
+        local currentEpoch = arrowEpoch
+        
+        if state then
+            task.spawn(function()
+                task.wait(0.5)
+                if currentEpoch ~= arrowEpoch then return end
+
+                local obj = loadAsset(100766397788633)
+                if currentEpoch ~= arrowEpoch then 
+                    if obj then obj:Destroy() end
+                    return 
+                end
+
+                if obj then
+                    obj.Name = "MysteriousArrowAccessory"
+                    if arrowAccessory then arrowAccessory:Destroy() end
+                    arrowAccessory = obj
+                    SmartWeld(LocalPlayer.Character, obj)
+                end
+
+                if arrowConn then arrowConn:Disconnect() end
+                arrowConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyArrow(char, currentEpoch) end)
+            end)
+        else
+            if arrowConn then arrowConn:Disconnect() arrowConn = nil end
+            if arrowAccessory then arrowAccessory:Destroy() arrowAccessory = nil end
+            if LocalPlayer.Character then
+                local existing = LocalPlayer.Character:FindFirstChild("MysteriousArrowAccessory")
                 if existing then existing:Destroy() end
             end
         end
