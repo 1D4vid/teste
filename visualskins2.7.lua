@@ -514,144 +514,14 @@ return function(env)
     end
 
     -- =======================================================
-    -- [1] SKIN CHANGER (TOTALMENTE IGUAL AO ORIGINAL, LARGURA TOTAL)
-    -- =======================================================
-    Library:CreateSection(Page, "Skin Changer")
-
-    -- Input Box do Skin Changer
-    local InputContainer = Instance.new("Frame")
-    InputContainer.Size = UDim2.new(1, -2, 0, 35)
-    InputContainer.Position = UDim2.new(0, 1, 0, 0)
-    InputContainer.BackgroundColor3 = Color3.new(0, 0, 0)
-    InputContainer.BackgroundTransparency = 0.45
-    InputContainer.Parent = Page
-    Instance.new("UICorner", InputContainer).CornerRadius = UDim.new(0, 6)
-    local icStr = Instance.new("UIStroke", InputContainer)
-    icStr.Color = Color3.fromRGB(40,40,40)
-
-    local UserInputBox = Instance.new("TextBox")
-    UserInputBox.Size = UDim2.new(1, -40, 1, 0)
-    UserInputBox.Position = UDim2.new(0, 10, 0, 0)
-    UserInputBox.BackgroundTransparency = 1
-    UserInputBox.Text = ""
-    UserInputBox.PlaceholderText = "Username..."
-    UserInputBox.TextColor3 = Theme.Text
-    UserInputBox.PlaceholderColor3 = Theme.TextDark
-    UserInputBox.Font = Theme.Font
-    UserInputBox.TextSize = 13
-    UserInputBox.TextXAlignment = Enum.TextXAlignment.Left
-    UserInputBox.Parent = InputContainer
-
-    local SearchBtnIcon = Instance.new("ImageButton")
-    SearchBtnIcon.Size = UDim2.new(0, 20, 0, 20)
-    SearchBtnIcon.Position = UDim2.new(1, -28, 0.5, -10)
-    SearchBtnIcon.BackgroundTransparency = 1
-    SearchBtnIcon.Image = "rbxassetid://104986431790017"
-    SearchBtnIcon.ImageColor3 = Theme.Accent
-    SearchBtnIcon.ScaleType = Enum.ScaleType.Fit
-    SearchBtnIcon.Parent = InputContainer
-
-    -- Presets do Skin Changer
-    local PresetsContainer = Instance.new("Frame")
-    PresetsContainer.Size = UDim2.new(1, 0, 0, 0)
-    PresetsContainer.BackgroundTransparency = 1
-    PresetsContainer.AutomaticSize = Enum.AutomaticSize.Y
-    PresetsContainer.Parent = Page
-
-    local Grid = Instance.new("UIGridLayout")
-    Grid.CellSize = UDim2.new(0.5, -4, 0, 42) 
-    Grid.CellPadding = UDim2.new(0, 8, 0, 8)
-    Grid.SortOrder = Enum.SortOrder.LayoutOrder
-    Grid.Parent = PresetsContainer
-
-    local DummyNames = {
-        "y4am1n380", "eduttk7", "Victoria234h", "1Pexssz", "Vaultzinx",
-        "fleepkkj", "znerx3ys", "TryNotToRageew", "DenzelDxvices", "DraxynSoulx", "Gaie_VR", "totallyvelez", "steik00s", "Guime_blox", "sennapy", "Mwaiconn", "Dexterzxxp", "Jpzinux", "Udies11br", "akatexs", "phzin_it1", "hq_slyin", "Dv_223", "Dimeyuri", "JaoEverCry", "Baydiina", "Meshew", "SniperFq",
-        "sukyaik", "nathanserafas12", "guhtorrez", "sthefany12091", "011coded", 
-        "Marionete533", "akatexs", "j_oqoo", "lauriinhakplayer", "tio_morcego", "l_qke", "pqsteljxde", "brokensfr", "TotallyFerr", "ZxvqZayan", "cw_223"
-    }
-
-    local function PerformSearch(forcedText)
-        local text = forcedText or UserInputBox.Text
-        if text and text ~= "" then
-            UserInputBox.Text = text
-            local s, id = pcall(function() return Players:GetUserIdFromNameAsync(text) end)
-            if s and id then
-                selectedModalId = id
-                currentModalAction = "Skin"
-                PTitle.Text = "SKIN FOUND"
-                PName.Text = text
-                PApplyBtn.Text = "Apply Skin"
-                local thumb, isReady = Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
-                if isReady then
-                    PImage.Image = thumb
-                    ModalOverlay.Visible = true
-                    PreviewBox.Visible = true
-                end
-            else
-                SendNotification("User not found!", 2)
-            end
-        end
-    end
-
-    UserInputBox.FocusLost:Connect(function(enter) if enter then PerformSearch() end end)
-    SearchBtnIcon.MouseButton1Click:Connect(function() PerformSearch() end)
-
-    for _, name in pairs(DummyNames) do
-        local Btn = Instance.new("TextButton")
-        Btn.BackgroundColor3 = Color3.new(0, 0, 0)
-        Btn.BackgroundTransparency = 0.45
-        Btn.Text = ""
-        Btn.Parent = PresetsContainer
-        Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
-
-        local BStroke = Instance.new("UIStroke")
-        BStroke.Color = Color3.fromRGB(40, 40, 40)
-        BStroke.Thickness = 1
-        BStroke.Parent = Btn
-
-        local AvatarIcon = Instance.new("ImageLabel")
-        AvatarIcon.Size = UDim2.new(0, 28, 0, 28)
-        AvatarIcon.Position = UDim2.new(0, 7, 0.5, -14)
-        AvatarIcon.BackgroundColor3 = Theme.SwitchOff
-        AvatarIcon.BackgroundTransparency = 0.5
-        AvatarIcon.Parent = Btn
-        Instance.new("UICorner", AvatarIcon).CornerRadius = UDim.new(0, 6)
-
-        local NameLabel = Instance.new("TextLabel")
-        NameLabel.Size = UDim2.new(1, -45, 1, 0)
-        NameLabel.Position = UDim2.new(0, 42, 0, 0)
-        NameLabel.BackgroundTransparency = 1
-        NameLabel.Text = name
-        NameLabel.Font = Theme.Font
-        NameLabel.TextSize = 11
-        NameLabel.TextColor3 = Theme.Text
-        NameLabel.TextXAlignment = Enum.TextXAlignment.Left
-        NameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-        NameLabel.Parent = Btn
-
-        Btn.MouseEnter:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play() end)
-        Btn.MouseLeave:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
-
-        task.spawn(function()
-            local s, id = pcall(function() return Players:GetUserIdFromNameAsync(name) end)
-            if s and id then
-                local thumb = Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
-                AvatarIcon.Image = thumb
-            end
-        end)
-        
-        Btn.MouseButton1Click:Connect(function() PerformSearch(name) end)
-    end
-
-    -- =======================================================
-    -- [2] CRIAÇÃO DAS COLUNAS (ABAIXO DO SKIN CHANGER)
+    -- [1] COLUNA SPLIT (BUNDLE CHANGER + EXCLUSIVE BUNDLES) - TOPO
     -- =======================================================
     local ColumnsContainer = Instance.new("Frame")
     ColumnsContainer.Name = "ColumnsContainer"
     ColumnsContainer.Size = UDim2.new(1, 0, 0, 0)
     ColumnsContainer.AutomaticSize = Enum.AutomaticSize.Y
     ColumnsContainer.BackgroundTransparency = 1
+    ColumnsContainer.LayoutOrder = 1
     ColumnsContainer.Parent = Page
 
     local CCLayout = Instance.new("UIListLayout")
@@ -682,9 +552,7 @@ return function(env)
     RL.SortOrder = Enum.SortOrder.LayoutOrder
     RL.Parent = RightCol
 
-    -- =======================================================
     -- [COLUNA ESQUERDA] - BUNDLE CHANGER (DENTRO DA COLUNA)
-    -- =======================================================
     local BundleChangerSection = Instance.new("Frame")
     BundleChangerSection.Name = "CategoryBox_BundleChanger"
     BundleChangerSection.Size = UDim2.new(1, 0, 0, 0)
@@ -837,15 +705,17 @@ return function(env)
         Instance.new("UICorner", BundleIcon).CornerRadius = UDim.new(0, 6)
 
         local NameLabel = Instance.new("TextLabel")
-        NameLabel.Size = UDim2.new(1, -45, 1, 0)
-        NameLabel.Position = UDim2.new(0, 42, 0, 0)
+        NameLabel.Size = UDim2.new(1, -40, 1, 0)
+        NameLabel.Position = UDim2.new(0, 36, 0, 0)
         NameLabel.BackgroundTransparency = 1
         NameLabel.Text = bndl.Name
         NameLabel.Font = Theme.Font
-        NameLabel.TextSize = 11
+        NameLabel.TextScaled = true
+        local nsConst = Instance.new("UITextSizeConstraint", NameLabel)
+        nsConst.MinTextSize = 7
+        nsConst.MaxTextSize = 11
         NameLabel.TextColor3 = Theme.Text
         NameLabel.TextXAlignment = Enum.TextXAlignment.Left
-        NameLabel.TextTruncate = Enum.TextTruncate.AtEnd
         NameLabel.Parent = Btn
 
         Btn.MouseEnter:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play() end)
@@ -855,9 +725,7 @@ return function(env)
     end
 
 
-    -- =======================================================
     -- [COLUNA DIREITA] - EXCLUSIVE BUNDLES (DENTRO DA COLUNA)
-    -- =======================================================
     local ExclusiveSection = Instance.new("Frame")
     ExclusiveSection.Name = "CategoryBox_ExclusiveBundles"
     ExclusiveSection.Size = UDim2.new(1, 0, 0, 0)
@@ -951,6 +819,7 @@ return function(env)
                         local targetDesc = nil
                         for _, item in ipairs(bundleDetails.Items) do
                             if item.Type == "UserOutfit" then
+                                American = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
                                 local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
                                 if s and desc then targetDesc = desc break end
                             end
@@ -980,4 +849,159 @@ return function(env)
             if LocalPlayer.Character then RestoreKorblox(LocalPlayer.Character) end
         end
     end)
+
+
+    -- =======================================================
+    -- [ESPAÇADOR] - ENTRE O TOPO E O SKIN CHANGER
+    -- =======================================================
+    local LayoutSpacer = Instance.new("Frame")
+    LayoutSpacer.Name = "LayoutSpacer"
+    LayoutSpacer.Size = UDim2.new(1, 0, 0, 10)
+    LayoutSpacer.BackgroundTransparency = 1
+    LayoutSpacer.LayoutOrder = 2
+    LayoutSpacer.Parent = Page
+
+
+    -- =======================================================
+    -- [2] SKIN CHANGER (TOTALMENTE IGUAL AO ORIGINAL, LARGURA TOTAL) - BASE
+    -- =======================================================
+    local before = #Page:GetChildren()
+    Library:CreateSection(Page, "Skin Changer")
+    
+    -- Ajuste do cabeçalho original para ficar na ordem correta
+    local pageChildren = Page:GetChildren()
+    local lastSectionHeader = pageChildren[#pageChildren]
+    if lastSectionHeader and lastSectionHeader:IsA("Frame") then
+        lastSectionHeader.LayoutOrder = 3
+    end
+
+    -- Input Box do Skin Changer
+    local InputContainer = Instance.new("Frame")
+    InputContainer.Size = UDim2.new(1, -2, 0, 35)
+    InputContainer.Position = UDim2.new(0, 1, 0, 0)
+    InputContainer.BackgroundColor3 = Color3.new(0, 0, 0)
+    InputContainer.BackgroundTransparency = 0.45
+    InputContainer.LayoutOrder = 4
+    InputContainer.Parent = Page
+    Instance.new("UICorner", InputContainer).CornerRadius = UDim.new(0, 6)
+    local icStr = Instance.new("UIStroke", InputContainer)
+    icStr.Color = Color3.fromRGB(40,40,40)
+
+    local UserInputBox = Instance.new("TextBox")
+    UserInputBox.Size = UDim2.new(1, -40, 1, 0)
+    UserInputBox.Position = UDim2.new(0, 10, 0, 0)
+    UserInputBox.BackgroundTransparency = 1
+    UserInputBox.Text = ""
+    UserInputBox.PlaceholderText = "Username..."
+    UserInputBox.TextColor3 = Theme.Text
+    UserInputBox.PlaceholderColor3 = Theme.TextDark
+    UserInputBox.Font = Theme.Font
+    UserInputBox.TextSize = 13
+    UserInputBox.TextXAlignment = Enum.TextXAlignment.Left
+    UserInputBox.Parent = InputContainer
+
+    local SearchBtnIcon = Instance.new("ImageButton")
+    SearchBtnIcon.Size = UDim2.new(0, 20, 0, 20)
+    SearchBtnIcon.Position = UDim2.new(1, -28, 0.5, -10)
+    SearchBtnIcon.BackgroundTransparency = 1
+    SearchBtnIcon.Image = "rbxassetid://104986431790017"
+    SearchBtnIcon.ImageColor3 = Theme.Accent
+    SearchBtnIcon.ScaleType = Enum.ScaleType.Fit
+    SearchBtnIcon.Parent = InputContainer
+
+    -- Presets do Skin Changer
+    local PresetsContainer = Instance.new("Frame")
+    PresetsContainer.Size = UDim2.new(1, 0, 0, 0)
+    PresetsContainer.BackgroundTransparency = 1
+    PresetsContainer.AutomaticSize = Enum.AutomaticSize.Y
+    PresetsContainer.LayoutOrder = 5
+    PresetsContainer.Parent = Page
+
+    local Grid = Instance.new("UIGridLayout")
+    Grid.CellSize = UDim2.new(0.5, -4, 0, 42) 
+    Grid.CellPadding = UDim2.new(0, 8, 0, 8)
+    Grid.SortOrder = Enum.SortOrder.LayoutOrder
+    Grid.Parent = PresetsContainer
+
+    local DummyNames = {
+        "y4am1n380", "eduttk7", "Victoria234h", "1Pexssz", "Vaultzinx",
+        "fleepkkj", "znerx3ys", "TryNotToRageew", "DenzelDxvices", "DraxynSoulx", "Gaie_VR", "totallyvelez", "steik00s", "Guime_blox", "sennapy", "Mwaiconn", "Dexterzxxp", "Jpzinux", "Udies11br", "akatexs", "phzin_it1", "hq_slyin", "Dv_223", "Dimeyuri", "JaoEverCry", "Baydiina", "Meshew", "SniperFq",
+        "sukyaik", "nathanserafas12", "guhtorrez", "sthefany12091", "011coded", 
+        "Marionete533", "akatexs", "j_oqoo", "lauriinhakplayer", "tio_morcego", "l_qke", "pqsteljxde", "brokensfr", "TotallyFerr", "ZxvqZayan", "cw_223"
+    }
+
+    local function PerformSearch(forcedText)
+        local text = forcedText or UserInputBox.Text
+        if text and text ~= "" then
+            UserInputBox.Text = text
+            local s, id = pcall(function() return Players:GetUserIdFromNameAsync(text) end)
+            if s and id then
+                selectedModalId = id
+                currentModalAction = "Skin"
+                PTitle.Text = "SKIN FOUND"
+                PName.Text = text
+                PApplyBtn.Text = "Apply Skin"
+                local thumb, isReady = Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+                if isReady then
+                    PImage.Image = thumb
+                    ModalOverlay.Visible = true
+                    PreviewBox.Visible = true
+                end
+            else
+                SendNotification("User not found!", 2)
+            end
+        end
+    end
+
+    UserInputBox.FocusLost:Connect(function(enter) if enter then PerformSearch() end end)
+    SearchBtnIcon.MouseButton1Click:Connect(function() PerformSearch() end)
+
+    for _, name in pairs(DummyNames) do
+        local Btn = Instance.new("TextButton")
+        Btn.BackgroundColor3 = Color3.new(0, 0, 0)
+        Btn.BackgroundTransparency = 0.45
+        Btn.Text = ""
+        Btn.Parent = PresetsContainer
+        Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
+
+        local BStroke = Instance.new("UIStroke")
+        BStroke.Color = Color3.fromRGB(40, 40, 40)
+        BStroke.Thickness = 1
+        BStroke.Parent = Btn
+
+        local AvatarIcon = Instance.new("ImageLabel")
+        AvatarIcon.Size = UDim2.new(0, 28, 0, 28)
+        AvatarIcon.Position = UDim2.new(0, 7, 0.5, -14)
+        AvatarIcon.BackgroundColor3 = Theme.SwitchOff
+        AvatarIcon.BackgroundTransparency = 0.5
+        AvatarIcon.Parent = Btn
+        Instance.new("UICorner", AvatarIcon).CornerRadius = UDim.new(0, 6)
+
+        local NameLabel = Instance.new("TextLabel")
+        NameLabel.Size = UDim2.new(1, -40, 1, 0)
+        NameLabel.Position = UDim2.new(0, 36, 0, 0)
+        NameLabel.BackgroundTransparency = 1
+        NameLabel.Text = name
+        NameLabel.Font = Theme.Font
+        NameLabel.TextScaled = true
+        local nsConst = Instance.new("UITextSizeConstraint", NameLabel)
+        nsConst.MinTextSize = 7
+        nsConst.MaxTextSize = 11
+        NameLabel.TextColor3 = Theme.Text
+        NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        NameLabel.Parent = Btn
+
+        Btn.MouseEnter:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play() end)
+        Btn.MouseLeave:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
+
+        task.spawn(function()
+            local s, id = pcall(function() return Players:GetUserIdFromNameAsync(name) end)
+            if s and id then
+                local thumb = Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+                AvatarIcon.Image = thumb
+            end
+        end)
+        
+        Btn.MouseButton1Click:Connect(function() PerformSearch(name) end)
+    end
 end
