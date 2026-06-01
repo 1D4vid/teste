@@ -17,7 +17,15 @@ return function(env)
     local currentModalAction = nil
     getgenv().FixLoop = nil
 
-    -- Funções Core
+    -- Funções Core de Auxílio
+    local function loadAsset(id)
+        local success, result = pcall(function()
+            return game:GetObjects("rbxassetid://" .. tostring(id))[1]
+        end)
+        if success and result then return result end
+        return nil
+    end
+
     local function SmartWeld(char, accessory)
         local handle = accessory:FindFirstChild("Handle")
         if not handle then return end
@@ -34,6 +42,9 @@ return function(env)
             elseif char:FindFirstChild("Torso") and char.Torso:FindFirstChild(accAtt.Name) then 
                 charAtt = char.Torso[accAtt.Name]
                 targetPart = char.Torso 
+            elseif char:FindFirstChild("Right Arm") and char["Right Arm"]:FindFirstChild(accAtt.Name) then
+                charAtt = char["Right Arm"][accAtt.Name]
+                targetPart = char["Right Arm"]
             end
         end
         local weld = Instance.new("Weld")
@@ -43,10 +54,10 @@ return function(env)
             weld.C0 = charAtt.CFrame
             weld.C1 = accAtt.CFrame
         else 
-            targetPart = char:FindFirstChild("Head")
+            targetPart = char:FindFirstChild("Right Arm")
             if targetPart then 
                 weld.Part0 = targetPart
-                weld.C0 = CFrame.new(0, 0.5, 0) 
+                weld.C0 = CFrame.new(0, -1, 0) * CFrame.Angles(math.rad(-90), 0, 0)
             end 
         end
         if weld.Part0 then weld.Parent = handle end
@@ -335,6 +346,59 @@ return function(env)
             for _, v in ipairs(backup) do
                 v:Clone().Parent = char
             end
+        end
+    end
+
+    -- Novas Variáveis Core para o Skeleton Leg e Cetro
+    local cachedSkeletonLeg = nil
+    local skeletonConn = nil
+    local skeletonBackups = {}
+
+    local function ApplySkeletonLeg(char)
+        if not char or not cachedSkeletonLeg then return end
+        task.wait(0.5)
+        if not skeletonBackups[char] then
+            skeletonBackups[char] = {}
+            for _, v in pairs(char:GetChildren()) do
+                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                    table.insert(skeletonBackups[char], v:Clone())
+                end
+            end
+        end
+        for _, v in pairs(char:GetChildren()) do
+            if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                v:Destroy()
+            end
+        end
+        cachedSkeletonLeg:Clone().Parent = char
+    end
+
+    local function RestoreSkeletonLeg(char)
+        if not char then return end
+        local backup = skeletonBackups[char]
+        if backup then
+            for _, v in pairs(char:GetChildren()) do
+                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                    v:Destroy()
+                end
+            end
+            for _, v in ipairs(backup) do
+                v:Clone().Parent = char
+            end
+        end
+    end
+
+    local scepterAccessory = nil
+    local scepterConn = nil
+
+    local function ApplyScepter(char)
+        if not char then return end
+        task.wait(0.5)
+        local obj = loadAsset(123021068422074)
+        if obj then
+            obj.Name = "RoyalScepterAccessory"
+            scepterAccessory = obj
+            SmartWeld(char, obj)
         end
     end
 
@@ -819,7 +883,6 @@ return function(env)
                         local targetDesc = nil
                         for _, item in ipairs(bundleDetails.Items) do
                             if item.Type == "UserOutfit" then
-                                American = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
                                 local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
                                 if s and desc then targetDesc = desc break end
                             end
@@ -847,6 +910,61 @@ return function(env)
         else
             if korbloxConn then korbloxConn:Disconnect() korbloxConn = nil end
             if LocalPlayer.Character then RestoreKorblox(LocalPlayer.Character) end
+        end
+    end)
+
+    -- Toggle 3: Skeleton Right Leg (Perna do Esqueleto ID 295)
+    CreateModernToggle(ExclusiveSection, "Skeleton Leg", false, function(state)
+        if state then
+            task.spawn(function()
+                if not cachedSkeletonLeg then
+                    local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(295) end)
+                    if success and bundleDetails then
+                        local targetDesc = nil
+                        for _, item in ipairs(bundleDetails.Items) do
+                            if item.Type == "UserOutfit" then
+                                local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
+                                if s and desc then targetDesc = desc break end
+                            end
+                        end
+                        if targetDesc then
+                            local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
+                            for _, item in pairs(dummy:GetChildren()) do
+                                if item:IsA("CharacterMesh") and item.BodyPart == Enum.BodyPart.RightLeg then
+                                    cachedSkeletonLeg = item:Clone()
+                                    break
+                                end
+                            end
+                            dummy:Destroy()
+                        end
+                    end
+                end
+                
+                if cachedSkeletonLeg then
+                    if LocalPlayer.Character then ApplySkeletonLeg(LocalPlayer.Character) end
+                    skeletonConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplySkeletonLeg(char) end)
+                else
+                    SendNotification("Failed to load Skeleton Leg", 3)
+                end
+            end)
+        else
+            if skeletonConn then skeletonConn:Disconnect() skeletonConn = nil end
+            if LocalPlayer.Character then RestoreSkeletonLeg(LocalPlayer.Character) end
+        end
+    end)
+
+    -- Toggle 4: Red Royal Scepter Holdable (ID 123021068422074)
+    CreateModernToggle(ExclusiveSection, "Royal Scepter", false, function(state)
+        if state then
+            if LocalPlayer.Character then ApplyScepter(LocalPlayer.Character) end
+            scepterConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyScepter(char) end)
+        else
+            if scepterConn then scepterConn:Disconnect() scepterConn = nil end
+            if scepterAccessory then scepterAccessory:Destroy() scepterAccessory = nil end
+            if LocalPlayer.Character then
+                local existing = LocalPlayer.Character:FindFirstChild("RoyalScepterAccessory")
+                if existing then existing:Destroy() end
+            end
         end
     end)
 
