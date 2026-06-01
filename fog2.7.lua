@@ -13,28 +13,24 @@ return function(env)
     -- [ COLUNA DIREITA: Color Calibrator ] --
     Library:CreateSection(Page, "Color Calibrator", "Right")
     
-    local CalibratorState = { 
-        enabled = false, 
-        fullbright = false, 
-        contrast = 0, 
-        brightness = 0, 
-        saturation = 0, 
-        tintColor = COLOR_WHITE, 
-        opacity = 1 
-    }
+    local CalibratorState = { enabled = false, fullbright = false, contrast = 0, brightness = 0, saturation = 0, hue = 0, opacity = 1 }
     local origAmbient = Lighting.Ambient
+    local origOutdoorAmbient = Lighting.OutdoorAmbient
     local origColorShiftBottom = Lighting.ColorShift_Bottom
     local origColorShiftTop = Lighting.ColorShift_Top
     local origGlobalShadows = Lighting.GlobalShadows
     local origFogEnd = Lighting.FogEnd
+    local origBrightness = Lighting.Brightness
 
     Lighting.Changed:Connect(function(prop)
         if not CalibratorState.fullbright then
             if prop == "Ambient" then origAmbient = Lighting.Ambient end
+            if prop == "OutdoorAmbient" then origOutdoorAmbient = Lighting.OutdoorAmbient end
             if prop == "ColorShift_Bottom" then origColorShiftBottom = Lighting.ColorShift_Bottom end
             if prop == "ColorShift_Top" then origColorShiftTop = Lighting.ColorShift_Top end
             if prop == "GlobalShadows" then origGlobalShadows = Lighting.GlobalShadows end
             if prop == "FogEnd" then origFogEnd = Lighting.FogEnd end
+            if prop == "Brightness" then origBrightness = Lighting.Brightness end
         end
     end)
 
@@ -76,15 +72,13 @@ return function(env)
         if eff.Contrast ~= targetContrast then eff.Contrast = targetContrast end
         if eff.Saturation ~= targetSaturation then eff.Saturation = targetSaturation end
         
-        local targetTint = CalibratorState.tintColor
-        local finalTint = Color3.new(
-            1 + (targetTint.R - 1) * op,
-            1 + (targetTint.G - 1) * op,
-            1 + (targetTint.B - 1) * op
-        )
+        local hueUnit = (((CalibratorState.hue % 360) + 360) % 360) / 360
+        local tintSat = math.clamp(math.abs(CalibratorState.hue) / 180 * 0.5, 0, 1)
+        local tintCol = Color3.fromHSV(hueUnit, tintSat, 1)
+        local targetTintColor = Color3.new(1 + (tintCol.R - 1)*op, 1 + (tintCol.G - 1)*op, 1 + (tintCol.B - 1)*op)
         
-        if eff.TintColor ~= finalTint then
-            eff.TintColor = finalTint
+        if eff.TintColor ~= targetTintColor then
+            eff.TintColor = targetTintColor
         end
     end
 
@@ -108,8 +102,8 @@ return function(env)
         ApplyCalibrator()
     end)
 
-    Library:CreateColorPicker(Page, "Tint Color", COLOR_WHITE, function(color)
-        CalibratorState.tintColor = color
+    local s4 = Library:CreateSlider(Page, "Hue Filter", -180, 180, 0, function(val)
+        CalibratorState.hue = val
         ApplyCalibrator()
     end)
 
@@ -122,9 +116,8 @@ return function(env)
         if s1 and s1.Set then s1.Set(0) end
         if s2 and s2.Set then s2.Set(0) end
         if s3 and s3.Set then s3.Set(0) end
+        if s4 and s4.Set then s4.Set(0) end
         if s5 and s5.Set then s5.Set(100) end
-        CalibratorState.tintColor = COLOR_WHITE
-        ApplyCalibrator()
         SendNotification("Color Calibrator Reset!", 2)
     end)
 
@@ -252,53 +245,42 @@ return function(env)
 
     local originalExposure = Lighting.ExposureCompensation
     local flashlightLoop = nil
-    local FlashlightState = {
-        enabled = false,
-        exposure = 2.8
-    }
+    local currentFlashlightVal = 0
 
-    local function ApplyFlashlight()
-        if FlashlightState.enabled then
-            if Lighting.ExposureCompensation ~= FlashlightState.exposure then
-                pcall(function() Lighting.ExposureCompensation = FlashlightState.exposure end)
-            end
-        else
-            if Lighting.ExposureCompensation ~= originalExposure then
-                pcall(function() Lighting.ExposureCompensation = originalExposure end)
-            end
-        end
-    end
-
-    Library:CreateToggle(Page, "FlashLight", false, function(state)
-        FlashlightState.enabled = state
-        if state then
-            ApplyFlashlight()
-            flashlightLoop = task.spawn(function()
-                while FlashlightState.enabled do
-                    if Lighting.ExposureCompensation ~= FlashlightState.exposure then
-                        pcall(function() Lighting.ExposureCompensation = FlashlightState.exposure end)
+    Library:CreateSlider(Page, "Flashlight Intensity", 0, 500, 0, function(val)
+        currentFlashlightVal = val / 100
+        pcall(function()
+            Lighting.ExposureCompensation = currentFlashlightVal
+        end)
+        
+        if val > 0 then
+            if not flashlightLoop then
+                flashlightLoop = task.spawn(function()
+                    while true do
+                        if currentFlashlightVal > 0 and Lighting.ExposureCompensation ~= currentFlashlightVal then
+                            pcall(function() Lighting.ExposureCompensation = currentFlashlightVal end)
+                        end
+                        task.wait(1)
                     end
-                    task.wait(1)
-                end
-            end)
+                end)
+            end
         else
             if flashlightLoop then task.cancel(flashlightLoop); flashlightLoop = nil end
-            ApplyFlashlight()
+            pcall(function() Lighting.ExposureCompensation = originalExposure end)
         end
-    end)
-
-    Library:CreateSlider(Page, "Flashlight Power", 0, 500, 280, function(val)
-        FlashlightState.exposure = val / 100
-        ApplyFlashlight()
     end)
 
     local FullbrightConn = nil
+    
+    -- Função aprimorada para dar o visual liso/fosco 3D da imagem sem sombras
     local function enforceFullbright()
         if Lighting.Ambient ~= COLOR_WHITE then Lighting.Ambient = COLOR_WHITE end
+        if Lighting.OutdoorAmbient ~= COLOR_WHITE then Lighting.OutdoorAmbient = COLOR_WHITE end -- ESSENCIAL PARA O VISUAL COMPACTO DA FOTO
         if Lighting.ColorShift_Bottom ~= COLOR_WHITE then Lighting.ColorShift_Bottom = COLOR_WHITE end
         if Lighting.ColorShift_Top ~= COLOR_WHITE then Lighting.ColorShift_Top = COLOR_WHITE end
         if Lighting.GlobalShadows ~= false then Lighting.GlobalShadows = false end
         if Lighting.FogEnd ~= 100000 then Lighting.FogEnd = 100000 end
+        if Lighting.Brightness ~= 3 then Lighting.Brightness = 3 end -- Achata e clareia o sombreamento dos cabos/paredes
     end
 
     Library:CreateToggle(Page, "Enable FullBright", false, function(state)
@@ -313,10 +295,12 @@ return function(env)
         else
             if FullbrightConn then FullbrightConn:Disconnect(); FullbrightConn = nil end
             Lighting.Ambient = origAmbient
+            Lighting.OutdoorAmbient = origOutdoorAmbient
             Lighting.ColorShift_Bottom = origColorShiftBottom
             Lighting.ColorShift_Top = origColorShiftTop
             Lighting.GlobalShadows = origGlobalShadows
             Lighting.FogEnd = origFogEnd
+            Lighting.Brightness = origBrightness
         end
     end)
 
