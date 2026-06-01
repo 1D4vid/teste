@@ -18,6 +18,12 @@ return function(env)
     local currentModalAction = nil
     getgenv().FixLoop = nil
 
+    -- Variáveis de controle de estado ativo (Previne Race Conditions)
+    local headlessActive = false
+    local korbloxActive = false
+    local skeletonActive = false
+    local scepterActive = false
+
     -- Funções Core de Auxílio
     local function loadAsset(id)
         local success, result = pcall(function()
@@ -327,8 +333,9 @@ return function(env)
     local headlessBackups = {}
 
     local function ApplyHeadless(char)
-        if not char or not cachedHeadlessMesh then return end
+        if not char or not headlessActive or not cachedHeadlessMesh then return end
         task.wait(0.5)
+        if not headlessActive then return end
         local head = char:FindFirstChild("Head")
         if head then
             if not headlessBackups[char] then
@@ -369,8 +376,9 @@ return function(env)
     local korbloxBackups = {}
 
     local function ApplyKorblox(char)
-        if not char or not cachedKorbloxLeg then return end
+        if not char or not korbloxActive or not cachedKorbloxLeg then return end
         task.wait(0.5)
+        if not korbloxActive then return end
         if not korbloxBackups[char] then
             korbloxBackups[char] = {}
             for _, v in pairs(char:GetChildren()) do
@@ -407,8 +415,9 @@ return function(env)
     local skeletonBackups = {}
 
     local function ApplySkeletonLeg(char)
-        if not char or not cachedSkeletonLeg then return end
+        if not char or not skeletonActive or not cachedSkeletonLeg then return end
         task.wait(0.5)
+        if not skeletonActive then return end
         if not skeletonBackups[char] then
             skeletonBackups[char] = {}
             for _, v in pairs(char:GetChildren()) do
@@ -444,11 +453,17 @@ return function(env)
     local scepterConn = nil
 
     local function ApplyScepter(char)
-        if not char then return end
+        if not char or not scepterActive then return end
         task.wait(0.5)
+        if not scepterActive then return end
         local obj = loadAsset(123021068422074)
+        if not scepterActive then
+            if obj then obj:Destroy() end
+            return
+        end
         if obj then
             obj.Name = "RoyalScepterAccessory"
+            scepterAccessory = obj
             SmartWeld(char, obj)
         end
     end
@@ -856,7 +871,7 @@ return function(env)
     end
 
 
-    -- [COLUNA DIREITA] - PARTS AND ACCESSORIES PACKAGES (SIMÉTRICO E MODERNIZADO)
+    -- [COLUNA DIREITA] - PARTS AND ACCESSORIES PACKAGES (SÉRIE CORRIGIDA DE RACE CONDITIONS)
     local ExclusiveSection = Instance.new("Frame")
     ExclusiveSection.Name = "CategoryBox_PartsAndAccessories"
     ExclusiveSection.Size = UDim2.new(1, 0, 0, 0)
@@ -902,7 +917,7 @@ return function(env)
     ESLabel.TextXAlignment = Enum.TextXAlignment.Left
     ESLabel.Parent = ESHeader
     
-    -- Barra de Pesquisa de IDs Customizados (Alinhada no Topo para dar Simetria)
+    -- Barra de Pesquisa de IDs Customizados
     local CustomAssetInputContainer = Instance.new("Frame")
     CustomAssetInputContainer.Name = "CustomAssetInputContainer"
     CustomAssetInputContainer.Size = UDim2.new(1, 0, 0, 35)
@@ -964,7 +979,7 @@ return function(env)
     CustomAssetInputBox.FocusLost:Connect(function(enter) if enter then ProcessCustomAsset() end end)
     CustomAssetSearchBtnIcon.MouseButton1Click:Connect(ProcessCustomAsset)
 
-    -- Container do Grid de Toggles (Fica exatamente igual ao grid do Bundle Changer)
+    -- Container do Grid de Toggles
     local TogglesGridContainer = Instance.new("Frame")
     TogglesGridContainer.Name = "TogglesGridContainer"
     TogglesGridContainer.Size = UDim2.new(1, 0, 0, 0)
@@ -978,8 +993,9 @@ return function(env)
     GridTgl.SortOrder = Enum.SortOrder.LayoutOrder
     GridTgl.Parent = TogglesGridContainer
 
-    -- Botões de Toggles Modernizados (Agora com Ícones e visual de cartões)
+    -- Botões de Toggles Seguros de Race Conditions
     CreateGridToggle(TogglesGridContainer, "Headless", "rbxthumb://type=BundleThumbnail&id=201&w=150&h=150", false, function(state)
+        headlessActive = state
         if state then
             task.spawn(function()
                 if not cachedHeadlessMesh then
@@ -1004,8 +1020,15 @@ return function(env)
                     end
                 end
                 
+                if not headlessActive then return end -- Checagem Crítica
+
                 if cachedHeadlessMesh then
                     if LocalPlayer.Character then ApplyHeadless(LocalPlayer.Character) end
+                    if not headlessActive then 
+                        if LocalPlayer.Character then RestoreHeadless(LocalPlayer.Character) end
+                        return 
+                    end
+                    if headlessConn then headlessConn:Disconnect() end
                     headlessConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyHeadless(char) end)
                 else
                     SendNotification("Failed to load Headless", 3)
@@ -1018,6 +1041,7 @@ return function(env)
     end)
     
     CreateGridToggle(TogglesGridContainer, "Korblox", "rbxthumb://type=BundleThumbnail&id=192&w=150&h=150", false, function(state)
+        korbloxActive = state
         if state then
             task.spawn(function()
                 if not cachedKorbloxLeg then
@@ -1043,8 +1067,15 @@ return function(env)
                     end
                 end
                 
+                if not korbloxActive then return end -- Checagem Crítica
+
                 if cachedKorbloxLeg then
                     if LocalPlayer.Character then ApplyKorblox(LocalPlayer.Character) end
+                    if not korbloxActive then 
+                        if LocalPlayer.Character then RestoreKorblox(LocalPlayer.Character) end
+                        return 
+                    end
+                    if korbloxConn then korbloxConn:Disconnect() end
                     korbloxConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyKorblox(char) end)
                 else
                     SendNotification("Failed to load Korblox", 3)
@@ -1057,6 +1088,7 @@ return function(env)
     end)
 
     CreateGridToggle(TogglesGridContainer, "Skeleton Leg", "rbxthumb://type=BundleThumbnail&id=295&w=150&h=150", false, function(state)
+        skeletonActive = state
         if state then
             task.spawn(function()
                 if not cachedSkeletonLeg then
@@ -1082,8 +1114,15 @@ return function(env)
                     end
                 end
                 
+                if not skeletonActive then return end -- Checagem Crítica
+
                 if cachedSkeletonLeg then
                     if LocalPlayer.Character then ApplySkeletonLeg(LocalPlayer.Character) end
+                    if not skeletonActive then 
+                        if LocalPlayer.Character then RestoreSkeletonLeg(LocalPlayer.Character) end
+                        return 
+                    end
+                    if skeletonConn then skeletonConn:Disconnect() end
                     skeletonConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplySkeletonLeg(char) end)
                 else
                     SendNotification("Failed to load Skeleton Leg", 3)
@@ -1096,9 +1135,28 @@ return function(env)
     end)
 
     CreateGridToggle(TogglesGridContainer, "Royal Scepter", "rbxthumb://type=Asset&id=123021068422074&w=150&h=150", false, function(state)
+        scepterActive = state
         if state then
-            if LocalPlayer.Character then ApplyScepter(LocalPlayer.Character) end
-            scepterConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyScepter(char) end)
+            task.spawn(function()
+                task.wait(0.5)
+                if not scepterActive then return end -- Checagem Crítica
+
+                local obj = loadAsset(123021068422074)
+                if not scepterActive then 
+                    if obj then obj:Destroy() end
+                    return 
+                end
+
+                if obj then
+                    obj.Name = "RoyalScepterAccessory"
+                    if scepterAccessory then scepterAccessory:Destroy() end
+                    scepterAccessory = obj
+                    SmartWeld(LocalPlayer.Character, obj)
+                end
+
+                if scepterConn then scepterConn:Disconnect() end
+                scepterConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyScepter(char) end)
+            end)
         else
             if scepterConn then scepterConn:Disconnect() scepterConn = nil end
             if scepterAccessory then scepterAccessory:Destroy() scepterAccessory = nil end
