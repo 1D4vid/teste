@@ -556,65 +556,79 @@ return function(env)
         end
     end)
 
-    -- Função Auxiliar para Criar Toggles no estilo Moderno do Menu Principal (New Design)
-    local function CreateModernToggle(parent, text, defaultState, callback)
+    -- Função Auxiliar para Criar Toggles no estilo de Cartões de Presets do Bundle Changer (Grid Sincronizado)
+    local function CreateGridToggle(parent, text, iconId, defaultState, callback)
         local state = defaultState or false
-        
-        local Tgl = Instance.new("TextButton")
-        Tgl.Size = UDim2.new(1, 0, 0, 30)
-        Tgl.BackgroundTransparency = 1
-        Tgl.Text = ""
-        Tgl.Parent = parent
 
-        local Label = Instance.new("TextLabel")
-        Label.Size = UDim2.new(1, -40, 1, 0)
-        Label.Position = UDim2.new(0, 5, 0, 0)
-        Label.BackgroundTransparency = 1
-        Label.Text = text
-        Label:SetAttribute("OriginalText", text)
-        Label.Font = Theme.Font
-        Label.TextXAlignment = Enum.TextXAlignment.Left
-        Label.TextScaled = true
-        local tConst = Instance.new("UITextSizeConstraint", Label)
-        tConst.MinTextSize = 7
-        tConst.MaxTextSize = 11
-        Label.TextColor3 = Theme.TextDark
-        Label.Parent = Tgl
+        local Btn = Instance.new("TextButton")
+        Btn.BackgroundColor3 = Color3.new(0, 0, 0)
+        Btn.BackgroundTransparency = 0.45
+        Btn.Text = ""
+        Btn.Parent = parent
+        Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
 
-        local Bg = Instance.new("Frame")
-        Bg.Size = UDim2.new(0, 30, 0, 14)
-        Bg.Position = UDim2.new(1, -30, 0.5, -7)
-        Bg.BackgroundColor3 = Theme.SwitchOff
-        Bg.Parent = Tgl
-        Instance.new("UICorner", Bg).CornerRadius = UDim.new(1, 0)
-        local BgGrad = ApplyGradient(Bg, Theme.SwitchOff, Theme.SwitchOff, 90)
+        local BStroke = Instance.new("UIStroke")
+        BStroke.Color = Color3.fromRGB(40, 40, 40)
+        BStroke.Thickness = 1
+        BStroke.Parent = Btn
 
-        local Cir = Instance.new("Frame")
-        Cir.Size = UDim2.new(0, 12, 0, 12)
-        Cir.Position = UDim2.new(0, 1, 0.5, -6)
-        Cir.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
-        Cir.Parent = Bg
-        Instance.new("UICorner", Cir).CornerRadius = UDim.new(1, 0)
+        local Icon = Instance.new("ImageLabel")
+        Icon.Size = UDim2.new(0, 28, 0, 28)
+        Icon.Position = UDim2.new(0, 7, 0.5, -14)
+        Icon.BackgroundColor3 = Theme.SwitchOff
+        Icon.BackgroundTransparency = 0.5
+        Icon.Image = iconId
+        Icon.Parent = Btn
+        Instance.new("UICorner", Icon).CornerRadius = UDim.new(0, 6)
+
+        local NameLabel = Instance.new("TextLabel")
+        NameLabel.Size = UDim2.new(1, -40, 1, 0)
+        NameLabel.Position = UDim2.new(0, 36, 0, 0)
+        NameLabel.BackgroundTransparency = 1
+        NameLabel.Text = text
+        NameLabel.Font = Theme.Font
+        NameLabel.TextScaled = true
+        local nsConst = Instance.new("UITextSizeConstraint", NameLabel)
+        nsConst.MinTextSize = 7
+        nsConst.MaxTextSize = 11
+        NameLabel.TextColor3 = Theme.TextDark
+        NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        NameLabel.Parent = Btn
+
+        local Indicator = Instance.new("Frame")
+        Indicator.Size = UDim2.new(0, 6, 0, 6)
+        Indicator.Position = UDim2.new(1, -12, 0, 6)
+        Indicator.BackgroundColor3 = Theme.Accent
+        Indicator.Visible = false
+        Indicator.Parent = Btn
+        Instance.new("UICorner", Indicator).CornerRadius = UDim.new(1, 0)
+        ApplyGradient(Indicator, Theme.Accent, Theme.AccentDark, 90)
 
         local function Upd(fireCallback)
-            local onPos = UDim2.new(1, -13, 0.5, -6)
-            local offPos = UDim2.new(0, 1, 0.5, -6)
-
             if state then
-                TweenService:Create(Bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Accent}):Play()
-                BgGrad.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Theme.Accent), ColorSequenceKeypoint.new(1, Theme.AccentDark)}
-                TweenService:Create(Cir, TweenInfo.new(0.2), {Position = onPos, BackgroundColor3 = Color3.new(0,0,0)}):Play()
-                TweenService:Create(Label, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
+                TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
+                TweenService:Create(NameLabel, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
+                Indicator.Visible = true
             else
-                TweenService:Create(Bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.SwitchOff}):Play()
-                BgGrad.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Theme.SwitchOff), ColorSequenceKeypoint.new(1, Theme.SwitchOff)}
-                TweenService:Create(Cir, TweenInfo.new(0.2), {Position = offPos, BackgroundColor3 = Color3.fromRGB(150, 150, 150)}):Play()
-                TweenService:Create(Label, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
+                TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
+                TweenService:Create(NameLabel, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
+                Indicator.Visible = false
             end
             if fireCallback then pcall(callback, state) end
         end
 
-        Tgl.MouseButton1Click:Connect(function()
+        Btn.MouseEnter:Connect(function()
+            if not state then
+                TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(80, 80, 80)}):Play()
+            end
+        end)
+        Btn.MouseLeave:Connect(function()
+            if not state then
+                TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
+            end
+        end)
+
+        Btn.MouseButton1Click:Connect(function()
             state = not state
             Upd(true)
         end)
@@ -842,7 +856,7 @@ return function(env)
     end
 
 
-    -- [COLUNA DIREITA] - PARTS AND ACCESSORIES PACKAGES (ANTIGO EXCLUSIVE BUNDLES)
+    -- [COLUNA DIREITA] - PARTS AND ACCESSORIES PACKAGES (SIMÉTRICO E MODERNIZADO)
     local ExclusiveSection = Instance.new("Frame")
     ExclusiveSection.Name = "CategoryBox_PartsAndAccessories"
     ExclusiveSection.Size = UDim2.new(1, 0, 0, 0)
@@ -861,7 +875,7 @@ return function(env)
 
     local ESLayout = Instance.new("UIListLayout")
     ESLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    ESLayout.Padding = UDim.new(0, 4)
+    ESLayout.Padding = UDim.new(0, 8)
     ESLayout.Parent = ExclusiveSection
 
     local ESPadding = Instance.new("UIPadding")
@@ -888,8 +902,84 @@ return function(env)
     ESLabel.TextXAlignment = Enum.TextXAlignment.Left
     ESLabel.Parent = ESHeader
     
-    -- Toggles de Pacotes e Partes
-    CreateModernToggle(ExclusiveSection, "Headless", false, function(state)
+    -- Barra de Pesquisa de IDs Customizados (Alinhada no Topo para dar Simetria)
+    local CustomAssetInputContainer = Instance.new("Frame")
+    CustomAssetInputContainer.Name = "CustomAssetInputContainer"
+    CustomAssetInputContainer.Size = UDim2.new(1, 0, 0, 35)
+    CustomAssetInputContainer.BackgroundColor3 = Color3.new(0, 0, 0)
+    CustomAssetInputContainer.BackgroundTransparency = 0.45
+    CustomAssetInputContainer.Parent = ExclusiveSection
+    Instance.new("UICorner", CustomAssetInputContainer).CornerRadius = UDim.new(0, 6)
+    local caiStr = Instance.new("UIStroke", CustomAssetInputContainer)
+    caiStr.Color = Color3.fromRGB(40,40,40)
+
+    local CustomAssetInputBox = Instance.new("TextBox")
+    CustomAssetInputBox.Size = UDim2.new(1, -36, 1, 0)
+    CustomAssetInputBox.Position = UDim2.new(0, 8, 0, 0)
+    CustomAssetInputBox.BackgroundTransparency = 1
+    CustomAssetInputBox.Text = ""
+    CustomAssetInputBox.PlaceholderText = "Asset/Accessory ID..."
+    CustomAssetInputBox.TextColor3 = Theme.Text
+    CustomAssetInputBox.PlaceholderColor3 = Theme.TextDark
+    CustomAssetInputBox.Font = Theme.Font
+    CustomAssetInputBox.TextSize = 11
+    CustomAssetInputBox.TextXAlignment = Enum.TextXAlignment.Left
+    CustomAssetInputBox.Parent = CustomAssetInputContainer
+
+    local CustomAssetSearchBtnIcon = Instance.new("ImageButton")
+    CustomAssetSearchBtnIcon.Size = UDim2.new(0, 18, 0, 18)
+    CustomAssetSearchBtnIcon.Position = UDim2.new(1, -24, 0.5, -9)
+    CustomAssetSearchBtnIcon.BackgroundTransparency = 1
+    CustomAssetSearchBtnIcon.Image = "rbxassetid://104986431790017"
+    CustomAssetSearchBtnIcon.ImageColor3 = Theme.Accent
+    CustomAssetSearchBtnIcon.ScaleType = Enum.ScaleType.Fit
+    CustomAssetSearchBtnIcon.Parent = CustomAssetInputContainer
+
+    local function ProcessCustomAsset()
+        local inputId = tonumber(CustomAssetInputBox.Text)
+        if inputId then
+            task.spawn(function()
+                local name = "Catalog Item"
+                local success, info = pcall(function()
+                    return MarketplaceService:GetProductInfo(inputId)
+                end)
+                if success and info then
+                    name = info.Name
+                end
+                
+                selectedModalId = inputId
+                currentModalAction = "Accessory"
+                PTitle.Text = "EQUIP ITEM"
+                PName.Text = name
+                PApplyBtn.Text = "Equip"
+                PImage.Image = "rbxthumb://type=Asset&id=" .. inputId .. "&w=150&h=150"
+                ModalOverlay.Visible = true
+                PreviewBox.Visible = true
+            end)
+        else
+            SendNotification("Por favor, insira um ID válido.", 3)
+        end
+    end
+
+    CustomAssetInputBox.FocusLost:Connect(function(enter) if enter then ProcessCustomAsset() end end)
+    CustomAssetSearchBtnIcon.MouseButton1Click:Connect(ProcessCustomAsset)
+
+    -- Container do Grid de Toggles (Fica exatamente igual ao grid do Bundle Changer)
+    local TogglesGridContainer = Instance.new("Frame")
+    TogglesGridContainer.Name = "TogglesGridContainer"
+    TogglesGridContainer.Size = UDim2.new(1, 0, 0, 0)
+    TogglesGridContainer.BackgroundTransparency = 1
+    TogglesGridContainer.AutomaticSize = Enum.AutomaticSize.Y
+    TogglesGridContainer.Parent = ExclusiveSection
+
+    local GridTgl = Instance.new("UIGridLayout")
+    GridTgl.CellSize = UDim2.new(0.5, -4, 0, 42)
+    GridTgl.CellPadding = UDim2.new(0, 8, 0, 8)
+    GridTgl.SortOrder = Enum.SortOrder.LayoutOrder
+    GridTgl.Parent = TogglesGridContainer
+
+    -- Botões de Toggles Modernizados (Agora com Ícones e visual de cartões)
+    CreateGridToggle(TogglesGridContainer, "Headless", "rbxthumb://type=BundleThumbnail&id=201&w=150&h=150", false, function(state)
         if state then
             task.spawn(function()
                 if not cachedHeadlessMesh then
@@ -927,7 +1017,7 @@ return function(env)
         end
     end)
     
-    CreateModernToggle(ExclusiveSection, "Korblox", false, function(state)
+    CreateGridToggle(TogglesGridContainer, "Korblox", "rbxthumb://type=BundleThumbnail&id=192&w=150&h=150", false, function(state)
         if state then
             task.spawn(function()
                 if not cachedKorbloxLeg then
@@ -966,7 +1056,7 @@ return function(env)
         end
     end)
 
-    CreateModernToggle(ExclusiveSection, "Skeleton Leg", false, function(state)
+    CreateGridToggle(TogglesGridContainer, "Skeleton Leg", "rbxthumb://type=BundleThumbnail&id=295&w=150&h=150", false, function(state)
         if state then
             task.spawn(function()
                 if not cachedSkeletonLeg then
@@ -1005,7 +1095,7 @@ return function(env)
         end
     end)
 
-    CreateModernToggle(ExclusiveSection, "Royal Scepter", false, function(state)
+    CreateGridToggle(TogglesGridContainer, "Royal Scepter", "rbxthumb://type=Asset&id=123021068422074&w=150&h=150", false, function(state)
         if state then
             if LocalPlayer.Character then ApplyScepter(LocalPlayer.Character) end
             scepterConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyScepter(char) end)
@@ -1018,76 +1108,6 @@ return function(env)
             end
         end
     end)
-
-    -- Divisor visual para o Campo de Input de ID
-    local FormSpacer = Instance.new("Frame")
-    FormSpacer.Name = "FormSpacer"
-    FormSpacer.Size = UDim2.new(1, 0, 0, 6)
-    FormSpacer.BackgroundTransparency = 1
-    FormSpacer.Parent = ExclusiveSection
-
-    -- Campo de Input para equipar QUALQUER item por ID
-    local CustomAssetInputContainer = Instance.new("Frame")
-    CustomAssetInputContainer.Name = "CustomAssetInputContainer"
-    CustomAssetInputContainer.Size = UDim2.new(1, 0, 0, 32)
-    CustomAssetInputContainer.BackgroundColor3 = Color3.new(0, 0, 0)
-    CustomAssetInputContainer.BackgroundTransparency = 0.45
-    CustomAssetInputContainer.Parent = ExclusiveSection
-    Instance.new("UICorner", CustomAssetInputContainer).CornerRadius = UDim.new(0, 6)
-    local caiStr = Instance.new("UIStroke", CustomAssetInputContainer)
-    caiStr.Color = Color3.fromRGB(40,40,40)
-
-    local CustomAssetInputBox = Instance.new("TextBox")
-    CustomAssetInputBox.Size = UDim2.new(1, -36, 1, 0)
-    CustomAssetInputBox.Position = UDim2.new(0, 8, 0, 0)
-    CustomAssetInputBox.BackgroundTransparency = 1
-    CustomAssetInputBox.Text = ""
-    CustomAssetInputBox.PlaceholderText = "Asset/Accessory ID..."
-    CustomAssetInputBox.TextColor3 = Theme.Text
-    CustomAssetInputBox.PlaceholderColor3 = Theme.TextDark
-    CustomAssetInputBox.Font = Theme.Font
-    CustomAssetInputBox.TextSize = 11
-    CustomAssetInputBox.TextXAlignment = Enum.TextXAlignment.Left
-    CustomAssetInputBox.Parent = CustomAssetInputContainer
-
-    local CustomAssetSearchBtnIcon = Instance.new("ImageButton")
-    CustomAssetSearchBtnIcon.Size = UDim2.new(0, 18, 0, 18)
-    CustomAssetSearchBtnIcon.Position = UDim2.new(1, -24, 0.5, -9)
-    CustomAssetSearchBtnIcon.BackgroundTransparency = 1
-    CustomAssetSearchBtnIcon.Image = "rbxassetid://104986431790017"
-    CustomAssetSearchBtnIcon.ImageColor3 = Theme.Accent
-    CustomAssetSearchBtnIcon.ScaleType = Enum.ScaleType.Fit
-    CustomAssetSearchBtnIcon.Parent = CustomAssetInputContainer
-
-    -- Processa o ID inserido e mostra a tela de confirmação
-    local function ProcessCustomAsset()
-        local inputId = tonumber(CustomAssetInputBox.Text)
-        if inputId then
-            task.spawn(function()
-                local name = "Catalog Item"
-                local success, info = pcall(function()
-                    return MarketplaceService:GetProductInfo(inputId)
-                end)
-                if success and info then
-                    name = info.Name
-                end
-                
-                selectedModalId = inputId
-                currentModalAction = "Accessory"
-                PTitle.Text = "EQUIP ITEM"
-                PName.Text = name
-                PApplyBtn.Text = "Equip"
-                PImage.Image = "rbxthumb://type=Asset&id=" .. inputId .. "&w=150&h=150"
-                ModalOverlay.Visible = true
-                PreviewBox.Visible = true
-            end)
-        else
-            SendNotification("Por favor, insira um ID válido.", 3)
-        end
-    end
-
-    CustomAssetInputBox.FocusLost:Connect(function(enter) if enter then ProcessCustomAsset() end end)
-    CustomAssetSearchBtnIcon.MouseButton1Click:Connect(ProcessCustomAsset)
 
 
     -- =======================================================
