@@ -20,15 +20,21 @@ return function(env)
     local origFogEnd = Lighting.FogEnd
     local origBrightness = Lighting.Brightness
 
+    local propsToTrack = {
+        Ambient = true, OutdoorAmbient = true, ColorShift_Bottom = true,
+        ColorShift_Top = true, GlobalShadows = true, FogEnd = true, Brightness = true
+    }
+
     Lighting.Changed:Connect(function(prop)
-        if not CalibratorState.fullbright then
-            if prop == "Ambient" then origAmbient = Lighting.Ambient end
-            if prop == "OutdoorAmbient" then origOutdoorAmbient = Lighting.OutdoorAmbient end
-            if prop == "ColorShift_Bottom" then origColorShiftBottom = Lighting.ColorShift_Bottom end
-            if prop == "ColorShift_Top" then origColorShiftTop = Lighting.ColorShift_Top end
-            if prop == "GlobalShadows" then origGlobalShadows = Lighting.GlobalShadows end
-            if prop == "FogEnd" then origFogEnd = Lighting.FogEnd end
-            if prop == "Brightness" then origBrightness = Lighting.Brightness end
+        if not CalibratorState.fullbright and propsToTrack[prop] then
+            if prop == "Ambient" then origAmbient = Lighting.Ambient
+            elseif prop == "OutdoorAmbient" then origOutdoorAmbient = Lighting.OutdoorAmbient
+            elseif prop == "ColorShift_Bottom" then origColorShiftBottom = Lighting.ColorShift_Bottom
+            elseif prop == "ColorShift_Top" then origColorShiftTop = Lighting.ColorShift_Top
+            elseif prop == "GlobalShadows" then origGlobalShadows = Lighting.GlobalShadows
+            elseif prop == "FogEnd" then origFogEnd = Lighting.FogEnd
+            elseif prop == "Brightness" then origBrightness = Lighting.Brightness
+            end
         end
     end)
 
@@ -197,6 +203,11 @@ return function(env)
 
     local BlackFogLoop = nil
     local OriginalAtmosphereData = nil
+    local CustomFogState = {
+        enabled = false,
+        color = COLOR_GRAY,
+        power = 50
+    }
 
     Library:CreateToggle(Page, "Black Fog", false, function(state)
         if state then
@@ -211,17 +222,19 @@ return function(env)
             end
             BlackFogLoop = task.spawn(function()
                 while state do
-                    local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
-                    if not atmosphere then
-                        atmosphere = Instance.new("Atmosphere")
-                        atmosphere.Parent = Lighting
+                    if not CustomFogState.enabled then
+                        local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+                        if not atmosphere then
+                            atmosphere = Instance.new("Atmosphere")
+                            atmosphere.Parent = Lighting
+                        end
+                        if atmosphere.Color ~= COLOR_BLACK then atmosphere.Color = COLOR_BLACK end
+                        if atmosphere.Glare ~= 0 then atmosphere.Glare = 0 end
+                        if atmosphere.Haze ~= 2.46 then atmosphere.Haze = 2.46 end
+                        if atmosphere.Decay ~= COLOR_BLACK then atmosphere.Decay = COLOR_BLACK end
+                        if atmosphere.Density ~= 0.75 then atmosphere.Density = 0.75 end
+                        if atmosphere.Offset ~= 0 then atmosphere.Offset = 0 end
                     end
-                    if atmosphere.Color ~= COLOR_BLACK then atmosphere.Color = COLOR_BLACK end
-                    if atmosphere.Glare ~= 0 then atmosphere.Glare = 0 end
-                    if atmosphere.Haze ~= 2.46 then atmosphere.Haze = 2.46 end
-                    if atmosphere.Decay ~= COLOR_BLACK then atmosphere.Decay = COLOR_BLACK end
-                    if atmosphere.Density ~= 0.75 then atmosphere.Density = 0.75 end
-                    if atmosphere.Offset ~= 0 then atmosphere.Offset = 0 end
                     task.wait(2)
                 end
             end)
@@ -295,13 +308,8 @@ return function(env)
         end
     end)
 
-    Library:CreateSection(Page, "Fog Setting", "Left")
+    Library:CreateSection(Page, "Another Fog", "Left")
 
-    local CustomFogState = {
-        enabled = false,
-        color = COLOR_GRAY,
-        power = 50
-    }
     local OriginalCustomFogData = nil
     local CustomFogLoop = nil
 
