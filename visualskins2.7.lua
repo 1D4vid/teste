@@ -439,10 +439,128 @@ return function(env)
         end
     end)
 
-    -- Início da construção da UI da Página
-    Library:CreateSection(Page, "Exclusive Bundles")
+    -- Função Auxiliar para Criar Toggles no estilo Moderno do Menu Principal (New Design)
+    local function CreateModernToggle(parent, text, defaultState, callback)
+        local state = defaultState or false
+        
+        local Tgl = Instance.new("TextButton")
+        Tgl.Size = UDim2.new(1, 0, 0, 30)
+        Tgl.BackgroundTransparency = 1
+        Tgl.Text = ""
+        Tgl.Parent = parent
+
+        local Label = Instance.new("TextLabel")
+        Label.Size = UDim2.new(1, -40, 1, 0)
+        Label.Position = UDim2.new(0, 5, 0, 0)
+        Label.BackgroundTransparency = 1
+        Label.Text = text
+        Label:SetAttribute("OriginalText", text)
+        Label.Font = Theme.Font
+        Label.TextXAlignment = Enum.TextXAlignment.Left
+        Label.TextScaled = true
+        local tConst = Instance.new("UITextSizeConstraint", Label)
+        tConst.MinTextSize = 7
+        tConst.MaxTextSize = 11
+        Label.TextColor3 = Theme.TextDark
+        Label.Parent = Tgl
+
+        local Bg = Instance.new("Frame")
+        Bg.Size = UDim2.new(0, 30, 0, 14)
+        Bg.Position = UDim2.new(1, -30, 0.5, -7)
+        Bg.BackgroundColor3 = Theme.SwitchOff
+        Bg.Parent = Tgl
+        Instance.new("UICorner", Bg).CornerRadius = UDim.new(1, 0)
+        local BgGrad = ApplyGradient(Bg, Theme.SwitchOff, Theme.SwitchOff, 90)
+
+        local Cir = Instance.new("Frame")
+        Cir.Size = UDim2.new(0, 12, 0, 12)
+        Cir.Position = UDim2.new(0, 1, 0.5, -6)
+        Cir.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+        Cir.Parent = Bg
+        Instance.new("UICorner", Cir).CornerRadius = UDim.new(1, 0)
+
+        local function Upd(fireCallback)
+            local onPos = UDim2.new(1, -13, 0.5, -6)
+            local offPos = UDim2.new(0, 1, 0.5, -6)
+
+            if state then
+                TweenService:Create(Bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Accent}):Play()
+                BgGrad.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Theme.Accent), ColorSequenceKeypoint.new(1, Theme.AccentDark)}
+                TweenService:Create(Cir, TweenInfo.new(0.2), {Position = onPos, BackgroundColor3 = Color3.new(0,0,0)}):Play()
+                TweenService:Create(Label, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
+            else
+                TweenService:Create(Bg, TweenInfo.new(0.2), {BackgroundColor3 = Theme.SwitchOff}):Play()
+                BgGrad.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Theme.SwitchOff), ColorSequenceKeypoint.new(1, Theme.SwitchOff)}
+                TweenService:Create(Cir, TweenInfo.new(0.2), {Position = offPos, BackgroundColor3 = Color3.fromRGB(150, 150, 150)}):Play()
+                TweenService:Create(Label, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
+            end
+            if fireCallback then pcall(callback, state) end
+        end
+
+        Tgl.MouseButton1Click:Connect(function()
+            state = not state
+            Upd(true)
+        end)
+
+        Upd(false)
+        if state then task.spawn(function() pcall(callback, state) end) end
+
+        return {
+            Set = function(val)
+                state = val
+                Upd(true)
+            end
+        }
+    end
+
+    -- Criação do Container de Categoria Moderno para os Toggles Exclusivos
+    local ExclusiveSection = Instance.new("Frame")
+    ExclusiveSection.Name = "CategoryBox_ExclusiveBundles"
+    ExclusiveSection.Size = UDim2.new(1, -2, 0, 0)
+    ExclusiveSection.AutomaticSize = Enum.AutomaticSize.Y
+    ExclusiveSection.BackgroundColor3 = Color3.new(0, 0, 0)
+    ExclusiveSection.BackgroundTransparency = 0.45
+    ExclusiveSection.BorderSizePixel = 0
+    ExclusiveSection.Parent = Page
+
+    Instance.new("UICorner", ExclusiveSection).CornerRadius = UDim.new(0, 6)
+
+    local ESStroke = Instance.new("UIStroke")
+    ESStroke.Color = Color3.fromRGB(40, 40, 40)
+    ESStroke.Thickness = 1
+    ESStroke.Parent = ExclusiveSection
+
+    local ESLayout = Instance.new("UIListLayout")
+    ESLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    ESLayout.Padding = UDim.new(0, 4)
+    ESLayout.Parent = ExclusiveSection
+
+    local ESPadding = Instance.new("UIPadding")
+    ESPadding.PaddingTop = UDim.new(0, 8)
+    ESPadding.PaddingBottom = UDim.new(0, 8)
+    ESPadding.PaddingLeft = UDim.new(0, 10)
+    ESPadding.PaddingRight = UDim.new(0, 10)
+    ESPadding.Parent = ExclusiveSection
+
+    local ESHeader = Instance.new("Frame")
+    ESHeader.Name = "HeaderContainer"
+    ESHeader.Size = UDim2.new(1, 0, 0, 20)
+    ESHeader.BackgroundTransparency = 1
+    ESHeader.Parent = ExclusiveSection
+
+    local ESLabel = Instance.new("TextLabel")
+    ESLabel.Size = UDim2.new(1, 0, 1, 0)
+    ESLabel.BackgroundTransparency = 1
+    ESLabel.Text = "Exclusive Bundles"
+    ESLabel:SetAttribute("OriginalText", "Exclusive Bundles")
+    ESLabel.Font = Theme.Font
+    ESLabel.TextSize = 12
+    ESLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ESLabel.TextXAlignment = Enum.TextXAlignment.Left
+    ESLabel.Parent = ESHeader
     
-    Library:CreateToggle(Page, "Headless", false, function(state)
+    -- Toggles Modernos aplicados no novo Container
+    CreateModernToggle(ExclusiveSection, "Headless", false, function(state)
         if state then
             task.spawn(function()
                 if not cachedHeadlessMesh then
@@ -480,7 +598,7 @@ return function(env)
         end
     end)
     
-    Library:CreateToggle(Page, "Korblox", false, function(state)
+    CreateModernToggle(ExclusiveSection, "Korblox", false, function(state)
         if state then
             task.spawn(function()
                 if not cachedKorbloxLeg then
