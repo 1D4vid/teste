@@ -5,12 +5,10 @@ return function(env)
     local RunService = env.RunService
     local SendNotification = env.SendNotification
 
-    -- Cache de valores constantes para poupar memória e processamento
     local COLOR_WHITE = Color3.new(1, 1, 1)
     local COLOR_BLACK = Color3.new(0, 0, 0)
     local COLOR_GRAY = Color3.fromRGB(128, 128, 128)
 
-    -- [ COLUNA DIREITA: Color Calibrator ] --
     Library:CreateSection(Page, "Color Calibrator", "Right")
     
     local CalibratorState = { enabled = false, fullbright = false, contrast = 0, brightness = 0, saturation = 0, hue = 0, opacity = 1 }
@@ -121,8 +119,7 @@ return function(env)
         SendNotification("Color Calibrator Reset!", 2)
     end)
 
-    -- [ COLUNA ESQUERDA: Fog ] --
-    Library:CreateSection(Page, "Fog", "Left")
+    Library:CreateSection(Page, "Fog Settings", "Left")
     
     local noFogEnabled = false
     local originalAtmos = setmetatable({}, {__mode = "k"})
@@ -225,7 +222,7 @@ return function(env)
                     if atmosphere.Decay ~= COLOR_BLACK then atmosphere.Decay = COLOR_BLACK end
                     if atmosphere.Density ~= 0.75 then atmosphere.Density = 0.75 end
                     if atmosphere.Offset ~= 0 then atmosphere.Offset = 0 end
-                    task.wait(1)
+                    task.wait(2)
                 end
             end)
         else
@@ -244,43 +241,37 @@ return function(env)
     end)
 
     local originalExposure = Lighting.ExposureCompensation
-    local flashlightLoop = nil
+    local flashlightConn = nil
     local currentFlashlightVal = 0
 
     Library:CreateSlider(Page, "Flashlight Intensity", 0, 500, 0, function(val)
         currentFlashlightVal = val / 100
-        pcall(function()
-            Lighting.ExposureCompensation = currentFlashlightVal
-        end)
+        if flashlightConn then flashlightConn:Disconnect(); flashlightConn = nil end
         
         if val > 0 then
-            if not flashlightLoop then
-                flashlightLoop = task.spawn(function()
-                    while true do
-                        if currentFlashlightVal > 0 and Lighting.ExposureCompensation ~= currentFlashlightVal then
-                            pcall(function() Lighting.ExposureCompensation = currentFlashlightVal end)
-                        end
-                        task.wait(1)
-                    end
-                end)
+            if Lighting.ExposureCompensation ~= currentFlashlightVal then
+                pcall(function() Lighting.ExposureCompensation = currentFlashlightVal end)
             end
+            flashlightConn = Lighting:GetPropertyChangedSignal("ExposureCompensation"):Connect(function()
+                if Lighting.ExposureCompensation ~= currentFlashlightVal then
+                    pcall(function() Lighting.ExposureCompensation = currentFlashlightVal end)
+                end
+            end)
         else
-            if flashlightLoop then task.cancel(flashlightLoop); flashlightLoop = nil end
             pcall(function() Lighting.ExposureCompensation = originalExposure end)
         end
     end)
 
     local FullbrightConn = nil
     
-    -- Função aprimorada para dar o visual liso/fosco 3D da imagem sem sombras
     local function enforceFullbright()
         if Lighting.Ambient ~= COLOR_WHITE then Lighting.Ambient = COLOR_WHITE end
-        if Lighting.OutdoorAmbient ~= COLOR_WHITE then Lighting.OutdoorAmbient = COLOR_WHITE end -- ESSENCIAL PARA O VISUAL COMPACTO DA FOTO
+        if Lighting.OutdoorAmbient ~= COLOR_WHITE then Lighting.OutdoorAmbient = COLOR_WHITE end
         if Lighting.ColorShift_Bottom ~= COLOR_WHITE then Lighting.ColorShift_Bottom = COLOR_WHITE end
         if Lighting.ColorShift_Top ~= COLOR_WHITE then Lighting.ColorShift_Top = COLOR_WHITE end
         if Lighting.GlobalShadows ~= false then Lighting.GlobalShadows = false end
         if Lighting.FogEnd ~= 100000 then Lighting.FogEnd = 100000 end
-        if Lighting.Brightness ~= 3 then Lighting.Brightness = 3 end -- Achata e clareia o sombreamento dos cabos/paredes
+        if Lighting.Brightness ~= 3 then Lighting.Brightness = 3 end
     end
 
     Library:CreateToggle(Page, "Enable FullBright", false, function(state)
@@ -304,7 +295,6 @@ return function(env)
         end
     end)
 
-    -- [ COLUNA ESQUERDA: Fog Setting ] --
     Library:CreateSection(Page, "Fog Setting", "Left")
 
     local CustomFogState = {
@@ -377,7 +367,7 @@ return function(env)
                         local classicFog = math.max(100, 100000 - (CustomFogState.power * 999))
                         if Lighting.FogEnd ~= classicFog then Lighting.FogEnd = classicFog end
                     end)
-                    task.wait(1)
+                    task.wait(2)
                 end
             end)
         else
