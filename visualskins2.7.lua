@@ -17,6 +17,38 @@ return function(env)
     local currentModalAction = nil
     getgenv().FixLoop = nil
 
+    -- Reconfigurando o layout da página para usar duas colunas (igual ao Hub principal)
+    local defaultLayout = Page:FindFirstChildOfClass("UIListLayout")
+    if defaultLayout then defaultLayout:Destroy() end
+
+    local PageLayout = Instance.new("UIListLayout")
+    PageLayout.FillDirection = Enum.FillDirection.Horizontal
+    PageLayout.Padding = UDim.new(0, 12) 
+    PageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    PageLayout.Parent = Page
+
+    local LeftCol = Instance.new("Frame")
+    LeftCol.Name = "LeftCol"
+    LeftCol.Size = UDim2.new(0.5, -6, 0, 0)
+    LeftCol.AutomaticSize = Enum.AutomaticSize.Y
+    LeftCol.BackgroundTransparency = 1
+    LeftCol.Parent = Page
+    local LL = Instance.new("UIListLayout")
+    LL.Padding = UDim.new(0, 10)
+    LL.SortOrder = Enum.SortOrder.LayoutOrder
+    LL.Parent = LeftCol
+
+    local RightCol = Instance.new("Frame")
+    RightCol.Name = "RightCol"
+    RightCol.Size = UDim2.new(0.5, -6, 0, 0)
+    RightCol.AutomaticSize = Enum.AutomaticSize.Y
+    RightCol.BackgroundTransparency = 1
+    RightCol.Parent = Page
+    local RL = Instance.new("UIListLayout")
+    RL.Padding = UDim.new(0, 10)
+    RL.SortOrder = Enum.SortOrder.LayoutOrder
+    RL.Parent = RightCol
+
     -- Funções Core
     local function SmartWeld(char, accessory)
         local handle = accessory:FindFirstChild("Handle")
@@ -513,144 +545,61 @@ return function(env)
         }
     end
 
-    -- Criação do Container de Categoria Moderno para os Toggles Exclusivos
-    local ExclusiveSection = Instance.new("Frame")
-    ExclusiveSection.Name = "CategoryBox_ExclusiveBundles"
-    ExclusiveSection.Size = UDim2.new(1, -2, 0, 0)
-    ExclusiveSection.AutomaticSize = Enum.AutomaticSize.Y
-    ExclusiveSection.BackgroundColor3 = Color3.new(0, 0, 0)
-    ExclusiveSection.BackgroundTransparency = 0.45
-    ExclusiveSection.BorderSizePixel = 0
-    ExclusiveSection.Parent = Page
+    -- =======================================================
+    -- MONTAGEM DOS ELEMENTOS NAS DUAS COLUNAS
+    -- =======================================================
 
-    Instance.new("UICorner", ExclusiveSection).CornerRadius = UDim.new(0, 6)
+    -- [COLUNA ESQUERDA] - CONTAINER: SKIN CHANGER
+    local SkinChangerSection = Instance.new("Frame")
+    SkinChangerSection.Name = "CategoryBox_SkinChanger"
+    SkinChangerSection.Size = UDim2.new(1, 0, 0, 0)
+    SkinChangerSection.AutomaticSize = Enum.AutomaticSize.Y
+    SkinChangerSection.BackgroundColor3 = Color3.new(0, 0, 0)
+    SkinChangerSection.BackgroundTransparency = 0.45
+    SkinChangerSection.BorderSizePixel = 0
+    SkinChangerSection.Parent = LeftCol
 
-    local ESStroke = Instance.new("UIStroke")
-    ESStroke.Color = Color3.fromRGB(40, 40, 40)
-    ESStroke.Thickness = 1
-    ESStroke.Parent = ExclusiveSection
+    Instance.new("UICorner", SkinChangerSection).CornerRadius = UDim.new(0, 6)
+    local SCStroke = Instance.new("UIStroke")
+    SCStroke.Color = Color3.fromRGB(40, 40, 40)
+    SCStroke.Thickness = 1
+    SCStroke.Parent = SkinChangerSection
 
-    local ESLayout = Instance.new("UIListLayout")
-    ESLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    ESLayout.Padding = UDim.new(0, 4)
-    ESLayout.Parent = ExclusiveSection
+    local SCLayout = Instance.new("UIListLayout")
+    SCLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    SCLayout.Padding = UDim.new(0, 8)
+    SCLayout.Parent = SkinChangerSection
 
-    local ESPadding = Instance.new("UIPadding")
-    ESPadding.PaddingTop = UDim.new(0, 8)
-    ESPadding.PaddingBottom = UDim.new(0, 8)
-    ESPadding.PaddingLeft = UDim.new(0, 10)
-    ESPadding.PaddingRight = UDim.new(0, 10)
-    ESPadding.Parent = ExclusiveSection
+    local SCPadding = Instance.new("UIPadding")
+    SCPadding.PaddingTop = UDim.new(0, 8)
+    SCPadding.PaddingBottom = UDim.new(0, 8)
+    SCPadding.PaddingLeft = UDim.new(0, 10)
+    SCPadding.PaddingRight = UDim.new(0, 10)
+    SCPadding.Parent = SkinChangerSection
 
-    local ESHeader = Instance.new("Frame")
-    ESHeader.Name = "HeaderContainer"
-    ESHeader.Size = UDim2.new(1, 0, 0, 20)
-    ESHeader.BackgroundTransparency = 1
-    ESHeader.Parent = ExclusiveSection
+    local SCHeader = Instance.new("Frame")
+    SCHeader.Name = "HeaderContainer"
+    SCHeader.Size = UDim2.new(1, 0, 0, 20)
+    SCHeader.BackgroundTransparency = 1
+    SCHeader.Parent = SkinChangerSection
 
-    local ESLabel = Instance.new("TextLabel")
-    ESLabel.Size = UDim2.new(1, 0, 1, 0)
-    ESLabel.BackgroundTransparency = 1
-    ESLabel.Text = "Exclusive Bundles"
-    ESLabel:SetAttribute("OriginalText", "Exclusive Bundles")
-    ESLabel.Font = Theme.Font
-    ESLabel.TextSize = 12
-    ESLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ESLabel.TextXAlignment = Enum.TextXAlignment.Left
-    ESLabel.Parent = ESHeader
-    
-    -- Toggles Modernos aplicados no novo Container
-    CreateModernToggle(ExclusiveSection, "Headless", false, function(state)
-        if state then
-            task.spawn(function()
-                if not cachedHeadlessMesh then
-                    local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(201) end)
-                    if success and bundleDetails then
-                        local targetDesc = nil
-                        for _, item in ipairs(bundleDetails.Items) do
-                            if item.Type == "UserOutfit" then
-                                local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
-                                if s and desc then targetDesc = desc break end
-                            end
-                        end
-                        if targetDesc then
-                            local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
-                            local dummyHead = dummy:FindFirstChild("Head")
-                            if dummyHead then
-                                local mesh = dummyHead:FindFirstChildOfClass("SpecialMesh")
-                                if mesh then cachedHeadlessMesh = mesh:Clone() end
-                            end
-                            dummy:Destroy()
-                        end
-                    end
-                end
-                
-                if cachedHeadlessMesh then
-                    if LocalPlayer.Character then ApplyHeadless(LocalPlayer.Character) end
-                    headlessConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyHeadless(char) end)
-                else
-                    SendNotification("Failed to load Headless", 3)
-                end
-            end)
-        else
-            if headlessConn then headlessConn:Disconnect() headlessConn = nil end
-            if LocalPlayer.Character then RestoreHeadless(LocalPlayer.Character) end
-        end
-    end)
-    
-    CreateModernToggle(ExclusiveSection, "Korblox", false, function(state)
-        if state then
-            task.spawn(function()
-                if not cachedKorbloxLeg then
-                    local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(192) end)
-                    if success and bundleDetails then
-                        local targetDesc = nil
-                        for _, item in ipairs(bundleDetails.Items) do
-                            if item.Type == "UserOutfit" then
-                                local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
-                                if s and desc then targetDesc = desc break end
-                            end
-                        end
-                        if targetDesc then
-                            local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
-                            for _, item in pairs(dummy:GetChildren()) do
-                                if item:IsA("CharacterMesh") and item.BodyPart == Enum.BodyPart.RightLeg then
-                                    cachedKorbloxLeg = item:Clone()
-                                    break
-                                end
-                            end
-                            dummy:Destroy()
-                        end
-                    end
-                end
-                
-                if cachedKorbloxLeg then
-                    if LocalPlayer.Character then ApplyKorblox(LocalPlayer.Character) end
-                    korbloxConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyKorblox(char) end)
-                else
-                    SendNotification("Failed to load Korblox", 3)
-                end
-            end)
-        else
-            if korbloxConn then korbloxConn:Disconnect() korbloxConn = nil end
-            if LocalPlayer.Character then RestoreKorblox(LocalPlayer.Character) end
-        end
-    end)
+    local SCLabel = Instance.new("TextLabel")
+    SCLabel.Size = UDim2.new(1, 0, 1, 0)
+    SCLabel.BackgroundTransparency = 1
+    SCLabel.Text = "Skin Changer"
+    SCLabel:SetAttribute("OriginalText", "Skin Changer")
+    SCLabel.Font = Theme.Font
+    SCLabel.TextSize = 12
+    SCLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SCLabel.TextXAlignment = Enum.TextXAlignment.Left
+    SCLabel.Parent = SCHeader
 
-    local SpacerEx = Instance.new("Frame")
-    SpacerEx.Size = UDim2.new(1, 0, 0, 5)
-    SpacerEx.BackgroundTransparency = 1
-    SpacerEx.Parent = Page
-
-    Library:CreateSection(Page, "Skin Changer")
-    
-    -- Custom Input UI para suportar o Ícone de Lupa
+    -- Input Box do Skin Changer
     local InputContainer = Instance.new("Frame")
-    InputContainer.Size = UDim2.new(1, -2, 0, 35)
-    InputContainer.Position = UDim2.new(0, 1, 0, 0)
+    InputContainer.Size = UDim2.new(1, 0, 0, 35)
     InputContainer.BackgroundColor3 = Color3.new(0, 0, 0)
     InputContainer.BackgroundTransparency = 0.45
-    InputContainer.Parent = Page
+    InputContainer.Parent = SkinChangerSection
     Instance.new("UICorner", InputContainer).CornerRadius = UDim.new(0, 6)
     local icStr = Instance.new("UIStroke", InputContainer)
     icStr.Color = Color3.fromRGB(40,40,40)
@@ -677,6 +626,26 @@ return function(env)
     SearchBtnIcon.ScaleType = Enum.ScaleType.Fit
     SearchBtnIcon.Parent = InputContainer
 
+    -- Presets do Skin Changer
+    local PresetsContainer = Instance.new("Frame")
+    PresetsContainer.Size = UDim2.new(1, 0, 0, 0)
+    PresetsContainer.BackgroundTransparency = 1
+    PresetsContainer.AutomaticSize = Enum.AutomaticSize.Y
+    PresetsContainer.Parent = SkinChangerSection
+
+    local Grid = Instance.new("UIGridLayout")
+    Grid.CellSize = UDim2.new(0.5, -4, 0, 42) 
+    Grid.CellPadding = UDim2.new(0, 8, 0, 8)
+    Grid.SortOrder = Enum.SortOrder.LayoutOrder
+    Grid.Parent = PresetsContainer
+
+    local DummyNames = {
+        "y4am1n380", "eduttk7", "Victoria234h", "1Pexssz", "Vaultzinx",
+        "fleepkkj", "znerx3ys", "TryNotToRageew", "DenzelDxvices", "DraxynSoulx", "Gaie_VR", "totallyvelez", "steik00s", "Guime_blox", "sennapy", "Mwaiconn", "Dexterzxxp", "Jpzinux", "Udies11br", "akatexs", "phzin_it1", "hq_slyin", "Dv_223", "Dimeyuri", "JaoEverCry", "Baydiina", "Meshew", "SniperFq",
+        "sukyaik", "nathanserafas12", "guhtorrez", "sthefany12091", "011coded", 
+        "Marionete533", "akatexs", "j_oqoo", "lauriinhakplayer", "tio_morcego", "l_qke", "pqsteljxde", "brokensfr", "TotallyFerr", "ZxvqZayan", "cw_223"
+    }
+
     local function PerformSearch(forcedText)
         local text = forcedText or UserInputBox.Text
         if text and text ~= "" then
@@ -702,25 +671,6 @@ return function(env)
 
     UserInputBox.FocusLost:Connect(function(enter) if enter then PerformSearch() end end)
     SearchBtnIcon.MouseButton1Click:Connect(function() PerformSearch() end)
-
-    local PresetsContainer = Instance.new("Frame")
-    PresetsContainer.Size = UDim2.new(1, 0, 0, 0)
-    PresetsContainer.BackgroundTransparency = 1
-    PresetsContainer.AutomaticSize = Enum.AutomaticSize.Y
-    PresetsContainer.Parent = Page
-
-    local Grid = Instance.new("UIGridLayout")
-    Grid.CellSize = UDim2.new(0.5, -4, 0, 42) 
-    Grid.CellPadding = UDim2.new(0, 8, 0, 8)
-    Grid.SortOrder = Enum.SortOrder.LayoutOrder
-    Grid.Parent = PresetsContainer
-
-    local DummyNames = {
-        "y4am1n380", "eduttk7", "Victoria234h", "1Pexssz", "Vaultzinx",
-        "fleepkkj", "znerx3ys", "TryNotToRageew", "DenzelDxvices", "DraxynSoulx", "Gaie_VR", "totallyvelez", "steik00s", "Guime_blox", "sennapy", "Mwaiconn", "Dexterzxxp", "Jpzinux", "Udies11br", "akatexs", "phzin_it1", "hq_slyin", "Dv_223", "Dimeyuri", "JaoEverCry", "Baydiina", "Meshew", "SniperFq",
-        "sukyaik", "nathanserafas12", "guhtorrez", "sthefany12091", "011coded", 
-        "Marionete533", "akatexs", "j_oqoo", "lauriinhakplayer", "tio_morcego", "l_qke", "pqsteljxde", "brokensfr", "TotallyFerr", "ZxvqZayan", "cw_223"
-    }
 
     for _, name in pairs(DummyNames) do
         local Btn = Instance.new("TextButton")
@@ -769,19 +719,58 @@ return function(env)
         Btn.MouseButton1Click:Connect(function() PerformSearch(name) end)
     end
 
-    local SpacerAfterSkins = Instance.new("Frame")
-    SpacerAfterSkins.Size = UDim2.new(1, 0, 0, 10)
-    SpacerAfterSkins.BackgroundTransparency = 1
-    SpacerAfterSkins.Parent = Page
 
-    Library:CreateSection(Page, "Bundle Changer")
-    
+    -- [COLUNA ESQUERDA] - CONTAINER: BUNDLE CHANGER
+    local BundleChangerSection = Instance.new("Frame")
+    BundleChangerSection.Name = "CategoryBox_BundleChanger"
+    BundleChangerSection.Size = UDim2.new(1, 0, 0, 0)
+    BundleChangerSection.AutomaticSize = Enum.AutomaticSize.Y
+    BundleChangerSection.BackgroundColor3 = Color3.new(0, 0, 0)
+    BundleChangerSection.BackgroundTransparency = 0.45
+    BundleChangerSection.BorderSizePixel = 0
+    BundleChangerSection.Parent = LeftCol
+
+    Instance.new("UICorner", BundleChangerSection).CornerRadius = UDim.new(0, 6)
+    local BCStroke = Instance.new("UIStroke")
+    BCStroke.Color = Color3.fromRGB(40, 40, 40)
+    BCStroke.Thickness = 1
+    BCStroke.Parent = BundleChangerSection
+
+    local BCLayout = Instance.new("UIListLayout")
+    BCLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    BCLayout.Padding = UDim.new(0, 8)
+    BCLayout.Parent = BundleChangerSection
+
+    local BCPadding = Instance.new("UIPadding")
+    BCPadding.PaddingTop = UDim.new(0, 8)
+    BCPadding.PaddingBottom = UDim.new(0, 8)
+    BCPadding.PaddingLeft = UDim.new(0, 10)
+    BCPadding.PaddingRight = UDim.new(0, 10)
+    BCPadding.Parent = BundleChangerSection
+
+    local BCHeader = Instance.new("Frame")
+    BCHeader.Name = "HeaderContainer"
+    BCHeader.Size = UDim2.new(1, 0, 0, 20)
+    BCHeader.BackgroundTransparency = 1
+    BCHeader.Parent = BundleChangerSection
+
+    local BCLabel = Instance.new("TextLabel")
+    BCLabel.Size = UDim2.new(1, 0, 1, 0)
+    BCLabel.BackgroundTransparency = 1
+    BCLabel.Text = "Bundle Changer"
+    BCLabel:SetAttribute("OriginalText", "Bundle Changer")
+    BCLabel.Font = Theme.Font
+    BCLabel.TextSize = 12
+    BCLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    BCLabel.TextXAlignment = Enum.TextXAlignment.Left
+    BCLabel.Parent = BCHeader
+
+    -- Input Box do Bundle Changer
     local BundleInputContainer = Instance.new("Frame")
-    BundleInputContainer.Size = UDim2.new(1, -2, 0, 35)
-    BundleInputContainer.Position = UDim2.new(0, 1, 0, 0)
+    BundleInputContainer.Size = UDim2.new(1, 0, 0, 35)
     BundleInputContainer.BackgroundColor3 = Color3.new(0, 0, 0)
     BundleInputContainer.BackgroundTransparency = 0.45
-    BundleInputContainer.Parent = Page
+    BundleInputContainer.Parent = BundleChangerSection
     Instance.new("UICorner", BundleInputContainer).CornerRadius = UDim.new(0, 6)
     local bicStr = Instance.new("UIStroke", BundleInputContainer)
     bicStr.Color = Color3.fromRGB(40,40,40)
@@ -808,11 +797,12 @@ return function(env)
     BundleSearchBtnIcon.ScaleType = Enum.ScaleType.Fit
     BundleSearchBtnIcon.Parent = BundleInputContainer
 
+    -- Presets do Bundle Changer
     local BundlePresetsContainer = Instance.new("Frame")
     BundlePresetsContainer.Size = UDim2.new(1, 0, 0, 0)
     BundlePresetsContainer.BackgroundTransparency = 1
     BundlePresetsContainer.AutomaticSize = Enum.AutomaticSize.Y
-    BundlePresetsContainer.Parent = Page
+    BundlePresetsContainer.Parent = BundleChangerSection
 
     local GridBundle = Instance.new("UIGridLayout")
     GridBundle.CellSize = UDim2.new(0.5, -4, 0, 42) 
@@ -899,4 +889,129 @@ return function(env)
 
         Btn.MouseButton1Click:Connect(function() PerformBundleSearch(bndl.Id, bndl.Name) end)
     end
+
+
+    -- [COLUNA DIREITA] - CONTAINER: EXCLUSIVE BUNDLES (TOGGLES)
+    local ExclusiveSection = Instance.new("Frame")
+    ExclusiveSection.Name = "CategoryBox_ExclusiveBundles"
+    ExclusiveSection.Size = UDim2.new(1, 0, 0, 0)
+    ExclusiveSection.AutomaticSize = Enum.AutomaticSize.Y
+    ExclusiveSection.BackgroundColor3 = Color3.new(0, 0, 0)
+    ExclusiveSection.BackgroundTransparency = 0.45
+    ExclusiveSection.BorderSizePixel = 0
+    ExclusiveSection.Parent = RightCol
+
+    Instance.new("UICorner", ExclusiveSection).CornerRadius = UDim.new(0, 6)
+
+    local ESStroke = Instance.new("UIStroke")
+    ESStroke.Color = Color3.fromRGB(40, 40, 40)
+    ESStroke.Thickness = 1
+    ESStroke.Parent = ExclusiveSection
+
+    local ESLayout = Instance.new("UIListLayout")
+    ESLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    ESLayout.Padding = UDim.new(0, 4)
+    ESLayout.Parent = ExclusiveSection
+
+    local ESPadding = Instance.new("UIPadding")
+    ESPadding.PaddingTop = UDim.new(0, 8)
+    ESPadding.PaddingBottom = UDim.new(0, 8)
+    ESPadding.PaddingLeft = UDim.new(0, 10)
+    ESPadding.PaddingRight = UDim.new(0, 10)
+    ESPadding.Parent = ExclusiveSection
+
+    local ESHeader = Instance.new("Frame")
+    ESHeader.Name = "HeaderContainer"
+    ESHeader.Size = UDim2.new(1, 0, 0, 20)
+    ESHeader.BackgroundTransparency = 1
+    ESHeader.Parent = ExclusiveSection
+
+    local ESLabel = Instance.new("TextLabel")
+    ESLabel.Size = UDim2.new(1, 0, 1, 0)
+    ESLabel.BackgroundTransparency = 1
+    ESLabel.Text = "Exclusive Bundles"
+    ESLabel:SetAttribute("OriginalText", "Exclusive Bundles")
+    ESLabel.Font = Theme.Font
+    ESLabel.TextSize = 12
+    ESLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ESLabel.TextXAlignment = Enum.TextXAlignment.Left
+    ESLabel.Parent = ESHeader
+    
+    -- Toggles Modernos aplicados na Coluna da Direita
+    CreateModernToggle(ExclusiveSection, "Headless", false, function(state)
+        if state then
+            task.spawn(function()
+                if not cachedHeadlessMesh then
+                    local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(201) end)
+                    if success and bundleDetails then
+                        local targetDesc = nil
+                        for _, item in ipairs(bundleDetails.Items) do
+                            if item.Type == "UserOutfit" then
+                                local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
+                                if s and desc then targetDesc = desc break end
+                            end
+                        end
+                        if targetDesc then
+                            local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
+                            local dummyHead = dummy:FindFirstChild("Head")
+                            if dummyHead then
+                                local mesh = dummyHead:FindFirstChildOfClass("SpecialMesh")
+                                if mesh then cachedHeadlessMesh = mesh:Clone() end
+                            end
+                            dummy:Destroy()
+                        end
+                    end
+                end
+                
+                if cachedHeadlessMesh then
+                    if LocalPlayer.Character then ApplyHeadless(LocalPlayer.Character) end
+                    headlessConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyHeadless(char) end)
+                else
+                    SendNotification("Failed to load Headless", 3)
+                end
+            end)
+        else
+            if headlessConn then headlessConn:Disconnect() headlessConn = nil end
+            if LocalPlayer.Character then RestoreHeadless(LocalPlayer.Character) end
+        end
+    end)
+    
+    CreateModernToggle(ExclusiveSection, "Korblox", false, function(state)
+        if state then
+            task.spawn(function()
+                if not cachedKorbloxLeg then
+                    local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(192) end)
+                    if success and bundleDetails then
+                        local targetDesc = nil
+                        for _, item in ipairs(bundleDetails.Items) do
+                            if item.Type == "UserOutfit" then
+                                local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
+                                if s and desc then targetDesc = desc break end
+                            end
+                        end
+                        if targetDesc then
+                            local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
+                            for _, item in pairs(dummy:GetChildren()) do
+                                if item:IsA("CharacterMesh") and item.BodyPart == Enum.BodyPart.RightLeg then
+                                    cachedKorbloxLeg = item:Clone()
+                                    break
+                                end
+                            end
+                            dummy:Destroy()
+                        end
+                    end
+                end
+                
+                if cachedKorbloxLeg then
+                    if LocalPlayer.Character then ApplyKorblox(LocalPlayer.Character) end
+                    korbloxConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyKorblox(char) end)
+                else
+                    SendNotification("Failed to load Korblox", 3)
+                end
+            end)
+        else
+            if korbloxConn then korbloxConn:Disconnect() korbloxConn = nil end
+            if LocalPlayer.Character then RestoreKorblox(LocalPlayer.Character) end
+        end
+    end)
 end
