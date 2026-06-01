@@ -5,7 +5,7 @@ return function(env)
     local RunService = env.RunService
     local SendNotification = env.SendNotification
 
-    -- Cache de valores constantes para poupar memória
+    -- Cache de valores constantes para poupar memória e processamento
     local COLOR_WHITE = Color3.new(1, 1, 1)
     local COLOR_BLACK = Color3.new(0, 0, 0)
     local COLOR_GRAY = Color3.fromRGB(128, 128, 128)
@@ -13,7 +13,15 @@ return function(env)
     -- [ COLUNA DIREITA: Color Calibrator ] --
     Library:CreateSection(Page, "Color Calibrator", "Right")
     
-    local CalibratorState = { enabled = false, fullbright = false, contrast = 0, brightness = 0, saturation = 0, hue = 0, opacity = 1 }
+    local CalibratorState = { 
+        enabled = false, 
+        fullbright = false, 
+        contrast = 0, 
+        brightness = 0, 
+        saturation = 0, 
+        tintColor = COLOR_WHITE, 
+        opacity = 1 
+    }
     local origAmbient = Lighting.Ambient
     local origColorShiftBottom = Lighting.ColorShift_Bottom
     local origColorShiftTop = Lighting.ColorShift_Top
@@ -68,13 +76,15 @@ return function(env)
         if eff.Contrast ~= targetContrast then eff.Contrast = targetContrast end
         if eff.Saturation ~= targetSaturation then eff.Saturation = targetSaturation end
         
-        local hueUnit = (((CalibratorState.hue % 360) + 360) % 360) / 360
-        local tintSat = math.clamp(math.abs(CalibratorState.hue) / 180 * 0.5, 0, 1)
-        local tintCol = Color3.fromHSV(hueUnit, tintSat, 1)
-        local targetTintColor = Color3.new(1 + (tintCol.R - 1)*op, 1 + (tintCol.G - 1)*op, 1 + (tintCol.B - 1)*op)
+        local targetTint = CalibratorState.tintColor
+        local finalTint = Color3.new(
+            1 + (targetTint.R - 1) * op,
+            1 + (targetTint.G - 1) * op,
+            1 + (targetTint.B - 1) * op
+        )
         
-        if eff.TintColor ~= targetTintColor then
-            eff.TintColor = targetTintColor
+        if eff.TintColor ~= finalTint then
+            eff.TintColor = finalTint
         end
     end
 
@@ -98,8 +108,8 @@ return function(env)
         ApplyCalibrator()
     end)
 
-    local s4 = Library:CreateSlider(Page, "Hue Filter", -180, 180, 0, function(val)
-        CalibratorState.hue = val
+    Library:CreateColorPicker(Page, "Tint Color", COLOR_WHITE, function(color)
+        CalibratorState.tintColor = color
         ApplyCalibrator()
     end)
 
@@ -112,8 +122,9 @@ return function(env)
         if s1 and s1.Set then s1.Set(0) end
         if s2 and s2.Set then s2.Set(0) end
         if s3 and s3.Set then s3.Set(0) end
-        if s4 and s4.Set then s4.Set(0) end
         if s5 and s5.Set then s5.Set(100) end
+        CalibratorState.tintColor = COLOR_WHITE
+        ApplyCalibrator()
         SendNotification("Color Calibrator Reset!", 2)
     end)
 
@@ -215,7 +226,6 @@ return function(env)
                         atmosphere = Instance.new("Atmosphere")
                         atmosphere.Parent = Lighting
                     end
-                    -- Apenas reescreve propriedades se forem alteradas por outros scripts
                     if atmosphere.Color ~= COLOR_BLACK then atmosphere.Color = COLOR_BLACK end
                     if atmosphere.Glare ~= 0 then atmosphere.Glare = 0 end
                     if atmosphere.Haze ~= 2.46 then atmosphere.Haze = 2.46 end
@@ -242,24 +252,44 @@ return function(env)
 
     local originalExposure = Lighting.ExposureCompensation
     local flashlightLoop = nil
-    Library:CreateToggle(Page, "FlashLight", false, function(state)
-        if state then
-            if Lighting.ExposureCompensation ~= 2.8 then
-                pcall(function() Lighting.ExposureCompensation = 2.8 end)
+    local FlashlightState = {
+        enabled = false,
+        exposure = 2.8
+    }
+
+    local function ApplyFlashlight()
+        if FlashlightState.enabled then
+            if Lighting.ExposureCompensation ~= FlashlightState.exposure then
+                pcall(function() Lighting.ExposureCompensation = FlashlightState.exposure end)
             end
+        else
+            if Lighting.ExposureCompensation ~= originalExposure then
+                pcall(function() Lighting.ExposureCompensation = originalExposure end)
+            end
+        end
+    end
+
+    Library:CreateToggle(Page, "FlashLight", false, function(state)
+        FlashlightState.enabled = state
+        if state then
+            ApplyFlashlight()
             flashlightLoop = task.spawn(function()
-                while true do
-                    -- Verifica antes de gravar para poupar processamento
-                    if Lighting.ExposureCompensation ~= 2.8 then
-                        pcall(function() Lighting.ExposureCompensation = 2.8 end)
+                while FlashlightState.enabled do
+                    if Lighting.ExposureCompensation ~= FlashlightState.exposure then
+                        pcall(function() Lighting.ExposureCompensation = FlashlightState.exposure end)
                     end
-                    task.wait(1.5)
+                    task.wait(1)
                 end
             end)
         else
             if flashlightLoop then task.cancel(flashlightLoop); flashlightLoop = nil end
-            pcall(function() Lighting.ExposureCompensation = originalExposure end)
+            ApplyFlashlight()
         end
+    end)
+
+    Library:CreateSlider(Page, "Flashlight Power", 0, 500, 280, function(val)
+        FlashlightState.exposure = val / 100
+        ApplyFlashlight()
     end)
 
     local FullbrightConn = nil
@@ -275,7 +305,6 @@ return function(env)
         CalibratorState.fullbright = state
         if state then
             enforceFullbright()
-            -- Event-driven: Só executa se algo mudar o Lighting (0% de uso de CPU quando parado)
             FullbrightConn = Lighting.Changed:Connect(function()
                 if CalibratorState.fullbright then
                     enforceFullbright()
