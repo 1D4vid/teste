@@ -1554,15 +1554,18 @@ return function(env)
     local function PerformSearch(forcedText)
         local text = forcedText or UserInputBox.Text
         if text and text ~= "" then
-            UserInputBox.Text = text
-            local s, id = pcall(function() return Players:GetUserIdFromNameAsync(text) end)
+            -- Limpar caracteres extras de estética (@) caso digitados na busca manual
+            local cleanText = text:gsub("^@", "")
+            UserInputBox.Text = cleanText
+            
+            local s, id = pcall(function() return Players:GetUserIdFromNameAsync(cleanText) end)
             if s and id then
                 selectedModalId = id
                 currentModalAction = "Skin"
                 PTitle.Text = "SKIN FOUND"
                 PApplyBtn.Text = "Apply Skin"
                 
-                -- Carregamento Estilizado de Nomes de Usuário (Assíncrono)
+                -- Busca o Display Name de forma segura e estrita apenas ao abrir o modal
                 task.spawn(function()
                     local success, result = pcall(function()
                         return UserService:GetUserInfosByUserIdsAsync({id})
@@ -1571,17 +1574,14 @@ return function(env)
                         PDisplayName.Text = result[1].DisplayName
                         PUsername.Text = "@" .. result[1].Username
                     else
-                        PDisplayName.Text = text
-                        PUsername.Text = "@" .. text
+                        PDisplayName.Text = cleanText
+                        PUsername.Text = "@" .. cleanText
                     end
                 end)
 
-                local thumb, isReady = Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
-                if isReady then
-                    PImage.Image = thumb
-                    ModalOverlay.Visible = true
-                    PreviewBox.Visible = true
-                end
+                PImage.Image = "rbxthumb://type=AvatarHeadShot&id=" .. id .. "&w=150&h=150"
+                ModalOverlay.Visible = true
+                PreviewBox.Visible = true
             else
                 SendNotification("User not found!", 2)
             end
@@ -1591,7 +1591,7 @@ return function(env)
     UserInputBox.FocusLost:Connect(function(enter) if enter then PerformSearch() end end)
     SearchBtnIcon.MouseButton1Click:Connect(function() PerformSearch() end)
 
-    for _, name in pairs(DummyNames) do
+    for i, name in pairs(DummyNames) do
         local Btn = Instance.new("TextButton")
         Btn.BackgroundColor3 = Color3.new(0, 0, 0)
         Btn.BackgroundTransparency = 0.45
@@ -1612,13 +1612,13 @@ return function(env)
         AvatarIcon.Parent = Btn
         Instance.new("UICorner", AvatarIcon).CornerRadius = UDim.new(0, 6)
 
-        -- Exibição de Nome de Exibição (Destaque Principal)
+        -- Exibição do Username Principal (Design destacado e em negrito sem quebrar a lógica)
         local DisplayNameLabel = Instance.new("TextLabel")
         DisplayNameLabel.Size = UDim2.new(1, -40, 0, 18)
         DisplayNameLabel.Position = UDim2.new(0, 36, 0, 4)
         DisplayNameLabel.BackgroundTransparency = 1
         DisplayNameLabel.Text = name
-        DisplayNameLabel.Font = Enum.Font.GothamBold -- Negrito / Chamativo
+        DisplayNameLabel.Font = Enum.Font.GothamBold -- Negrito chamativo
         DisplayNameLabel.TextScaled = true
         local dnsConst = Instance.new("UITextSizeConstraint", DisplayNameLabel)
         dnsConst.MinTextSize = 7
@@ -1627,13 +1627,13 @@ return function(env)
         DisplayNameLabel.TextXAlignment = Enum.TextXAlignment.Left
         DisplayNameLabel.Parent = Btn
 
-        -- Exibição do Username Real (Sutil e Normal)
+        -- Subtexto com o @ correspondente de forma discreta e polida
         local UsernameLabel = Instance.new("TextLabel")
         UsernameLabel.Size = UDim2.new(1, -40, 0, 14)
         UsernameLabel.Position = UDim2.new(0, 36, 0, 22)
         UsernameLabel.BackgroundTransparency = 1
         UsernameLabel.Text = "@" .. name
-        UsernameLabel.Font = Enum.Font.Gotham -- Sutil / Normal
+        UsernameLabel.Font = Enum.Font.Gotham -- Normal sutil
         UsernameLabel.TextScaled = true
         local unsConst = Instance.new("UITextSizeConstraint", UsernameLabel)
         unsConst.MinTextSize = 7
@@ -1645,20 +1645,12 @@ return function(env)
         Btn.MouseEnter:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play() end)
         Btn.MouseLeave:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
 
+        -- Escalonamento (Staggering) de miniaturas para evitar saturação de tráfego de rede no Roblox
         task.spawn(function()
+            task.wait(i * 0.03)
             local s, id = pcall(function() return Players:GetUserIdFromNameAsync(name) end)
             if s and id then
-                local thumb = Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
-                AvatarIcon.Image = thumb
-                
-                -- Sincronizando Display Names e Usernames reais nos cartões
-                local success, result = pcall(function()
-                    return UserService:GetUserInfosByUserIdsAsync({id})
-                end)
-                if success and result and result[1] then
-                    DisplayNameLabel.Text = result[1].DisplayName
-                    UsernameLabel.Text = "@" .. result[1].Username
-                end
+                AvatarIcon.Image = "rbxthumb://type=AvatarHeadShot&id=" .. id .. "&w=150&h=150"
             end
         end)
         
