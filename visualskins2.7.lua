@@ -271,8 +271,34 @@ return function(env)
         end
     end
 
+    -- Processador e Equipador Dinâmico para Desvio de CreateHumanoidModel (Universal R6)
+    local function ApplyLoadedAsset(char, obj)
+        if not obj then return end
+        if obj:IsA("Accessory") or obj:IsA("Hat") then
+            SmartWeld(char, obj)
+        elseif obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") or obj:IsA("BodyColors") or obj:IsA("CharacterMesh") then
+            local existing = char:FindFirstChildOfClass(obj.ClassName)
+            if existing then existing:Destroy() end
+            obj.Parent = char
+        elseif obj:IsA("Decal") then
+            local head = char:FindFirstChild("Head")
+            if head then
+                local face = head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")
+                if not face then
+                    face = Instance.new("Decal", head)
+                    face.Name = "face"
+                end
+                face.Texture = obj.Texture
+            end
+        elseif obj:IsA("Folder") or obj:IsA("Model") then
+            for _, child in ipairs(obj:GetChildren()) do
+                ApplyLoadedAsset(char, child)
+            end
+        end
+    end
+
     -- =======================================================
-    -- SISTEMA DE APLICAÇÃO PROTEGIDO CONTRA FALHAS (RESPAWN)
+    -- SISTEMA DE APLICAÇÃO VISUAL COMPATÍVEL E SEM TRAVAMENTOS
     -- =======================================================
     local isApplyingVisuals = false
 
@@ -284,7 +310,7 @@ return function(env)
             local char = LocalPlayer.Character
             if not char then return end
 
-            -- Aguarda o personagem ser devidamente introduzido ao Workspace
+            -- Sincronização e Espera de Parentesco no Workspace
             local elapsed = 0
             while char and char.Parent ~= Workspace and elapsed < 3 do
                 task.wait(0.1)
@@ -292,14 +318,13 @@ return function(env)
             end
             if not char or char.Parent ~= Workspace then return end
 
-            -- Assegura a integridade das partes R6
             char:WaitForChild("Head", 5)
             char:WaitForChild("Torso", 5)
 
             if not LocalPlayer:HasAppearanceLoaded() then
                 pcall(function() LocalPlayer.CharacterAppearanceLoaded:Wait() end)
             end
-            task.wait(0.15)
+            task.wait(0.1)
 
             if getgenv().FixLoop then 
                 getgenv().FixLoop:Disconnect() 
@@ -308,83 +333,53 @@ return function(env)
 
             BackupCharacterAppearance(char)
 
-            -- 1. ETAPA: Aparência Básica (Skin customizada OU Preset Bundle OU Aparência Original)
+            -- 1. ETAPA: Carregamento Base da Aparência
             if ActiveModifiers.SkinUserId then
-                local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(ActiveModifiers.SkinUserId) end)
-                if s and desc then
-                    local realColors = { ["Head"] = desc.HeadColor, ["Torso"] = desc.TorsoColor, ["Left Arm"] = desc.LeftArmColor, ["Right Arm"] = desc.RightArmColor, ["Left Leg"] = desc.LeftLegColor, ["Right Leg"] = desc.RightLegColor }
-                    local dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
-                    dummy.Name = "AssetSource"
-                    dummy.Parent = Workspace
-                    dummy:PivotTo(CFrame.new(0, -500, 0))
-                    task.wait(0.5)
-
-                    if char and char.Parent then
-                        local targetHeadTexture = ""
-                        local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
-                        if dummyMesh then targetHeadTexture = dummyMesh.TextureId end
-
-                        for _, v in pairs(char:GetChildren()) do 
-                            if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
-                                v:Destroy() 
-                            end 
-                        end
-                        if char:FindFirstChild("Head") and char.Head:FindFirstChild("face") then char.Head.face:Destroy() end
-
-                        local myMesh = char.Head:FindFirstChildOfClass("SpecialMesh")
-                        if not myMesh then myMesh = Instance.new("SpecialMesh", char.Head) end
-
-                        if dummyMesh then 
-                            myMesh.MeshType = dummyMesh.MeshType
-                            myMesh.MeshId = dummyMesh.MeshId
-                            myMesh.Scale = dummyMesh.Scale
-                            myMesh.TextureId = targetHeadTexture
-                        else
-                            myMesh.MeshType = Enum.MeshType.Head
-                            myMesh.MeshId = ""
-                            myMesh.Scale = Vector3.new(1.25, 1.25, 1.25)
-                            myMesh.TextureId = ""
-                        end
-                        myMesh.VertexColor = Vector3.new(1,1,1)
-
-                        for _, item in pairs(dummy:GetChildren()) do if item:IsA("CharacterMesh") then item:Clone().Parent = char end end
-                        for _, item in pairs(dummy:GetChildren()) do 
-                            if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
-                                item:Clone().Parent = char 
-                            end 
-                        end
-
-                        local faceDecal = Instance.new("Decal")
-                        faceDecal.Name = "face"
-                        local dummyFace = dummy.Head:FindFirstChild("face")
-                        if dummyFace then
-                            faceDecal.Texture = dummyFace.Texture
-                        elseif desc.Face and desc.Face > 0 then
-                            faceDecal.Texture = "rbxassetid://" .. desc.Face
-                        else
-                            faceDecal.Texture = "rbxasset://textures/face.png"
-                        end
-                        faceDecal.Parent = char.Head
-
-                        local newBC = Instance.new("BodyColors")
-                        newBC.HeadColor3 = desc.HeadColor
-                        newBC.TorsoColor3 = desc.TorsoColor
-                        newBC.LeftArmColor3 = desc.LeftArmColor
-                        newBC.RightArmColor3 = desc.RightArmColor
-                        newBC.LeftLegColor3 = desc.LeftLegColor
-                        newBC.RightLegColor3 = desc.RightLegColor
-                        newBC.Parent = char
-
-                        StartFixLoop(char, realColors, targetHeadTexture)
-
-                        for _, item in pairs(dummy:GetChildren()) do 
-                            if item:IsA("Accessory") then 
-                                local clone = item:Clone()
-                                SmartWeld(char, clone) 
-                            end 
+                -- ALGORITMO DE CARREGAMENTO UNIVERSAL R6 POR APIS DA ROBLOX (Ignora restrições do jogo)
+                local s, info = pcall(function() return Players:GetCharacterAppearanceInfoAsync(ActiveModifiers.SkinUserId) end)
+                if s and info then
+                    -- Limpeza completa de trajes antigos
+                    for _, v in pairs(char:GetChildren()) do 
+                        if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") then 
+                            v:Destroy() 
+                        end 
+                    end
+                    local head = char:FindFirstChild("Head")
+                    if head then
+                        local face = head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")
+                        if face then face:Destroy() end
+                        local m = head:FindFirstChildOfClass("SpecialMesh")
+                        if m then
+                            m.MeshType = Enum.MeshType.Head
+                            m.MeshId = ""
+                            m.TextureId = ""
+                            m.Scale = Vector3.new(1.25, 1.25, 1.25)
                         end
                     end
-                    dummy:Destroy()
+
+                    -- Aplicação de BodyColors
+                    if info.bodyColors then
+                        local bc = char:FindFirstChildOfClass("BodyColors") or Instance.new("BodyColors", char)
+                        bc.HeadColor3 = BrickColor.new(info.bodyColors.headColorId).Color
+                        bc.TorsoColor3 = BrickColor.new(info.bodyColors.torsoColorId).Color
+                        bc.LeftArmColor3 = BrickColor.new(info.bodyColors.leftArmColorId).Color
+                        bc.RightArmColor3 = BrickColor.new(info.bodyColors.rightArmColorId).Color
+                        bc.LeftLegColor3 = BrickColor.new(info.bodyColors.leftLegColorId).Color
+                        bc.RightLegColor3 = BrickColor.new(info.bodyColors.rightLegColorId).Color
+                    end
+
+                    -- Processamento de Assets através do downloader e parentesco direto
+                    if info.assets then
+                        for _, assetData in ipairs(info.assets) do
+                            local assetId = assetData.id
+                            task.spawn(function()
+                                local obj = loadAsset(assetId)
+                                if obj then
+                                    ApplyLoadedAsset(char, obj)
+                                end
+                            end)
+                        end
+                    end
                 end
             elseif ActiveModifiers.BundleId then
                 local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(ActiveModifiers.BundleId) end)
@@ -456,7 +451,7 @@ return function(env)
                                     local clone = item:Clone()
                                     SmartWeld(char, clone) 
                                 end 
-                        end
+                            end
                         end
                         dummy:Destroy()
                     end
@@ -465,7 +460,7 @@ return function(env)
                 RestoreCharacterAppearance(char)
             end
 
-            -- 2. ETAPA: Reaplicação de Modificadores Corporais (Garante que nunca se percam)
+            -- 2. ETAPA: Reaplicação de Modificadores Corporais Sincronizados
             if ActiveModifiers.Headless then
                 local head = char:FindFirstChild("Head")
                 if head then
@@ -555,87 +550,103 @@ return function(env)
         end)
     end
 
-    -- Criação do Modal de Confirmação
+    -- =======================================================
+    -- DESIGN REDESENHADO DO MODAL DE CONFIRMAÇÃO (PREVIEWBOX)
+    -- =======================================================
     local PreviewBox = Instance.new("Frame")
-    PreviewBox.Size = UDim2.new(0, 260, 0, 130)
+    PreviewBox.Size = UDim2.new(0, 300, 0, 170)
     PreviewBox.AnchorPoint = Vector2.new(0.5, 0.5)
     PreviewBox.Position = UDim2.new(0.5, 0, 0.5, 0)
-    PreviewBox.BackgroundColor3 = Color3.new(0,0,0)
-    PreviewBox.BackgroundTransparency = 0.15
+    PreviewBox.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
     PreviewBox.BorderSizePixel = 0
     PreviewBox.ZIndex = 11
     PreviewBox.Visible = false
     PreviewBox.Parent = ModalOverlay
+    Instance.new("UICorner", PreviewBox).CornerRadius = UDim.new(0, 8)
 
-    local PBStroke = Instance.new("UIStroke")
-    PBStroke.Color = Color3.fromRGB(40, 40, 40)
-    PBStroke.Parent = PreviewBox
+    local PBStroke = Instance.new("UIStroke", PreviewBox)
+    PBStroke.Color = Theme.Accent
+    PBStroke.Thickness = 1.2
+    ApplyGradient(PBStroke, Theme.Accent, Color3.fromRGB(50, 50, 50), 45)
     
-    local PBTopLine = Instance.new("Frame")
-    PBTopLine.Size = UDim2.new(1, 0, 0, 2)
-    PBTopLine.BackgroundColor3 = Theme.Accent
-    PBTopLine.BorderSizePixel = 0
-    PBTopLine.ZIndex = 12
-    PBTopLine.Parent = PreviewBox
-    ApplyGradient(PBTopLine, Theme.Accent, Theme.AccentDark, 0)
+    local PBTopGlow = Instance.new("Frame", PreviewBox)
+    PBTopGlow.Size = UDim2.new(1, 0, 0, 3)
+    PBTopGlow.BorderSizePixel = 0
+    PBTopGlow.ZIndex = 12
+    ApplyGradient(PBTopGlow, Theme.Accent, Theme.AccentDark, 0)
+    Instance.new("UICorner", PBTopGlow).CornerRadius = UDim.new(0, 8)
 
-    local PTitle = Instance.new("TextLabel")
-    PTitle.Parent = PreviewBox
-    PTitle.Text = "FOUND"
+    local PTitle = Instance.new("TextLabel", PreviewBox)
+    PTitle.Text = "SKIN FOUND"
     PTitle.Font = Theme.Font
-    PTitle.TextSize = 14
+    PTitle.TextSize = 13
     PTitle.TextColor3 = Theme.Accent
     PTitle.Size = UDim2.new(1, 0, 0, 35)
+    PTitle.Position = UDim2.new(0, 0, 0, 8)
     PTitle.BackgroundTransparency = 1
     PTitle.ZIndex = 12
 
-    local PImage = Instance.new("ImageLabel")
-    PImage.Size = UDim2.new(0, 46, 0, 46)
-    PImage.Position = UDim2.new(0, 20, 0, 35)
-    PImage.BackgroundColor3 = Theme.SwitchOff
+    local PImage = Instance.new("ImageLabel", PreviewBox)
+    PImage.Size = UDim2.new(0, 56, 0, 56)
+    PImage.Position = UDim2.new(0, 20, 0, 48)
+    PImage.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    PImage.BorderSizePixel = 0
     PImage.ZIndex = 12
-    PImage.Parent = PreviewBox
     Instance.new("UICorner", PImage).CornerRadius = UDim.new(0, 6)
+    local PImgStroke = Instance.new("UIStroke", PImage)
+    PImgStroke.Color = Color3.fromRGB(45, 45, 45)
 
-    local PName = Instance.new("TextLabel")
+    local PName = Instance.new("TextLabel", PreviewBox)
     PName.Text = "Name"
-    PName.Size = UDim2.new(1, -80, 0, 46)
-    PName.Position = UDim2.new(0, 75, 0, 35)
+    PName.Size = UDim2.new(1, -110, 0, 56)
+    PName.Position = UDim2.new(0, 90, 0, 48)
     PName.BackgroundTransparency = 1
-    PName.TextColor3 = Theme.Text
-    PName.Font = Enum.Font.Gotham
-    PName.TextSize = 13
+    PName.TextColor3 = Color3.fromRGB(230, 230, 230)
+    PName.Font = Enum.Font.GothamBold
+    PName.TextSize = 14
     PName.TextXAlignment = Enum.TextXAlignment.Left
+    PName.TextWrapped = true
     PName.ZIndex = 12
-    PName.Parent = PreviewBox
 
-    local PApplyBtn = Instance.new("TextButton")
-    PApplyBtn.Text = "Apply"
-    PApplyBtn.Size = UDim2.new(0, 100, 0, 28)
-    PApplyBtn.Position = UDim2.new(0, 20, 0, 90)
+    local PApplyBtn = Instance.new("TextButton", PreviewBox)
+    PApplyBtn.Text = "Apply Skin"
+    PApplyBtn.Size = UDim2.new(0.42, 0, 0, 32)
+    PApplyBtn.Position = UDim2.new(0.06, 0, 0, 120)
     PApplyBtn.BackgroundColor3 = Theme.Accent
-    PApplyBtn.TextColor3 = Color3.new(0,0,0)
+    PApplyBtn.TextColor3 = Color3.fromRGB(10, 10, 10)
     PApplyBtn.Font = Theme.Font
     PApplyBtn.TextSize = 12
     PApplyBtn.ZIndex = 12
-    PApplyBtn.Parent = PreviewBox
-    Instance.new("UICorner", PApplyBtn).CornerRadius = UDim.new(0, 4)
+    Instance.new("UICorner", PApplyBtn).CornerRadius = UDim.new(0, 6)
     ApplyGradient(PApplyBtn, Theme.Accent, Theme.AccentDark, 90)
 
-    local PCancelBtn = Instance.new("TextButton")
+    local PCancelBtn = Instance.new("TextButton", PreviewBox)
     PCancelBtn.Text = "Cancel"
-    PCancelBtn.Size = UDim2.new(0, 100, 0, 28)
-    PCancelBtn.Position = UDim2.new(1, -120, 0, 90)
-    PCancelBtn.BackgroundColor3 = Color3.new(0,0,0)
-    PCancelBtn.BackgroundTransparency = 0.45
-    PCancelBtn.TextColor3 = Theme.TextDark
+    PCancelBtn.Size = UDim2.new(0.42, 0, 0, 32)
+    PCancelBtn.Position = UDim2.new(0.52, 0, 0, 120)
+    PCancelBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    PCancelBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
     PCancelBtn.Font = Theme.Font
     PCancelBtn.TextSize = 12
     PCancelBtn.ZIndex = 12
-    PCancelBtn.Parent = PreviewBox
-    Instance.new("UICorner", PCancelBtn).CornerRadius = UDim.new(0, 4)
+    Instance.new("UICorner", PCancelBtn).CornerRadius = UDim.new(0, 6)
     local pcbStr = Instance.new("UIStroke", PCancelBtn)
-    pcbStr.Color = Color3.fromRGB(40,40,40)
+    pcbStr.Color = Color3.fromRGB(45, 45, 45)
+
+    -- Animações e Hovers dos Botões do Modal
+    PApplyBtn.MouseEnter:Connect(function()
+        TweenService:Create(PApplyBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+    end)
+    PApplyBtn.MouseLeave:Connect(function()
+        TweenService:Create(PApplyBtn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Accent}):Play()
+    end)
+
+    PCancelBtn.MouseEnter:Connect(function()
+        TweenService:Create(PCancelBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(38, 38, 38)}):Play()
+    end)
+    PCancelBtn.MouseLeave:Connect(function()
+        TweenService:Create(PCancelBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(25, 25, 25)}):Play()
+    end)
 
     PCancelBtn.MouseButton1Click:Connect(function() 
         ModalOverlay.Visible = false
@@ -1363,7 +1374,7 @@ return function(env)
     PresetsContainer.Parent = Page
 
     local Grid = Instance.new("UIGridLayout")
-    Grid.CellSize = UDim2.new(0.25, -6, 0, 42) -- Dimensionamento matemático exato para 4 colunas (4x4)
+    Grid.CellSize = UDim2.new(0.25, -6, 0, 42) -- Sincronização matemática exata para 4 colunas (4x4)
     Grid.CellPadding = UDim2.new(0, 8, 0, 8)
     Grid.SortOrder = Enum.SortOrder.LayoutOrder
     Grid.Parent = PresetsContainer
