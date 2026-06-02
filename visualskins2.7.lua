@@ -1154,8 +1154,8 @@ return function(env)
     local ESLabel = Instance.new("TextLabel")
     ESLabel.Size = UDim2.new(1, 0, 1, 0)
     ESLabel.BackgroundTransparency = 1
-    ESLabel.Text = "acessories changer"
-    ESLabel:SetAttribute("OriginalText", "acessories changer")
+    ESLabel.Text = "Accessories Changer"
+    ESLabel:SetAttribute("OriginalText", "Accessories Changer")
     ESLabel.Font = Theme.Font
     ESLabel.TextSize = 12
     ESLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -1174,8 +1174,8 @@ return function(env)
     caiStr.Color = Color3.fromRGB(40,40,40)
 
     local CustomAssetInputBox = Instance.new("TextBox")
-    CustomAssetInputBox.Size = UDim2.new(1, -36, 1, 0)
-    CustomAssetInputBox.Position = UDim2.new(0, 8, 0, 0)
+    CustomAssetInputBox.Size = UDim2.new(1, -40, 1, 0)
+    CustomAssetInputBox.Position = UDim2.new(0, 10, 0, 0)
     CustomAssetInputBox.BackgroundTransparency = 1
     CustomAssetInputBox.Text = ""
     CustomAssetInputBox.PlaceholderText = "Asset/Accessory ID..."
@@ -1187,8 +1187,8 @@ return function(env)
     CustomAssetInputBox.Parent = CustomAssetInputContainer
 
     local CustomAssetSearchBtnIcon = Instance.new("ImageButton")
-    CustomAssetSearchBtnIcon.Size = UDim2.new(0, 18, 0, 18)
-    CustomAssetSearchBtnIcon.Position = UDim2.new(1, -24, 0.5, -9)
+    CustomAssetSearchBtnIcon.Size = UDim2.new(0, 20, 0, 20)
+    CustomAssetSearchBtnIcon.Position = UDim2.new(1, -28, 0.5, -10)
     CustomAssetSearchBtnIcon.BackgroundTransparency = 1
     CustomAssetSearchBtnIcon.Image = "rbxassetid://104986431790017"
     CustomAssetSearchBtnIcon.ImageColor3 = Theme.Accent
