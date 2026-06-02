@@ -26,6 +26,12 @@ return function(env)
     local scepterEpoch = 0
     local arrowEpoch = 0
 
+    -- Controle de Estado Exclusivo do Bundle Changer
+    local currentActiveBundleId = nil
+    local bundleEpoch = 0
+    local bundleToggleControls = {}
+    local bundleConn = nil
+
     -- Funções Core de Auxílio
     local function loadAsset(id)
         local success, result = pcall(function()
@@ -247,15 +253,27 @@ return function(env)
         SendNotification("Skin Applied Successfully!", 3)
     end
 
-    local function AplicarBundle(bundleId)
+    -- Recarrega o personagem original sem perder o CFrame (Posição) do mapa
+    local function ReloadDefaultCharacter()
         local char = LocalPlayer.Character
-        if not char then return false end
+        local oldCF = char and char:FindFirstChild("HumanoidRootPart") and char.HumanoidRootPart.CFrame
+        LocalPlayer:LoadCharacter()
+        if oldCF then
+            task.spawn(function()
+                local newChar = LocalPlayer.CharacterAdded:Wait()
+                local root = newChar:WaitForChild("HumanoidRootPart", 5)
+                if root then root.CFrame = oldCF end
+            end)
+        end
+    end
+
+    local function ApplyBundleSafe(bundleId, epoch)
+        local char = LocalPlayer.Character
+        if not char then return end
         
         local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(bundleId) end)
-        if not success or not bundleDetails or not bundleDetails.Items then
-            SendNotification("Invalid Bundle ID", 3)
-            return false
-        end
+        if epoch ~= bundleEpoch then return end
+        if not success or not bundleDetails or not bundleDetails.Items then return end
 
         local targetDesc = nil
         for _, item in ipairs(bundleDetails.Items) do
@@ -264,21 +282,32 @@ return function(env)
                 if s and desc then targetDesc = desc break end
             end
         end
+        if epoch ~= bundleEpoch then return end
 
-        if not targetDesc then
-            SendNotification("Could not load bundle appearance", 3)
-            return false
-        end
+        if not targetDesc then return end
         
-        local realColors = { ["Head"] = targetDesc.HeadColor, ["Torso"] = targetDesc.TorsoColor,["Left Arm"] = targetDesc.LeftArmColor,["Right Arm"] = targetDesc.RightArmColor,["Left Leg"] = targetDesc.LeftLegColor,["Right Leg"] = targetDesc.RightLegColor }
+        local realColors = { 
+            ["Head"] = targetDesc.HeadColor, 
+            ["Torso"] = targetDesc.TorsoColor,
+            ["Left Arm"] = targetDesc.LeftArmColor,
+            ["Right Arm"] = targetDesc.RightArmColor,
+            ["Left Leg"] = targetDesc.LeftLegColor,
+            ["Right Leg"] = targetDesc.RightLegColor 
+        }
+        
         local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
+        if epoch ~= bundleEpoch then dummy:Destroy() return end
+        
         dummy.Name = "AssetSource"
         dummy.Parent = workspace
         dummy:SetPrimaryPartCFrame(CFrame.new(0, -500, 0))
         task.wait(1.0)
+        if epoch ~= bundleEpoch then dummy:Destroy() return end
         
         local targetHeadTexture = ""
-        if dummy.Head:FindFirstChildOfClass("SpecialMesh") then targetHeadTexture = dummy.Head:FindFirstChildOfClass("SpecialMesh").TextureId end
+        if dummy.Head:FindFirstChildOfClass("SpecialMesh") then 
+            targetHeadTexture = dummy.Head:FindFirstChildOfClass("SpecialMesh").TextureId 
+        end
         
         for _, v in pairs(char:GetChildren()) do 
             if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
@@ -298,7 +327,9 @@ return function(env)
             myMesh.VertexColor = Vector3.new(1,1,1) 
         end
         
-        for _, item in pairs(dummy:GetChildren()) do if item:IsA("CharacterMesh") then item:Clone().Parent = char end end
+        for _, item in pairs(dummy:GetChildren()) do 
+            if item:IsA("CharacterMesh") then item:Clone().Parent = char end 
+        end
         for _, item in pairs(dummy:GetChildren()) do 
             if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
                 item:Clone().Parent = char 
@@ -327,7 +358,6 @@ return function(env)
         dummy:Destroy()
         
         SendNotification("Bundle Applied Successfully!", 3)
-        return true
     end
 
     -- SISTEMA DE APLICAÇÃO PREVENIDO DE RACE CONDITIONS
@@ -618,7 +648,24 @@ return function(env)
             if currentModalAction == "Skin" then
                 TransformarSkin(selectedModalId)
             elseif currentModalAction == "Bundle" then
-                AplicarBundle(selectedModalId)
+                -- Desliga qualquer toggle de bundle visualmente ativo antes de aplicar a busca customizada
+                if currentActiveBundleId then
+                    local prevControl = bundleToggleControls[currentActiveBundleId]
+                    if prevControl then prevControl.SetVisual(false) end
+                end
+                currentActiveBundleId = nil -- Como é customizado, limpa a referência ativa dos presets
+                
+                bundleEpoch = bundleEpoch + 1
+                local currentEpoch = bundleEpoch
+                
+                task.spawn(function()
+                    ApplyBundleSafe(selectedModalId, currentEpoch)
+                    if currentEpoch ~= bundleEpoch then return end
+                    if bundleConn then bundleConn:Disconnect() end
+                    bundleConn = LocalPlayer.CharacterAdded:Connect(function(char)
+                        ApplyBundleSafe(selectedModalId, currentEpoch)
+                    end)
+                end)
             elseif currentModalAction == "Accessory" then
                 EquipAccessoryByID(selectedModalId)
             end
@@ -712,6 +759,100 @@ return function(env)
                 state = val
                 Upd(true)
             end
+        }
+    end
+
+    -- Função Auxiliar para Criar os Presets de Bundle como Toggles Exclusivos (Estilo Radio Button)
+    local function SetupBundleToggle(btn, bndl)
+        local state = false
+        local bId = bndl.Id
+
+        local Indicator = Instance.new("Frame")
+        Indicator.Name = "Indicator"
+        Indicator.Size = UDim2.new(0, 6, 0, 6)
+        Indicator.Position = UDim2.new(1, -12, 0, 6)
+        Indicator.BackgroundColor3 = Theme.Accent
+        Indicator.Visible = false
+        Indicator.Parent = btn
+        Instance.new("UICorner", Indicator).CornerRadius = UDim.new(1, 0)
+        ApplyGradient(Indicator, Theme.Accent, Theme.AccentDark, 90)
+
+        local function UpdVisuals(isActive)
+            state = isActive
+            local BStroke = btn:FindFirstChildOfClass("UIStroke")
+            local NameLabel = btn:FindFirstChildWhichIsA("TextLabel")
+            if BStroke and NameLabel then
+                if isActive then
+                    TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
+                    TweenService:Create(NameLabel, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
+                    Indicator.Visible = true
+                else
+                    TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
+                    TweenService:Create(NameLabel, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
+                    Indicator.Visible = false
+                end
+            end
+        end
+
+        local function Action(isActive)
+            bundleEpoch = bundleEpoch + 1
+            local currentEpoch = bundleEpoch
+
+            if isActive then
+                -- Desativa visualmente o bundle anterior se houver
+                if currentActiveBundleId and currentActiveBundleId ~= bId then
+                    local prevControl = bundleToggleControls[currentActiveBundleId]
+                    if prevControl then
+                        prevControl.SetVisual(false)
+                    end
+                end
+                currentActiveBundleId = bId
+
+                task.spawn(function()
+                    ApplyBundleSafe(bId, currentEpoch)
+                    if currentEpoch ~= bundleEpoch then return end
+
+                    if bundleConn then bundleConn:Disconnect() end
+                    bundleConn = LocalPlayer.CharacterAdded:Connect(function(char)
+                        ApplyBundleSafe(bId, currentEpoch)
+                    end)
+                end)
+            else
+                -- Desativação manual do bundle ativo atual
+                if currentActiveBundleId == bId then
+                    currentActiveBundleId = nil
+                    if bundleConn then bundleConn:Disconnect() bundleConn = nil end
+                    if getgenv().FixLoop then getgenv().FixLoop:Disconnect() getgenv().FixLoop = nil end
+                    ReloadDefaultCharacter()
+                end
+            end
+        end
+
+        btn.MouseButton1Click:Connect(function()
+            state = not state
+            UpdVisuals(state)
+            Action(state)
+        end)
+
+        btn.MouseEnter:Connect(function()
+            if not state then
+                local BStroke = btn:FindFirstChildOfClass("UIStroke")
+                if BStroke then TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(80, 80, 80)}):Play() end
+            end
+        end)
+        btn.MouseLeave:Connect(function()
+            if not state then
+                local BStroke = btn:FindFirstChildOfClass("UIStroke")
+                if BStroke then TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play() end
+            end
+        end)
+
+        bundleToggleControls[bId] = {
+            SetVisual = function(val)
+                state = val
+                UpdVisuals(val)
+            end,
+            Action = Action
         }
     end
 
@@ -844,38 +985,6 @@ return function(env)
     GridBundle.SortOrder = Enum.SortOrder.LayoutOrder
     GridBundle.Parent = BundlePresetsContainer
 
-    local function PerformBundleSearch(forcedId, forcedName)
-        local text = forcedId or BundleInputBox.Text
-        local bId = tonumber(text)
-        if bId then
-            BundleInputBox.Text = tostring(bId)
-            local bundleName = forcedName
-            if not bundleName then
-                local s, details = pcall(function() return AssetService:GetBundleDetailsAsync(bId) end)
-                if s and details then bundleName = details.Name end
-            end
-            
-            if bundleName then
-                selectedModalId = bId
-                currentModalAction = "Bundle"
-                local thumb = "rbxthumb://type=BundleThumbnail&id=" .. bId .. "&w=150&h=150"
-                PTitle.Text = "BUNDLE FOUND"
-                PName.Text = bundleName
-                PImage.Image = thumb
-                PApplyBtn.Text = "Apply Bundle"
-                ModalOverlay.Visible = true
-                PreviewBox.Visible = true
-            else
-                SendNotification("Bundle not found!", 2)
-            end
-        else
-            SendNotification("Invalid ID!", 2)
-        end
-    end
-
-    BundleInputBox.FocusLost:Connect(function(enter) if enter then PerformBundleSearch() end end)
-    BundleSearchBtnIcon.MouseButton1Click:Connect(function() PerformBundleSearch() end)
-
     local BundlePresets = {
         {Name = "Headless", Id = 201},
         {Name = "Korblox", Id = 192},
@@ -917,15 +1026,16 @@ return function(env)
         local nsConst = Instance.new("UITextSizeConstraint", NameLabel)
         nsConst.MinTextSize = 7
         nsConst.MaxTextSize = 11
-        NameLabel.TextColor3 = Theme.Text
+        NameLabel.TextColor3 = Theme.TextDark
         NameLabel.TextXAlignment = Enum.TextXAlignment.Left
         NameLabel.Parent = Btn
 
-        Btn.MouseEnter:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play() end)
-        Btn.MouseLeave:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
-
-        Btn.MouseButton1Click:Connect(function() PerformBundleSearch(bndl.Id, bndl.Name) end)
+        -- Associa os presets ao novo controller de Toggles de seleção exclusiva
+        SetupBundleToggle(Btn, bndl)
     end
+
+    BundleInputBox.FocusLost:Connect(function(enter) if enter then PerformBundleSearch() end end)
+    BundleSearchBtnIcon.MouseButton1Click:Connect(function() PerformBundleSearch() end)
 
 
     -- [COLUNA DIREITA] - PARTS AND ACCESSORIES PACKAGES (CONECTADA VIA EPOCH CONTROL)
@@ -1269,7 +1379,6 @@ return function(env)
         end
     end)
 
-    -- Novo Toggle: Mysterious Arrow (Holdable R6 ID 100766397788633)
     CreateGridToggle(TogglesGridContainer, "Mysterious Arrow", "rbxthumb://type=Asset&id=100766397788633&w=150&h=150", false, function(state)
         arrowEpoch = arrowEpoch + 1
         local currentEpoch = arrowEpoch
