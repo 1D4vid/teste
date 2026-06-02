@@ -26,8 +26,8 @@ return function(env)
         ZombieLeg = false,
         RoyalScepter = false,
         MysteriousArrow = false,
-        SkinUserId = nil, -- Armazena a Skin personalizada ativa (Username/UserId)
-        BundleId = nil    -- Armazena o Preset de Bundle ativo
+        SkinUserId = nil, 
+        BundleId = nil    
     }
 
     local currentActiveBundleId = nil
@@ -272,132 +272,57 @@ return function(env)
     end
 
     -- =======================================================
-    -- SISTEMA DE APLICAÇÃO ATÔMICA E PROTEÇÃO PÓS-RESPAWN
+    -- SISTEMA DE APLICAÇÃO PROTEGIDO CONTRA FALHAS (RESPAWN)
     -- =======================================================
     local isApplyingVisuals = false
 
     local function ApplyBaseAppearanceAndModifiers()
-        local char = LocalPlayer.Character
-        if not char or not char:IsDescendantOf(Workspace) then return end
         if isApplyingVisuals then return end
         isApplyingVisuals = true
 
-        -- Garante o carregamento padrão inicial para evitar interrupções de ativos nativos
-        if not LocalPlayer:HasAppearanceLoaded() then
-            pcall(function() LocalPlayer.CharacterAppearanceLoaded:Wait() end)
-        end
-        task.wait(0.15)
+        local ok, err = pcall(function()
+            local char = LocalPlayer.Character
+            if not char then return end
 
-        -- Desconecta o fix loop durante o carregamento de ativos
-        if getgenv().FixLoop then 
-            getgenv().FixLoop:Disconnect() 
-            getgenv().FixLoop = nil 
-        end
-
-        BackupCharacterAppearance(char)
-
-        -- 1. ETAPA: Aparência Básica (Skin customizada OU Preset Bundle OU Aparência Original)
-        if ActiveModifiers.SkinUserId then
-            local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(ActiveModifiers.SkinUserId) end)
-            if s and desc then
-                local realColors = { ["Head"] = desc.HeadColor, ["Torso"] = desc.TorsoColor, ["Left Arm"] = desc.LeftArmColor, ["Right Arm"] = desc.RightArmColor, ["Left Leg"] = desc.LeftLegColor, ["Right Leg"] = desc.RightLegColor }
-                local dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
-                dummy.Name = "AssetSource"
-                dummy.Parent = Workspace
-                dummy:PivotTo(CFrame.new(0, -500, 0))
-                task.wait(0.6)
-
-                if char and char.Parent then
-                    local targetHeadTexture = ""
-                    local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
-                    if dummyMesh then targetHeadTexture = dummyMesh.TextureId end
-
-                    for _, v in pairs(char:GetChildren()) do 
-                        if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
-                            v:Destroy() 
-                        end 
-                    end
-                    if char:FindFirstChild("Head") and char.Head:FindFirstChild("face") then char.Head.face:Destroy() end
-
-                    local myMesh = char.Head:FindFirstChildOfClass("SpecialMesh")
-                    if not myMesh then myMesh = Instance.new("SpecialMesh", char.Head) end
-
-                    if dummyMesh then 
-                        myMesh.MeshType = dummyMesh.MeshType
-                        myMesh.MeshId = dummyMesh.MeshId
-                        myMesh.Scale = dummyMesh.Scale
-                        myMesh.TextureId = targetHeadTexture
-                    else
-                        myMesh.MeshType = Enum.MeshType.Head
-                        myMesh.MeshId = ""
-                        myMesh.Scale = Vector3.new(1.25, 1.25, 1.25)
-                        myMesh.TextureId = ""
-                    end
-                    myMesh.VertexColor = Vector3.new(1,1,1)
-
-                    for _, item in pairs(dummy:GetChildren()) do if item:IsA("CharacterMesh") then item:Clone().Parent = char end end
-                    for _, item in pairs(dummy:GetChildren()) do 
-                        if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
-                            item:Clone().Parent = char 
-                        end 
-                    end
-
-                    local faceDecal = Instance.new("Decal")
-                    faceDecal.Name = "face"
-                    local dummyFace = dummy.Head:FindFirstChild("face")
-                    if dummyFace then
-                        faceDecal.Texture = dummyFace.Texture
-                    elseif desc.Face and desc.Face > 0 then
-                        faceDecal.Texture = "rbxassetid://" .. desc.Face
-                    else
-                        faceDecal.Texture = "rbxasset://textures/face.png"
-                    end
-                    faceDecal.Parent = char.Head
-
-                    local newBC = Instance.new("BodyColors")
-                    newBC.HeadColor3 = desc.HeadColor
-                    newBC.TorsoColor3 = desc.TorsoColor
-                    newBC.LeftArmColor3 = desc.LeftArmColor
-                    newBC.RightArmColor3 = desc.RightArmColor
-                    newBC.LeftLegColor3 = desc.LeftLegColor
-                    newBC.RightLegColor3 = desc.RightLegColor
-                    newBC.Parent = char
-
-                    StartFixLoop(char, realColors, targetHeadTexture)
-
-                    for _, item in pairs(dummy:GetChildren()) do 
-                        if item:IsA("Accessory") then 
-                            local clone = item:Clone()
-                            SmartWeld(char, clone) 
-                        end 
-                    end
-                end
-                dummy:Destroy()
+            -- Aguarda o personagem ser devidamente introduzido ao Workspace
+            local elapsed = 0
+            while char and char.Parent ~= Workspace and elapsed < 3 do
+                task.wait(0.1)
+                elapsed = elapsed + 0.1
             end
-        elseif ActiveModifiers.BundleId then
-            local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(ActiveModifiers.BundleId) end)
-            if success and bundleDetails and bundleDetails.Items then
-                local targetDesc = nil
-                for _, item in ipairs(bundleDetails.Items) do
-                    if item.Type == "UserOutfit" then
-                        local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
-                        if s and desc then targetDesc = desc break end
-                    end
-                end
+            if not char or char.Parent ~= Workspace then return end
 
-                if targetDesc then
-                    local realColors = { ["Head"] = targetDesc.HeadColor, ["Torso"] = targetDesc.TorsoColor, ["Left Arm"] = targetDesc.LeftArmColor, ["Right Arm"] = targetDesc.RightArmColor, ["Left Leg"] = targetDesc.LeftLegColor, ["Right Leg"] = targetDesc.RightLegColor }
-                    local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
+            -- Assegura a integridade das partes R6
+            char:WaitForChild("Head", 5)
+            char:WaitForChild("Torso", 5)
+
+            if not LocalPlayer:HasAppearanceLoaded() then
+                pcall(function() LocalPlayer.CharacterAppearanceLoaded:Wait() end)
+            end
+            task.wait(0.15)
+
+            if getgenv().FixLoop then 
+                getgenv().FixLoop:Disconnect() 
+                getgenv().FixLoop = nil 
+            end
+
+            BackupCharacterAppearance(char)
+
+            -- 1. ETAPA: Aparência Básica (Skin customizada OU Preset Bundle OU Aparência Original)
+            if ActiveModifiers.SkinUserId then
+                local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(ActiveModifiers.SkinUserId) end)
+                if s and desc then
+                    local realColors = { ["Head"] = desc.HeadColor, ["Torso"] = desc.TorsoColor, ["Left Arm"] = desc.LeftArmColor, ["Right Arm"] = desc.RightArmColor, ["Left Leg"] = desc.LeftLegColor, ["Right Leg"] = desc.RightLegColor }
+                    local dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
                     dummy.Name = "AssetSource"
                     dummy.Parent = Workspace
                     dummy:PivotTo(CFrame.new(0, -500, 0))
-                    task.wait(0.6)
+                    task.wait(0.5)
 
                     if char and char.Parent then
                         local targetHeadTexture = ""
-                        if dummy.Head:FindFirstChildOfClass("SpecialMesh") then 
-                            targetHeadTexture = dummy.Head:FindFirstChildOfClass("SpecialMesh").TextureId 
-                        end
+                        local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
+                        if dummyMesh then targetHeadTexture = dummyMesh.TextureId end
 
                         for _, v in pairs(char:GetChildren()) do 
                             if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
@@ -406,35 +331,48 @@ return function(env)
                         end
                         if char:FindFirstChild("Head") and char.Head:FindFirstChild("face") then char.Head.face:Destroy() end
 
-                        local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
                         local myMesh = char.Head:FindFirstChildOfClass("SpecialMesh")
+                        if not myMesh then myMesh = Instance.new("SpecialMesh", char.Head) end
+
                         if dummyMesh then 
-                            if not myMesh then myMesh = Instance.new("SpecialMesh", char.Head) end
-                            myMesh.MeshType = Enum.MeshType.FileMesh
+                            myMesh.MeshType = dummyMesh.MeshType
                             myMesh.MeshId = dummyMesh.MeshId
                             myMesh.Scale = dummyMesh.Scale
                             myMesh.TextureId = targetHeadTexture
-                            myMesh.VertexColor = Vector3.new(1,1,1) 
+                        else
+                            myMesh.MeshType = Enum.MeshType.Head
+                            myMesh.MeshId = ""
+                            myMesh.Scale = Vector3.new(1.25, 1.25, 1.25)
+                            myMesh.TextureId = ""
                         end
+                        myMesh.VertexColor = Vector3.new(1,1,1)
 
-                        for _, item in pairs(dummy:GetChildren()) do 
-                            if item:IsA("CharacterMesh") then item:Clone().Parent = char end 
-                        end
+                        for _, item in pairs(dummy:GetChildren()) do if item:IsA("CharacterMesh") then item:Clone().Parent = char end end
                         for _, item in pairs(dummy:GetChildren()) do 
                             if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
                                 item:Clone().Parent = char 
-                            elseif item.Name == "Head" and item:FindFirstChild("face") then 
-                                item.face:Clone().Parent = char:FindFirstChild("Head") 
                             end 
                         end
 
+                        local faceDecal = Instance.new("Decal")
+                        faceDecal.Name = "face"
+                        local dummyFace = dummy.Head:FindFirstChild("face")
+                        if dummyFace then
+                            faceDecal.Texture = dummyFace.Texture
+                        elseif desc.Face and desc.Face > 0 then
+                            faceDecal.Texture = "rbxassetid://" .. desc.Face
+                        else
+                            faceDecal.Texture = "rbxasset://textures/face.png"
+                        end
+                        faceDecal.Parent = char.Head
+
                         local newBC = Instance.new("BodyColors")
-                        newBC.HeadColor3 = targetDesc.HeadColor
-                        newBC.TorsoColor3 = targetDesc.TorsoColor
-                        newBC.LeftArmColor3 = targetDesc.LeftArmColor
-                        newBC.RightArmColor3 = targetDesc.RightArmColor
-                        newBC.LeftLegColor3 = targetDesc.LeftLegColor
-                        newBC.RightLegColor3 = targetDesc.RightLegColor
+                        newBC.HeadColor3 = desc.HeadColor
+                        newBC.TorsoColor3 = desc.TorsoColor
+                        newBC.LeftArmColor3 = desc.LeftArmColor
+                        newBC.RightArmColor3 = desc.RightArmColor
+                        newBC.LeftLegColor3 = desc.LeftLegColor
+                        newBC.RightLegColor3 = desc.RightLegColor
                         newBC.Parent = char
 
                         StartFixLoop(char, realColors, targetHeadTexture)
@@ -448,74 +386,151 @@ return function(env)
                     end
                     dummy:Destroy()
                 end
-            end
-        else
-            RestoreCharacterAppearance(char)
-        end
+            elseif ActiveModifiers.BundleId then
+                local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(ActiveModifiers.BundleId) end)
+                if success and bundleDetails and bundleDetails.Items then
+                    local targetDesc = nil
+                    for _, item in ipairs(bundleDetails.Items) do
+                        if item.Type == "UserOutfit" then
+                            local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
+                            if s and desc then targetDesc = desc break end
+                        end
+                    end
 
-        -- 2. ETAPA: Reaplicação de Modificadores Corporais (Garante que nunca se percam)
-        if ActiveModifiers.Headless then
-            local head = char:FindFirstChild("Head")
-            if head then
-                if not headlessBackups[char] then
-                    headlessBackups[char] = {
-                        mesh = head:FindFirstChildOfClass("SpecialMesh") and head:FindFirstChildOfClass("SpecialMesh"):Clone(),
-                        face = (head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")) and (head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")):Clone()
-                    }
+                    if targetDesc then
+                        local realColors = { ["Head"] = targetDesc.HeadColor, ["Torso"] = targetDesc.TorsoColor, ["Left Arm"] = targetDesc.LeftArmColor, ["Right Arm"] = targetDesc.RightArmColor, ["Left Leg"] = targetDesc.LeftLegColor, ["Right Leg"] = targetDesc.RightLegColor }
+                        local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
+                        dummy.Name = "AssetSource"
+                        dummy.Parent = Workspace
+                        dummy:PivotTo(CFrame.new(0, -500, 0))
+                        task.wait(0.5)
+
+                        if char and char.Parent then
+                            local targetHeadTexture = ""
+                            if dummy.Head:FindFirstChildOfClass("SpecialMesh") then 
+                                targetHeadTexture = dummy.Head:FindFirstChildOfClass("SpecialMesh").TextureId 
+                            end
+
+                            for _, v in pairs(char:GetChildren()) do 
+                                if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
+                                    v:Destroy() 
+                                end 
+                            end
+                            if char:FindFirstChild("Head") and char.Head:FindFirstChild("face") then char.Head.face:Destroy() end
+
+                            local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
+                            local myMesh = char.Head:FindFirstChildOfClass("SpecialMesh")
+                            if dummyMesh then 
+                                if not myMesh then myMesh = Instance.new("SpecialMesh", char.Head) end
+                                myMesh.MeshType = Enum.MeshType.FileMesh
+                                myMesh.MeshId = dummyMesh.MeshId
+                                myMesh.Scale = dummyMesh.Scale
+                                myMesh.TextureId = targetHeadTexture
+                                myMesh.VertexColor = Vector3.new(1,1,1) 
+                            end
+
+                            for _, item in pairs(dummy:GetChildren()) do 
+                                if item:IsA("CharacterMesh") then item:Clone().Parent = char end 
+                            end
+                            for _, item in pairs(dummy:GetChildren()) do 
+                                if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
+                                    item:Clone().Parent = char 
+                                elseif item.Name == "Head" and item:FindFirstChild("face") then 
+                                    item.face:Clone().Parent = char:FindFirstChild("Head") 
+                                end 
+                            end
+
+                            local newBC = Instance.new("BodyColors")
+                            newBC.HeadColor3 = targetDesc.HeadColor
+                            newBC.TorsoColor3 = targetDesc.TorsoColor
+                            newBC.LeftArmColor3 = targetDesc.LeftArmColor
+                            newBC.RightArmColor3 = targetDesc.RightArmColor
+                            newBC.LeftLegColor3 = targetDesc.LeftLegColor
+                            newBC.RightLegColor3 = targetDesc.RightLegColor
+                            newBC.Parent = char
+
+                            StartFixLoop(char, realColors, targetHeadTexture)
+
+                            for _, item in pairs(dummy:GetChildren()) do 
+                                if item:IsA("Accessory") then 
+                                    local clone = item:Clone()
+                                    SmartWeld(char, clone) 
+                                end 
+                        end
+                        end
+                        dummy:Destroy()
+                    end
                 end
-                local currentMesh = head:FindFirstChildOfClass("SpecialMesh")
-                if currentMesh then currentMesh:Destroy() end
-                local face = head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")
-                if face then face:Destroy() end
-                if cachedHeadlessMesh then
-                    cachedHeadlessMesh:Clone().Parent = head
+            else
+                RestoreCharacterAppearance(char)
+            end
+
+            -- 2. ETAPA: Reaplicação de Modificadores Corporais (Garante que nunca se percam)
+            if ActiveModifiers.Headless then
+                local head = char:FindFirstChild("Head")
+                if head then
+                    if not headlessBackups[char] then
+                        headlessBackups[char] = {
+                            mesh = head:FindFirstChildOfClass("SpecialMesh") and head:FindFirstChildOfClass("SpecialMesh"):Clone(),
+                            face = (head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")) and (head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")):Clone()
+                        }
+                    end
+                    local currentMesh = head:FindFirstChildOfClass("SpecialMesh")
+                    if currentMesh then currentMesh:Destroy() end
+                    local face = head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")
+                    if face then face:Destroy() end
+                    if cachedHeadlessMesh then
+                        cachedHeadlessMesh:Clone().Parent = head
+                    end
                 end
             end
-        end
 
-        -- Aplicação Seletiva de Perna (Prevenção de Sobreposição de R6 Leg Meshes)
-        local activeLegMesh = nil
-        if ActiveModifiers.Korblox then
-            activeLegMesh = cachedKorbloxLeg
-        elseif ActiveModifiers.SkeletonLeg then
-            activeLegMesh = cachedSkeletonLeg
-        elseif ActiveModifiers.ZombieLeg then
-            activeLegMesh = cachedZombieLeg
-        end
+            local activeLegMesh = nil
+            if ActiveModifiers.Korblox then
+                activeLegMesh = cachedKorbloxLeg
+            elseif ActiveModifiers.SkeletonLeg then
+                activeLegMesh = cachedSkeletonLeg
+            elseif ActiveModifiers.ZombieLeg then
+                activeLegMesh = cachedZombieLeg
+            end
 
-        if activeLegMesh then
-            for _, v in pairs(char:GetChildren()) do
-                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
-                    v:Destroy()
+            if activeLegMesh then
+                for _, v in pairs(char:GetChildren()) do
+                    if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                        v:Destroy()
+                    end
+                end
+                activeLegMesh:Clone().Parent = char
+            end
+
+            if ActiveModifiers.RoyalScepter then
+                local existing = char:FindFirstChild("RoyalScepterAccessory")
+                if existing then existing:Destroy() end
+                local obj = loadAsset(123021068422074)
+                if obj then
+                    obj.Name = "RoyalScepterAccessory"
+                    SmartWeld(char, obj)
                 end
             end
-            activeLegMesh:Clone().Parent = char
-        end
 
-        if ActiveModifiers.RoyalScepter then
-            local existing = char:FindFirstChild("RoyalScepterAccessory")
-            if existing then existing:Destroy() end
-            local obj = loadAsset(123021068422074)
-            if obj then
-                obj.Name = "RoyalScepterAccessory"
-                SmartWeld(char, obj)
+            if ActiveModifiers.MysteriousArrow then
+                local existing = char:FindFirstChild("MysteriousArrowAccessory")
+                if existing then existing:Destroy() end
+                local obj = loadAsset(100766397788633)
+                if obj then
+                    obj.Name = "MysteriousArrowAccessory"
+                    SmartWeld(char, obj)
+                end
             end
+        end)
+        
+        if not ok then
+            warn("Erro ao reaplicar modificacoes visuais: ", err)
         end
-
-        if ActiveModifiers.MysteriousArrow then
-            local existing = char:FindFirstChild("MysteriousArrowAccessory")
-            if existing then existing:Destroy() end
-            local obj = loadAsset(100766397788633)
-            if obj then
-                obj.Name = "MysteriousArrowAccessory"
-                SmartWeld(char, obj)
-            end
-        end
-
         isApplyingVisuals = false
     end
 
-    -- Escuta de Evento Unificada para Respawn/Morte do Personagem (Proteção Absoluta)
+    -- Evento Unificado de Respawn
     local respawnConn = nil
     local function SetupRespawnConnection()
         if respawnConn then respawnConn:Disconnect() end
@@ -650,7 +665,7 @@ return function(env)
         end
     end)
 
-    -- Criador Visual de Toggles Corporais Sincronizados
+    -- Criador de Toggles Corporais Sincronizados
     local function CreateGridToggle(parent, text, iconId, defaultState, callback)
         local state = defaultState or false
 
@@ -1296,7 +1311,7 @@ return function(env)
 
 
     -- =======================================================
-    -- [2] SKIN CHANGER (LARGURA TOTAL, COM 3 COLUNAS)
+    -- [2] SKIN CHANGER (LARGURA TOTAL, COM GRADE MATEMÁTICA 4X4)
     -- =======================================================
     local before = #Page:GetChildren()
     Library:CreateSection(Page, "Skin Changer")
@@ -1348,7 +1363,7 @@ return function(env)
     PresetsContainer.Parent = Page
 
     local Grid = Instance.new("UIGridLayout")
-    Grid.CellSize = UDim2.new(0.333, -6, 0, 42) 
+    Grid.CellSize = UDim2.new(0.25, -6, 0, 42) -- Dimensionamento matemático exato para 4 colunas (4x4)
     Grid.CellPadding = UDim2.new(0, 8, 0, 8)
     Grid.SortOrder = Enum.SortOrder.LayoutOrder
     Grid.Parent = PresetsContainer
