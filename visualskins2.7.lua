@@ -14,31 +14,39 @@ return function(env)
 
     local AssetService = game:GetService("AssetService")
     local MarketplaceService = game:GetService("MarketplaceService")
+    local UserService = game:GetService("UserService")
+    
     local selectedModalId = nil
     local currentModalAction = nil
     getgenv().FixLoop = nil
 
-    -- IDs de Época para prevenção absoluta de Race Conditions
+    -- IDs de Época para prevenção de Race Conditions
     local headlessEpoch = 0
     local korbloxEpoch = 0
     local skeletonEpoch = 0
     local zombieEpoch = 0
     local scepterEpoch = 0
     local arrowEpoch = 0
-    local skinEpoch = 0
-
-    -- Controle de Estado Exclusivo do Bundle Changer
-    local currentActiveBundleId = nil
     local bundleEpoch = 0
+
+    -- Controle de Estado Centralizado para Modificações
+    local ModifierStates = {
+        Headless = false,
+        Korblox = false,
+        Skeleton = false,
+        Zombie = false,
+        Scepter = false,
+        Arrow = false
+    }
+
+    getgenv().ActiveSkinUserId = getgenv().ActiveSkinUserId or nil
+    getgenv().ActiveBundleId = getgenv().ActiveBundleId or nil
+
+    local currentActiveBundleId = nil
     local bundleToggleControls = {}
-    local bundleConn = nil
     local characterBackups = setmetatable({}, {__mode = "k"})
 
-    -- Controle de Estado do Skin Changer (Anti-Reset)
-    local activeSkinUserId = nil
-    local skinConn = nil
-
-    -- Funções Core de Auxílio
+    -- Funções Auxiliares de Carregamento
     local function loadAsset(id)
         local success, result = pcall(function()
             return game:GetObjects("rbxassetid://" .. tostring(id))[1]
@@ -84,58 +92,6 @@ return function(env)
         if weld.Part0 then weld.Parent = handle end
     end
 
-    -- Equipamento universal "Independente do que seja vai equipar"
-    local function EquipAccessoryByID(id)
-        local char = LocalPlayer.Character
-        if not char then return end
-        
-        local asset = loadAsset(id)
-        if not asset then
-            SendNotification("Failed to load item ID: " .. tostring(id), 3)
-            return
-        end
-        
-        local function handleEquip(obj)
-            if obj:IsA("Accessory") or obj:IsA("Hat") then
-                SmartWeld(char, obj)
-                SendNotification("Accessory Equipped!", 3)
-            elseif obj:IsA("Tool") then
-                obj.Parent = char
-                SendNotification("Tool Equipped!", 3)
-            elseif obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") or obj:IsA("BodyColors") or obj:IsA("CharacterMesh") then
-                local existing = char:FindFirstChildOfClass(obj.ClassName)
-                if existing then existing:Destroy() end
-                obj.Parent = char
-                SendNotification("Clothing Equipped!", 3)
-            elseif obj:IsA("Model") then
-                local hasEquipped = false
-                for _, child in ipairs(obj:GetChildren()) do
-                    if child:IsA("Accessory") or child:IsA("Hat") or child:IsA("Tool") or child:IsA("Shirt") or child:IsA("Pants") then
-                        handleEquip(child)
-                        hasEquipped = true
-                    end
-                end
-                if not hasEquipped then
-                    obj.Parent = char
-                    local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-                    if primary then
-                        primary.Anchored = false
-                        primary.CanCollide = false
-                        local weld = Instance.new("Weld")
-                        weld.Part0 = char:FindFirstChild("Head") or char.PrimaryPart
-                        weld.Part1 = primary
-                        weld.C0 = CFrame.new(0, 0, 0)
-                        weld.Parent = primary
-                    end
-                    SendNotification("Model Attached!", 3)
-                end
-            else
-                obj.Parent = char
-            end
-        end
-        handleEquip(asset)
-    end
-
     local function StartFixLoop(char, colorTable, originalHeadTextureId)
         if getgenv().FixLoop then getgenv().FixLoop:Disconnect() end
         getgenv().FixLoop = RunService.RenderStepped:Connect(function()
@@ -173,98 +129,7 @@ return function(env)
         end)
     end
 
-    local function TransformarSkinSafe(userId, epoch)
-        local char = LocalPlayer.Character
-        if not char then return end
-        
-        BackupCharacterAppearance(char)
-        
-        local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(userId) end)
-        if epoch ~= skinEpoch then return end
-        if not s or not desc then 
-            SendNotification("Não foi possível carregar a skin.", 3)
-            return 
-        end
-        
-        local realColors = { ["Head"] = desc.HeadColor,["Torso"] = desc.TorsoColor,["Left Arm"] = desc.LeftArmColor,["Right Arm"] = desc.RightArmColor,["Left Leg"] = desc.LeftLegColor,["Right Leg"] = desc.RightLegColor }
-        local dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
-        if epoch ~= skinEpoch then dummy:Destroy() return end
-        dummy.Name = "AssetSource"
-        dummy.Parent = workspace
-        dummy:SetPrimaryPartCFrame(CFrame.new(0, -500, 0))
-        task.wait(1.0)
-        if epoch ~= skinEpoch then dummy:Destroy() return end
-        
-        local targetHeadTexture = ""
-        local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
-        if dummyMesh then targetHeadTexture = dummyMesh.TextureId end
-        
-        for _, v in pairs(char:GetChildren()) do 
-            if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
-                v:Destroy() 
-            end 
-        end
-        if char:FindFirstChild("Head") and char.Head:FindFirstChild("face") then char.Head.face:Destroy() end
-        
-        local myMesh = char.Head:FindFirstChildOfClass("SpecialMesh")
-        if not myMesh then myMesh = Instance.new("SpecialMesh", char.Head) end
-        
-        if dummyMesh then 
-            myMesh.MeshType = dummyMesh.MeshType
-            myMesh.MeshId = dummyMesh.MeshId
-            myMesh.Scale = dummyMesh.Scale
-            myMesh.TextureId = targetHeadTexture
-        else
-            myMesh.MeshType = Enum.MeshType.Head
-            myMesh.MeshId = ""
-            myMesh.Scale = Vector3.new(1.25, 1.25, 1.25)
-            myMesh.TextureId = ""
-        end
-        myMesh.VertexColor = Vector3.new(1,1,1) 
-        
-        for _, item in pairs(dummy:GetChildren()) do if item:IsA("CharacterMesh") then item:Clone().Parent = char end end
-        for _, item in pairs(dummy:GetChildren()) do 
-            if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
-                item:Clone().Parent = char 
-            end 
-        end
-
-        local faceDecal = Instance.new("Decal")
-        faceDecal.Name = "face"
-        local dummyFace = dummy.Head:FindFirstChild("face")
-        
-        if dummyFace then
-            faceDecal.Texture = dummyFace.Texture
-        elseif desc.Face and desc.Face > 0 then
-            faceDecal.Texture = "rbxassetid://" .. desc.Face
-        else
-            faceDecal.Texture = "rbxasset://textures/face.png"
-        end
-        faceDecal.Parent = char.Head
-        
-        local newBC = Instance.new("BodyColors")
-        newBC.HeadColor3 = desc.HeadColor
-        newBC.TorsoColor3 = desc.TorsoColor
-        newBC.LeftArmColor3 = desc.LeftArmColor
-        newBC.RightArmColor3 = desc.RightArmColor
-        newBC.LeftLegColor3 = desc.LeftLegColor
-        newBC.RightLegColor3 = desc.RightLegColor
-        newBC.Parent = char
-        
-        StartFixLoop(char, realColors, targetHeadTexture)
-        
-        for _, item in pairs(dummy:GetChildren()) do 
-            if item:IsA("Accessory") then 
-                local clone = item:Clone()
-                SmartWeld(char, clone) 
-            end 
-        end
-        dummy:Destroy()
-        
-        SendNotification("Skin Applied Successfully!", 3)
-    end
-
-    -- Sistema de Backup e Restauração local de Personagem (Substitui o LoadCharacter instável)
+    -- Sistema de Backup e Restauração de Aparência
     local function BackupCharacterAppearance(char)
         if not char then return end
         if characterBackups[char] then return end
@@ -355,9 +220,345 @@ return function(env)
         end
     end
 
+    -- Modificadores Individuais (Seguros e livres de Race Conditions)
+    local cachedHeadlessMesh = nil
+    local headlessBackups = {}
+    local function ApplyHeadless(char, epoch)
+        if not char or not cachedHeadlessMesh then return end
+        if epoch ~= headlessEpoch then return end
+        local head = char:FindFirstChild("Head")
+        if head then
+            if not headlessBackups[char] then
+                headlessBackups[char] = {
+                    mesh = head:FindFirstChildOfClass("SpecialMesh") and head:FindFirstChildOfClass("SpecialMesh"):Clone(),
+                    face = (head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")) and (head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")):Clone()
+                }
+            end
+            local currentMesh = head:FindFirstChildOfClass("SpecialMesh")
+            if currentMesh then currentMesh:Destroy() end
+            local face = head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")
+            if face then face:Destroy() end
+            cachedHeadlessMesh:Clone().Parent = head
+        end
+    end
+
+    local function RestoreHeadless(char)
+        if not char then return end
+        local head = char:FindFirstChild("Head")
+        if not head then return end
+        local backup = headlessBackups[char]
+        if backup then
+            local currentMesh = head:FindFirstChildOfClass("SpecialMesh")
+            if currentMesh then currentMesh:Destroy() end
+            if backup.mesh then backup.mesh:Clone().Parent = head end
+            local face = head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")
+            if face then face:Destroy() end
+            if backup.face then backup.face:Clone().Parent = head end
+        end
+    end
+
+    local cachedKorbloxLeg = nil
+    local korbloxBackups = {}
+    local function ApplyKorblox(char, epoch)
+        if not char or not cachedKorbloxLeg then return end
+        if epoch ~= korbloxEpoch then return end
+        if not korbloxBackups[char] then
+            korbloxBackups[char] = {}
+            for _, v in pairs(char:GetChildren()) do
+                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                    table.insert(korbloxBackups[char], v:Clone())
+                end
+            end
+        end
+        for _, v in pairs(char:GetChildren()) do
+            if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                v:Destroy()
+            end
+        end
+        cachedKorbloxLeg:Clone().Parent = char
+    end
+
+    local function RestoreKorblox(char)
+        if not char then return end
+        local backup = korbloxBackups[char]
+        if backup then
+            for _, v in pairs(char:GetChildren()) do
+                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                    v:Destroy()
+                end
+            end
+            for _, v in ipairs(backup) do
+                v:Clone().Parent = char
+            end
+        end
+    end
+
+    local cachedSkeletonLeg = nil
+    local skeletonBackups = {}
+    local function ApplySkeletonLeg(char, epoch)
+        if not char or not cachedSkeletonLeg then return end
+        if epoch ~= skeletonEpoch then return end
+        if not skeletonBackups[char] then
+            skeletonBackups[char] = {}
+            for _, v in pairs(char:GetChildren()) do
+                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                    table.insert(skeletonBackups[char], v:Clone())
+                end
+            end
+        end
+        for _, v in pairs(char:GetChildren()) do
+            if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                v:Destroy()
+            end
+        end
+        cachedSkeletonLeg:Clone().Parent = char
+    end
+
+    local function RestoreSkeletonLeg(char)
+        if not char then return end
+        local backup = skeletonBackups[char]
+        if backup then
+            for _, v in pairs(char:GetChildren()) do
+                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                    v:Destroy()
+                end
+            end
+            for _, v in ipairs(backup) do
+                v:Clone().Parent = char
+            end
+        end
+    end
+
+    local cachedZombieLeg = nil
+    local zombieBackups = {}
+    local function ApplyZombieLeg(char, epoch)
+        if not char or not cachedZombieLeg then return end
+        if epoch ~= zombieEpoch then return end
+        if not zombieBackups[char] then
+            zombieBackups[char] = {}
+            for _, v in pairs(char:GetChildren()) do
+                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                    table.insert(zombieBackups[char], v:Clone())
+                end
+            end
+        end
+        for _, v in pairs(char:GetChildren()) do
+            if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                v:Destroy()
+            end
+        end
+        cachedZombieLeg:Clone().Parent = char
+    end
+
+    local function RestoreZombieLeg(char)
+        if not char then return end
+        local backup = zombieBackups[char]
+        if backup then
+            for _, v in pairs(char:GetChildren()) do
+                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
+                    v:Destroy()
+                end
+            end
+            for _, v in ipairs(backup) do
+                v:Clone().Parent = char
+            end
+        end
+    end
+
+    local scepterAccessory = nil
+    local function ApplyScepter(char, epoch)
+        if not char then return end
+        if epoch ~= scepterEpoch then return end
+        local obj = loadAsset(123021068422074)
+        if epoch ~= scepterEpoch then 
+            if obj then obj:Destroy() end
+            return 
+        end
+        if obj then
+            obj.Name = "RoyalScepterAccessory"
+            if scepterAccessory then scepterAccessory:Destroy() end
+            scepterAccessory = obj
+            SmartWeld(char, obj)
+        end
+    end
+
+    local arrowAccessory = nil
+    local function ApplyArrow(char, epoch)
+        if not char then return end
+        if epoch ~= arrowEpoch then return end
+        local obj = loadAsset(100766397788633)
+        if epoch ~= arrowEpoch then 
+            if obj then obj:Destroy() end
+            return 
+        end
+        if obj then
+            obj.Name = "MysteriousArrowAccessory"
+            if arrowAccessory then arrowAccessory:Destroy() end
+            arrowAccessory = obj
+            SmartWeld(char, obj)
+        end
+    end
+
+    -- Sistema de Aplicação Unificada de Modificadores Ativos
+    local function ApplyActiveModifiers(char)
+        if not char then return end
+        task.spawn(function()
+            if ModifierStates.Headless then ApplyHeadless(char, headlessEpoch) end
+            if ModifierStates.Korblox then ApplyKorblox(char, korbloxEpoch) end
+            if ModifierStates.Skeleton then ApplySkeletonLeg(char, skeletonEpoch) end
+            if ModifierStates.Zombie then ApplyZombieLeg(char, zombieEpoch) end
+            if ModifierStates.Scepter then ApplyScepter(char, scepterEpoch) end
+            if ModifierStates.Arrow then ApplyArrow(char, arrowEpoch) end
+        end)
+    end
+
+    local function EquipAccessoryByID(id)
+        local char = LocalPlayer.Character
+        if not char then return end
+        
+        local asset = loadAsset(id)
+        if not asset then
+            SendNotification("Failed to load item ID: " .. tostring(id), 3)
+            return
+        end
+        
+        local function handleEquip(obj)
+            if obj:IsA("Accessory") or obj:IsA("Hat") then
+                SmartWeld(char, obj)
+                SendNotification("Accessory Equipped!", 3)
+            elseif obj:IsA("Tool") then
+                obj.Parent = char
+                SendNotification("Tool Equipped!", 3)
+            elseif obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") or obj:IsA("BodyColors") or obj:IsA("CharacterMesh") then
+                local existing = char:FindFirstChildOfClass(obj.ClassName)
+                if existing then existing:Destroy() end
+                obj.Parent = char
+                SendNotification("Clothing Equipped!", 3)
+            elseif obj:IsA("Model") then
+                local hasEquipped = false
+                for _, child in ipairs(obj:GetChildren()) do
+                    if child:IsA("Accessory") or child:IsA("Hat") or child:IsA("Tool") or child:IsA("Shirt") or child:IsA("Pants") then
+                        handleEquip(child)
+                        hasEquipped = true
+                    end
+                end
+                if not hasEquipped then
+                    obj.Parent = char
+                    local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                    if primary then
+                        primary.Anchored = false
+                        primary.CanCollide = false
+                        local weld = Instance.new("Weld")
+                        weld.Part0 = char:FindFirstChild("Head") or char.PrimaryPart
+                        weld.Part1 = primary
+                        weld.C0 = CFrame.new(0, 0, 0)
+                        weld.Parent = primary
+                    end
+                    SendNotification("Model Attached!", 3)
+                end
+            else
+                obj.Parent = char
+            end
+        end
+        handleEquip(asset)
+    end
+
+    local function TransformarSkin(userId)
+        local char = LocalPlayer.Character
+        if not char then return end
+        
+        getgenv().ActiveSkinUserId = userId
+        getgenv().ActiveBundleId = nil
+        
+        local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(userId) end)
+        if not s or not desc then 
+            SendNotification("Failed to load skin data.", 3)
+            return 
+        end
+        
+        local realColors = { ["Head"] = desc.HeadColor,["Torso"] = desc.TorsoColor,["Left Arm"] = desc.LeftArmColor,["Right Arm"] = desc.RightArmColor,["Left Leg"] = desc.LeftLegColor,["Right Leg"] = desc.RightLegColor }
+        local dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
+        dummy.Name = "AssetSource"
+        dummy.Parent = workspace
+        dummy:SetPrimaryPartCFrame(CFrame.new(0, -500, 0))
+        task.wait(1.0)
+        
+        local targetHeadTexture = ""
+        local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
+        if dummyMesh then targetHeadTexture = dummyMesh.TextureId end
+        
+        for _, v in pairs(char:GetChildren()) do 
+            if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
+                v:Destroy() 
+            end 
+        end
+        if char:FindFirstChild("Head") and char.Head:FindFirstChild("face") then char.Head.face:Destroy() end
+        
+        local myMesh = char.Head:FindFirstChildOfClass("SpecialMesh")
+        if not myMesh then myMesh = Instance.new("SpecialMesh", char.Head) end
+        
+        if dummyMesh then 
+            myMesh.MeshType = dummyMesh.MeshType
+            myMesh.MeshId = dummyMesh.MeshId
+            myMesh.Scale = dummyMesh.Scale
+            myMesh.TextureId = targetHeadTexture
+        else
+            myMesh.MeshType = Enum.MeshType.Head
+            myMesh.MeshId = ""
+            myMesh.Scale = Vector3.new(1.25, 1.25, 1.25)
+            myMesh.TextureId = ""
+        end
+        myMesh.VertexColor = Vector3.new(1,1,1) 
+        
+        for _, item in pairs(dummy:GetChildren()) do if item:IsA("CharacterMesh") then item:Clone().Parent = char end end
+        for _, item in pairs(dummy:GetChildren()) do 
+            if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
+                item:Clone().Parent = char 
+            end 
+        end
+
+        local faceDecal = Instance.new("Decal")
+        faceDecal.Name = "face"
+        local dummyFace = dummy.Head:FindFirstChild("face")
+        
+        if dummyFace then
+            faceDecal.Texture = dummyFace.Texture
+        elseif desc.Face and desc.Face > 0 then
+            faceDecal.Texture = "rbxassetid://" .. desc.Face
+        else
+            faceDecal.Texture = "rbxasset://textures/face.png"
+        end
+        faceDecal.Parent = char.Head
+        
+        local newBC = Instance.new("BodyColors")
+        newBC.HeadColor3 = desc.HeadColor
+        newBC.TorsoColor3 = desc.TorsoColor
+        newBC.LeftArmColor3 = desc.LeftArmColor
+        newBC.RightArmColor3 = desc.RightArmColor
+        newBC.LeftLegColor3 = desc.LeftLegColor
+        newBC.RightLegColor3 = desc.RightLegColor
+        newBC.Parent = char
+        
+        StartFixLoop(char, realColors, targetHeadTexture)
+        
+        for _, item in pairs(dummy:GetChildren()) do 
+            if item:IsA("Accessory") then 
+                local clone = item:Clone()
+                SmartWeld(char, clone) 
+            end 
+        end
+        dummy:Destroy()
+        
+        ApplyActiveModifiers(char)
+        SendNotification("Skin Applied Successfully!", 3)
+    end
+
     local function ApplyBundleSafe(bundleId, epoch)
         local char = LocalPlayer.Character
         if not char then return end
+        
+        getgenv().ActiveBundleId = bundleId
+        getgenv().ActiveSkinUserId = nil
         
         BackupCharacterAppearance(char)
         
@@ -373,7 +574,6 @@ return function(env)
             end
         end
         if epoch ~= bundleEpoch then return end
-
         if not targetDesc then return end
         
         local realColors = { 
@@ -447,231 +647,158 @@ return function(env)
         end
         dummy:Destroy()
         
+        ApplyActiveModifiers(char)
         SendNotification("Bundle Applied Successfully!", 3)
     end
 
-    -- SISTEMA DE APLICAÇÃO PREVENIDO DE RACE CONDITIONS
-    local cachedHeadlessMesh = nil
-    local headlessConn = nil
-    local headlessBackups = {}
-
-    local function ApplyHeadless(char, epoch)
-        if not char or not cachedHeadlessMesh then return end
-        task.wait(0.5)
-        if epoch ~= headlessEpoch then return end -- Aborta se mudou de estado
-        local head = char:FindFirstChild("Head")
-        if head then
-            if not headlessBackups[char] then
-                headlessBackups[char] = {
-                    mesh = head:FindFirstChildOfClass("SpecialMesh") and head:FindFirstChildOfClass("SpecialMesh"):Clone(),
-                    face = (head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")) and (head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")):Clone()
-                }
-            end
-            
-            local currentMesh = head:FindFirstChildOfClass("SpecialMesh")
-            if currentMesh then currentMesh:Destroy() end
-            local face = head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")
-            if face then face:Destroy() end
-            
-            cachedHeadlessMesh:Clone().Parent = head
-        end
-    end
-
-    local function RestoreHeadless(char)
+    -- Loop de Monitoramento de Respawn Unificado
+    local function onCharacterAdded(char)
         if not char then return end
-        local head = char:FindFirstChild("Head")
-        if not head then return end
+        task.wait(0.6)
         
-        local backup = headlessBackups[char]
-        if backup then
-            local currentMesh = head:FindFirstChildOfClass("SpecialMesh")
-            if currentMesh then currentMesh:Destroy() end
-            if backup.mesh then backup.mesh:Clone().Parent = head end
-            
-            local face = head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")
-            if face then face:Destroy() end
-            if backup.face then backup.face:Clone().Parent = head end
+        if getgenv().ActiveSkinUserId then
+            TransformarSkin(getgenv().ActiveSkinUserId)
+        elseif getgenv().ActiveBundleId then
+            ApplyBundleSafe(getgenv().ActiveBundleId, bundleEpoch)
         end
+        
+        task.wait(1.2)
+        ApplyActiveModifiers(char)
     end
 
-    local cachedKorbloxLeg = nil
-    local korbloxConn = nil
-    local korbloxBackups = {}
-
-    local function ApplyKorblox(char, epoch)
-        if not char or not cachedKorbloxLeg then return end
-        task.wait(0.5)
-        if epoch ~= korbloxEpoch then return end -- Aborta se mudou de estado
-        if not korbloxBackups[char] then
-            korbloxBackups[char] = {}
-            for _, v in pairs(char:GetChildren()) do
-                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
-                    table.insert(korbloxBackups[char], v:Clone())
-                end
-            end
-        end
-        for _, v in pairs(char:GetChildren()) do
-            if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
-                v:Destroy()
-            end
-        end
-        cachedKorbloxLeg:Clone().Parent = char
+    if getgenv().NexSkinCharacterAddedConn then
+        getgenv().NexSkinCharacterAddedConn:Disconnect()
+        getgenv().NexSkinCharacterAddedConn = nil
+    end
+    getgenv().NexSkinCharacterAddedConn = LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+    if LocalPlayer.Character then
+        task.spawn(onCharacterAdded, LocalPlayer.Character)
     end
 
-    local function RestoreKorblox(char)
-        if not char then return end
-        local backup = korbloxBackups[char]
-        if backup then
-            for _, v in pairs(char:GetChildren()) do
-                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
-                    v:Destroy()
-                end
-            end
-            for _, v in ipairs(backup) do
-                v:Clone().Parent = char
-            end
-        end
-    end
+    -- Criação do Modal de Confirmação Redesenhado
+    local PreviewBox = Instance.new("Frame")
+    PreviewBox.Size = UDim2.new(0, 260, 0, 130)
+    PreviewBox.AnchorPoint = Vector2.new(0.5, 0.5)
+    PreviewBox.Position = UDim2.new(0.5, 0, 0.5, 0)
+    PreviewBox.BackgroundColor3 = Color3.new(0,0,0)
+    PreviewBox.BackgroundTransparency = 0.15
+    PreviewBox.BorderSizePixel = 0
+    PreviewBox.ZIndex = 11
+    PreviewBox.Visible = false
+    PreviewBox.Parent = ModalOverlay
 
-    local cachedSkeletonLeg = nil
-    local skeletonConn = nil
-    local skeletonBackups = {}
+    local PBStroke = Instance.new("UIStroke")
+    PBStroke.Color = Color3.fromRGB(40, 40, 40)
+    PBStroke.Parent = PreviewBox
+    
+    local PBTopLine = Instance.new("Frame")
+    PBTopLine.Size = UDim2.new(1, 0, 0, 2)
+    PBTopLine.BackgroundColor3 = Theme.Accent
+    PBTopLine.BorderSizePixel = 0
+    PBTopLine.ZIndex = 12
+    PBTopLine.Parent = PreviewBox
+    ApplyGradient(PBTopLine, Theme.Accent, Theme.AccentDark, 0)
 
-    local function ApplySkeletonLeg(char, epoch)
-        if not char or not cachedSkeletonLeg then return end
-        task.wait(0.5)
-        if epoch ~= skeletonEpoch then return end -- Aborta se mudou de estado
-        if not skeletonBackups[char] then
-            skeletonBackups[char] = {}
-            for _, v in pairs(char:GetChildren()) do
-                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
-                    table.insert(skeletonBackups[char], v:Clone())
-                end
-            end
-        end
-        for _, v in pairs(char:GetChildren()) do
-            if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
-                v:Destroy()
-            end
-        end
-        cachedSkeletonLeg:Clone().Parent = char
-    end
+    local PTitle = Instance.new("TextLabel")
+    PTitle.Parent = PreviewBox
+    PTitle.Text = "FOUND"
+    PTitle.Font = Theme.Font
+    PTitle.TextSize = 14
+    PTitle.TextColor3 = Theme.Accent
+    PTitle.Size = UDim2.new(1, 0, 0, 35)
+    PTitle.BackgroundTransparency = 1
+    PTitle.ZIndex = 12
 
-    local function RestoreSkeletonLeg(char)
-        if not char then return end
-        local backup = skeletonBackups[char]
-        if backup then
-            for _, v in pairs(char:GetChildren()) do
-                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
-                    v:Destroy()
-                end
-            end
-            for _, v in ipairs(backup) do
-                v:Clone().Parent = char
-            end
-        end
-    end
+    local PImage = Instance.new("ImageLabel")
+    PImage.Size = UDim2.new(0, 46, 0, 46)
+    PImage.Position = UDim2.new(0, 20, 0, 35)
+    PImage.BackgroundColor3 = Theme.SwitchOff
+    PImage.ZIndex = 12
+    PImage.Parent = PreviewBox
+    Instance.new("UICorner", PImage).CornerRadius = UDim.new(0, 6)
 
-    local cachedZombieLeg = nil
-    local zombieConn = nil
-    local zombieBackups = {}
-
-    local function ApplyZombieLeg(char, epoch)
-        if not char or not cachedZombieLeg then return end
-        task.wait(0.5)
-        if epoch ~= zombieEpoch then return end -- Aborta se mudou de estado
-        if not zombieBackups[char] then
-            zombieBackups[char] = {}
-            for _, v in pairs(char:GetChildren()) do
-                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
-                    table.insert(zombieBackups[char], v:Clone())
-                end
-            end
-        end
-        for _, v in pairs(char:GetChildren()) do
-            if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
-                v:Destroy()
-            end
-        end
-        cachedZombieLeg:Clone().Parent = char
-    end
-
-    local function RestoreZombieLeg(char)
-        if not char then return end
-        local backup = zombieBackups[char]
-        if backup then
-            for _, v in pairs(char:GetChildren()) do
-                if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
-                    v:Destroy()
-                end
-            end
-            for _, v in ipairs(backup) do
-                v:Clone().Parent = char
-            end
-        end
-    end
-
-    local function ApplyScepter(char, epoch)
-        if not char then return end
-        task.wait(0.5)
-        if epoch ~= scepterEpoch then return end
-        local obj = loadAsset(123021068422074)
-        if epoch ~= scepterEpoch then 
-            if obj then obj:Destroy() end
-            return 
-        end
-        if obj then
-            obj.Name = "RoyalScepterAccessory"
-            SmartWeld(char, obj)
-        end
-    end
-
-    local arrowAccessory = nil
-    local arrowConn = nil
-
-    local function ApplyArrow(char, epoch)
-        if not char then return end
-        task.wait(0.5)
-        if epoch ~= arrowEpoch then return end
-        local obj = loadAsset(100766397788633)
-        if epoch ~= arrowEpoch then 
-            if obj then obj:Destroy() end
-            return 
-        end
-        if obj then
-            obj.Name = "MysteriousArrowAccessory"
-            SmartWeld(char, obj)
-        end
-    end
-
-    -- Criação de Dois TextLabels para Nome de Exibição (Mais Marcado) e Nome de Usuário (Normal)
+    -- Display Name em destaque no Modal
     local PDisplayName = Instance.new("TextLabel")
-    PDisplayName.Name = "PDisplayName"
+    PDisplayName.Text = "Display Name"
     PDisplayName.Size = UDim2.new(1, -80, 0, 22)
     PDisplayName.Position = UDim2.new(0, 75, 0, 35)
     PDisplayName.BackgroundTransparency = 1
-    PDisplayName.Text = "Display Name"
     PDisplayName.TextColor3 = Theme.Text
-    PDisplayName.Font = Theme.Font -- GothamBold (Mais marcado)
+    PDisplayName.Font = Enum.Font.GothamBold
     PDisplayName.TextSize = 14
     PDisplayName.TextXAlignment = Enum.TextXAlignment.Left
     PDisplayName.ZIndex = 12
     PDisplayName.Parent = PreviewBox
 
+    -- Username sem destaque no Modal
     local PUsername = Instance.new("TextLabel")
-    PUsername.Name = "PUsername"
-    PUsername.Size = UDim2.new(1, -80, 0, 18)
-    PUsername.Position = UDim2.new(0, 75, 0, 57)
-    PUsername.BackgroundTransparency = 1
     PUsername.Text = "@Username"
+    PUsername.Size = UDim2.new(1, -80, 0, 18)
+    PUsername.Position = UDim2.new(0, 75, 0, 55)
+    PUsername.BackgroundTransparency = 1
     PUsername.TextColor3 = Theme.TextDark
-    PUsername.Font = Enum.Font.Gotham -- Gotham Normal
+    PUsername.Font = Enum.Font.Gotham
     PUsername.TextSize = 11
     PUsername.TextXAlignment = Enum.TextXAlignment.Left
     PUsername.ZIndex = 12
     PUsername.Parent = PreviewBox
 
-    -- Função Auxiliar para Criar Toggles no estilo de Cartões de Presets do Bundle Changer (Grid Sincronizado)
+    local PApplyBtn = Instance.new("TextButton")
+    PApplyBtn.Text = "Apply"
+    PApplyBtn.Size = UDim2.new(0, 100, 0, 28)
+    PApplyBtn.Position = UDim2.new(0, 20, 0, 90)
+    PApplyBtn.BackgroundColor3 = Theme.Accent
+    PApplyBtn.TextColor3 = Color3.new(0,0,0)
+    PApplyBtn.Font = Theme.Font
+    PApplyBtn.TextSize = 12
+    PApplyBtn.ZIndex = 12
+    PApplyBtn.Parent = PreviewBox
+    Instance.new("UICorner", PApplyBtn).CornerRadius = UDim.new(0, 4)
+    ApplyGradient(PApplyBtn, Theme.Accent, Theme.AccentDark, 90)
+
+    local PCancelBtn = Instance.new("TextButton")
+    PCancelBtn.Text = "Cancel"
+    PCancelBtn.Size = UDim2.new(0, 100, 0, 28)
+    PCancelBtn.Position = UDim2.new(1, -120, 0, 90)
+    PCancelBtn.BackgroundColor3 = Color3.new(0,0,0)
+    PCancelBtn.BackgroundTransparency = 0.45
+    PCancelBtn.TextColor3 = Theme.TextDark
+    PCancelBtn.Font = Theme.Font
+    PCancelBtn.TextSize = 12
+    PCancelBtn.ZIndex = 12
+    PCancelBtn.Parent = PreviewBox
+    Instance.new("UICorner", PCancelBtn).CornerRadius = UDim.new(0, 4)
+    local pcbStr = Instance.new("UIStroke", PCancelBtn)
+    pcbStr.Color = Color3.fromRGB(40,40,40)
+
+    PCancelBtn.MouseButton1Click:Connect(function() 
+        ModalOverlay.Visible = false
+        PreviewBox.Visible = false
+        selectedModalId = nil 
+        currentModalAction = nil
+    end)
+    
+    PApplyBtn.MouseButton1Click:Connect(function() 
+        if selectedModalId then
+            if currentModalAction == "Skin" then
+                TransformarSkin(selectedModalId)
+            elseif currentModalAction == "Bundle" then
+                if currentActiveBundleId then
+                    local prevControl = bundleToggleControls[currentActiveBundleId]
+                    if prevControl then prevControl.SetVisual(false) end
+                end
+                currentActiveBundleId = nil
+                bundleEpoch = bundleEpoch + 1
+                ApplyBundleSafe(selectedModalId, bundleEpoch)
+            elseif currentModalAction == "Accessory" then
+                EquipAccessoryByID(selectedModalId)
+            end
+            ModalOverlay.Visible = false
+            PreviewBox.Visible = false
+        end
+    end)
+
+    -- Função Auxiliar para Criar Toggles no Grid Sincronizado
     local function CreateGridToggle(parent, text, iconId, defaultState, callback)
         local state = defaultState or false
 
@@ -759,7 +886,7 @@ return function(env)
         }
     end
 
-    -- Função Auxiliar para Criar os Presets de Bundle como Toggles Exclusivos (Estilo Radio Button)
+    -- Configuração de Presets de Bundle
     local function SetupBundleToggle(btn, bndl)
         local state = false
         local bId = bndl.Id
@@ -793,34 +920,18 @@ return function(env)
 
         local function Action(isActive)
             bundleEpoch = bundleEpoch + 1
-            local currentEpoch = bundleEpoch
-
             if isActive then
                 if currentActiveBundleId and currentActiveBundleId ~= bId then
                     local prevControl = bundleToggleControls[currentActiveBundleId]
-                    if prevControl then
-                        prevControl.SetVisual(false)
-                    end
+                    if prevControl then prevControl.SetVisual(false) end
                 end
                 currentActiveBundleId = bId
-
-                task.spawn(function()
-                    ApplyBundleSafe(bId, currentEpoch)
-                    if currentEpoch ~= bundleEpoch then return end
-
-                    if bundleConn then bundleConn:Disconnect() end
-                    bundleConn = LocalPlayer.CharacterAdded:Connect(function(char)
-                        ApplyBundleSafe(bId, currentEpoch)
-                    end)
-                end)
+                ApplyBundleSafe(bId, bundleEpoch)
             else
                 if currentActiveBundleId == bId then
                     currentActiveBundleId = nil
-                    if bundleConn then bundleConn:Disconnect() bundleConn = nil end
                     if getgenv().FixLoop then getgenv().FixLoop:Disconnect() getgenv().FixLoop = nil end
-                    if LocalPlayer.Character then
-                        RestoreCharacterAppearance(LocalPlayer.Character)
-                    end
+                    if LocalPlayer.Character then RestoreCharacterAppearance(LocalPlayer.Character) end
                 end
             end
         end
@@ -854,7 +965,7 @@ return function(env)
     end
 
     -- =======================================================
-    -- [1] COLUNA SPLIT (BUNDLE CHANGER + PARTS & ACCESSORIES) - TOPO
+    -- [1] COLUNA SPLIT (BUNDLE CHANGER + PARTS & ACCESSORIES)
     -- =======================================================
     local ColumnsContainer = Instance.new("Frame")
     ColumnsContainer.Name = "ColumnsContainer"
@@ -937,7 +1048,6 @@ return function(env)
     BCLabel.TextXAlignment = Enum.TextXAlignment.Left
     BCLabel.Parent = BCHeader
 
-    -- Input Box do Bundle Changer
     local BundleInputContainer = Instance.new("Frame")
     BundleInputContainer.Size = UDim2.new(1, 0, 0, 35)
     BundleInputContainer.BackgroundColor3 = Color3.new(0, 0, 0)
@@ -946,7 +1056,6 @@ return function(env)
     Instance.new("UICorner", BundleInputContainer).CornerRadius = UDim.new(0, 6)
     local bicStr = Instance.new("UIStroke", BundleInputContainer)
     bicStr.Color = Color3.fromRGB(40,40,40)
-    bicStr.Thickness = 1
 
     local BundleInputBox = Instance.new("TextBox")
     BundleInputBox.Size = UDim2.new(1, -40, 1, 0)
@@ -970,7 +1079,32 @@ return function(env)
     BundleSearchBtnIcon.ScaleType = Enum.ScaleType.Fit
     BundleSearchBtnIcon.Parent = BundleInputContainer
 
-    -- Presets do Bundle Changer
+    local function PerformBundleSearch()
+        local inputId = tonumber(BundleInputBox.Text)
+        if inputId then
+            task.spawn(function()
+                local bName = "Bundle Asset"
+                local success, info = pcall(function() return AssetService:GetBundleDetailsAsync(inputId) end)
+                if success and info then bName = info.Name end
+                
+                selectedModalId = inputId
+                currentModalAction = "Bundle"
+                PTitle.Text = "BUNDLE FOUND"
+                PDisplayName.Text = bName
+                PUsername.Text = "@ID: " .. tostring(inputId)
+                PApplyBtn.Text = "Apply Bundle"
+                PImage.Image = "rbxthumb://type=BundleThumbnail&id=" .. inputId .. "&w=150&h=150"
+                ModalOverlay.Visible = true
+                PreviewBox.Visible = true
+            end)
+        else
+            SendNotification("Please enter a valid Bundle ID.", 3)
+        end
+    end
+
+    BundleInputBox.FocusLost:Connect(function(enter) if enter then PerformBundleSearch() end end)
+    BundleSearchBtnIcon.MouseButton1Click:Connect(function() PerformBundleSearch() end)
+
     local BundlePresetsContainer = Instance.new("Frame")
     BundlePresetsContainer.Size = UDim2.new(1, 0, 0, 0)
     BundlePresetsContainer.BackgroundTransparency = 1
@@ -1031,11 +1165,7 @@ return function(env)
         SetupBundleToggle(Btn, bndl)
     end
 
-    BundleInputBox.FocusLost:Connect(function(enter) if enter then PerformBundleSearch() end end)
-    BundleSearchBtnIcon.MouseButton1Click:Connect(function() PerformBundleSearch() end)
-
-
-    -- [COLUNA DIREITA] - ACCESSORIES CHANGER (DESIGN 100% SINCRONIZADO)
+    -- [COLUNA DIREITA] - ACCESSORIES CHANGER
     local ExclusiveSection = Instance.new("Frame")
     ExclusiveSection.Name = "CategoryBox_AccessoriesChanger"
     ExclusiveSection.Size = UDim2.new(1, 0, 0, 0)
@@ -1046,7 +1176,6 @@ return function(env)
     ExclusiveSection.Parent = RightCol
 
     Instance.new("UICorner", ExclusiveSection).CornerRadius = UDim.new(0, 6)
-
     local ESStroke = Instance.new("UIStroke")
     ESStroke.Color = Color3.fromRGB(40, 40, 40)
     ESStroke.Thickness = 1
@@ -1081,7 +1210,6 @@ return function(env)
     ESLabel.TextXAlignment = Enum.TextXAlignment.Left
     ESLabel.Parent = ESHeader
     
-    -- Barra de Pesquisa de IDs Customizados (100% Sincronizada com o Bundle Changer)
     local CustomAssetInputContainer = Instance.new("Frame")
     CustomAssetInputContainer.Name = "CustomAssetInputContainer"
     CustomAssetInputContainer.Size = UDim2.new(1, 0, 0, 35)
@@ -1091,7 +1219,6 @@ return function(env)
     Instance.new("UICorner", CustomAssetInputContainer).CornerRadius = UDim.new(0, 6)
     local caiStr = Instance.new("UIStroke", CustomAssetInputContainer)
     caiStr.Color = Color3.fromRGB(40,40,40)
-    caiStr.Thickness = 1
 
     local CustomAssetInputBox = Instance.new("TextBox")
     CustomAssetInputBox.Size = UDim2.new(1, -40, 1, 0)
@@ -1120,32 +1247,27 @@ return function(env)
         if inputId then
             task.spawn(function()
                 local name = "Catalog Item"
-                local success, info = pcall(function()
-                    return MarketplaceService:GetProductInfo(inputId)
-                end)
-                if success and info then
-                    name = info.Name
-                end
+                local success, info = pcall(function() return MarketplaceService:GetProductInfo(inputId) end)
+                if success and info then name = info.Name end
                 
                 selectedModalId = inputId
                 currentModalAction = "Accessory"
                 PTitle.Text = "EQUIP ITEM"
                 PDisplayName.Text = name
-                PUsername.Text = "Asset ID: " .. tostring(inputId)
+                PUsername.Text = "@ID: " .. tostring(inputId)
                 PApplyBtn.Text = "Equip"
                 PImage.Image = "rbxthumb://type=Asset&id=" .. inputId .. "&w=150&h=150"
                 ModalOverlay.Visible = true
                 PreviewBox.Visible = true
             end)
         else
-            SendNotification("Por favor, insira um ID válido.", 3)
+            SendNotification("Please enter a valid Accessory ID.", 3)
         end
     end
 
     CustomAssetInputBox.FocusLost:Connect(function(enter) if enter then ProcessCustomAsset() end end)
     CustomAssetSearchBtnIcon.MouseButton1Click:Connect(ProcessCustomAsset)
 
-    -- Container do Grid de Toggles
     local TogglesGridContainer = Instance.new("Frame")
     TogglesGridContainer.Name = "TogglesGridContainer"
     TogglesGridContainer.Size = UDim2.new(1, 0, 0, 0)
@@ -1159,10 +1281,11 @@ return function(env)
     GridTgl.SortOrder = Enum.SortOrder.LayoutOrder
     GridTgl.Parent = TogglesGridContainer
 
-    -- Botões de Toggles Seguros de Race Conditions (Epoch-Safe)
+    -- Modificações com Aplicação Reativa Pós-Morte
     CreateGridToggle(TogglesGridContainer, "Headless", "rbxthumb://type=BundleThumbnail&id=201&w=150&h=150", false, function(state)
         headlessEpoch = headlessEpoch + 1
         local currentEpoch = headlessEpoch
+        ModifierStates.Headless = state
         
         if state then
             task.spawn(function()
@@ -1190,17 +1313,9 @@ return function(env)
                 end
                 
                 if currentEpoch ~= headlessEpoch then return end
-
-                if cachedHeadlessMesh then
-                    if LocalPlayer.Character then ApplyHeadless(LocalPlayer.Character, currentEpoch) end
-                    if headlessConn then headlessConn:Disconnect() end
-                    headlessConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyHeadless(char, currentEpoch) end)
-                else
-                    SendNotification("Failed to load Headless", 3)
-                end
+                if cachedHeadlessMesh and LocalPlayer.Character then ApplyHeadless(LocalPlayer.Character, currentEpoch) end
             end)
         else
-            if headlessConn then headlessConn:Disconnect() headlessConn = nil end
             if LocalPlayer.Character then RestoreHeadless(LocalPlayer.Character) end
         end
     end)
@@ -1208,6 +1323,7 @@ return function(env)
     CreateGridToggle(TogglesGridContainer, "Korblox", "rbxassetid://93791173513996", false, function(state)
         korbloxEpoch = korbloxEpoch + 1
         local currentEpoch = korbloxEpoch
+        ModifierStates.Korblox = state
         
         if state then
             task.spawn(function()
@@ -1236,17 +1352,9 @@ return function(env)
                 end
                 
                 if currentEpoch ~= korbloxEpoch then return end
-
-                if cachedKorbloxLeg then
-                    if LocalPlayer.Character then ApplyKorblox(LocalPlayer.Character, currentEpoch) end
-                    if korbloxConn then korbloxConn:Disconnect() end
-                    korbloxConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyKorblox(char, currentEpoch) end)
-                else
-                    SendNotification("Failed to load Korblox", 3)
-                end
+                if cachedKorbloxLeg and LocalPlayer.Character then ApplyKorblox(LocalPlayer.Character, currentEpoch) end
             end)
         else
-            if korbloxConn then korbloxConn:Disconnect() korbloxConn = nil end
             if LocalPlayer.Character then RestoreKorblox(LocalPlayer.Character) end
         end
     end)
@@ -1254,6 +1362,7 @@ return function(env)
     CreateGridToggle(TogglesGridContainer, "Skeleton Leg", "rbxassetid://118599491782541", false, function(state)
         skeletonEpoch = skeletonEpoch + 1
         local currentEpoch = skeletonEpoch
+        ModifierStates.Skeleton = state
         
         if state then
             task.spawn(function()
@@ -1282,17 +1391,9 @@ return function(env)
                 end
                 
                 if currentEpoch ~= skeletonEpoch then return end
-
-                if cachedSkeletonLeg then
-                    if LocalPlayer.Character then ApplySkeletonLeg(LocalPlayer.Character, currentEpoch) end
-                    if skeletonConn then skeletonConn:Disconnect() end
-                    skeletonConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplySkeletonLeg(char, currentEpoch) end)
-                else
-                    SendNotification("Failed to load Skeleton Leg", 3)
-                end
+                if cachedSkeletonLeg and LocalPlayer.Character then ApplySkeletonLeg(LocalPlayer.Character, currentEpoch) end
             end)
         else
-            if skeletonConn then skeletonConn:Disconnect() skeletonConn = nil end
             if LocalPlayer.Character then RestoreSkeletonLeg(LocalPlayer.Character) end
         end
     end)
@@ -1300,6 +1401,7 @@ return function(env)
     CreateGridToggle(TogglesGridContainer, "Zombie Leg", "rbxassetid://137720329950856", false, function(state)
         zombieEpoch = zombieEpoch + 1
         local currentEpoch = zombieEpoch
+        ModifierStates.Zombie = state
         
         if state then
             task.spawn(function()
@@ -1328,17 +1430,9 @@ return function(env)
                 end
                 
                 if currentEpoch ~= zombieEpoch then return end
-
-                if cachedZombieLeg then
-                    if LocalPlayer.Character then ApplyZombieLeg(LocalPlayer.Character, currentEpoch) end
-                    if zombieConn then zombieConn:Disconnect() end
-                    zombieConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyZombieLeg(char, currentEpoch) end)
-                else
-                    SendNotification("Failed to load Zombie Leg", 3)
-                end
+                if cachedZombieLeg and LocalPlayer.Character then ApplyZombieLeg(LocalPlayer.Character, currentEpoch) end
             end)
         else
-            if zombieConn then zombieConn:Disconnect() zombieConn = nil end
             if LocalPlayer.Character then RestoreZombieLeg(LocalPlayer.Character) end
         end
     end)
@@ -1346,30 +1440,15 @@ return function(env)
     CreateGridToggle(TogglesGridContainer, "Royal Scepter", "rbxthumb://type=Asset&id=123021068422074&w=150&h=150", false, function(state)
         scepterEpoch = scepterEpoch + 1
         local currentEpoch = scepterEpoch
+        ModifierStates.Scepter = state
         
         if state then
             task.spawn(function()
-                task.wait(0.5)
+                task.wait(0.2)
                 if currentEpoch ~= scepterEpoch then return end
-
-                local obj = loadAsset(123021068422074)
-                if currentEpoch ~= scepterEpoch then 
-                    if obj then obj:Destroy() end
-                    return 
-                end
-
-                if obj then
-                    obj.Name = "RoyalScepterAccessory"
-                    if scepterAccessory then scepterAccessory:Destroy() end
-                    scepterAccessory = obj
-                    SmartWeld(LocalPlayer.Character, obj)
-                end
-
-                if scepterConn then scepterConn:Disconnect() end
-                scepterConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyScepter(char, currentEpoch) end)
+                if LocalPlayer.Character then ApplyScepter(LocalPlayer.Character, currentEpoch) end
             end)
         else
-            if scepterConn then scepterConn:Disconnect() scepterConn = nil end
             if scepterAccessory then scepterAccessory:Destroy() scepterAccessory = nil end
             if LocalPlayer.Character then
                 local existing = LocalPlayer.Character:FindFirstChild("RoyalScepterAccessory")
@@ -1381,30 +1460,15 @@ return function(env)
     CreateGridToggle(TogglesGridContainer, "Mysterious Arrow", "rbxthumb://type=Asset&id=100766397788633&w=150&h=150", false, function(state)
         arrowEpoch = arrowEpoch + 1
         local currentEpoch = arrowEpoch
+        ModifierStates.Arrow = state
         
         if state then
             task.spawn(function()
-                task.wait(0.5)
+                task.wait(0.2)
                 if currentEpoch ~= arrowEpoch then return end
-
-                local obj = loadAsset(100766397788633)
-                if currentEpoch ~= arrowEpoch then 
-                    if obj then obj:Destroy() end
-                    return 
-                end
-
-                if obj then
-                    obj.Name = "MysteriousArrowAccessory"
-                    if arrowAccessory then arrowAccessory:Destroy() end
-                    arrowAccessory = obj
-                    SmartWeld(LocalPlayer.Character, obj)
-                end
-
-                if arrowConn then arrowConn:Disconnect() end
-                arrowConn = LocalPlayer.CharacterAdded:Connect(function(char) ApplyArrow(char, currentEpoch) end)
+                if LocalPlayer.Character then ApplyArrow(LocalPlayer.Character, currentEpoch) end
             end)
         else
-            if arrowConn then arrowConn:Disconnect() arrowConn = nil end
             if arrowAccessory then arrowAccessory:Destroy() arrowAccessory = nil end
             if LocalPlayer.Character then
                 local existing = LocalPlayer.Character:FindFirstChild("MysteriousArrowAccessory")
@@ -1413,9 +1477,8 @@ return function(env)
         end
     end)
 
-
     -- =======================================================
-    -- [ESPAÇADOR] - ENTRE O TOPO E O SKIN CHANGER
+    -- [ESPAÇADOR]
     -- =======================================================
     local LayoutSpacer = Instance.new("Frame")
     LayoutSpacer.Name = "LayoutSpacer"
@@ -1424,55 +1487,23 @@ return function(env)
     LayoutSpacer.LayoutOrder = 2
     LayoutSpacer.Parent = Page
 
-
     -- =======================================================
-    -- [2] SKIN CHANGER (LARGURA TOTAL, COM CONFIGURAÇÃO DE 3 COLUNAS)
+    -- [2] SKIN CHANGER (LARGURA TOTAL, GRADE DE 3 COLUNAS)
     -- =======================================================
-    local before = #Page:GetChildren()
     Library:CreateSection(Page, "Skin Changer")
     
-    -- Ajuste do cabeçalho original para ficar na ordem correta
     local pageChildren = Page:GetChildren()
     local lastSectionHeader = pageChildren[#pageChildren]
     if lastSectionHeader and lastSectionHeader:IsA("Frame") then
         lastSectionHeader.LayoutOrder = 3
     end
 
-    -- Container do Botão de Reset de Skin (Voltar ao Normal)
-    local ResetSkinBtn = Instance.new("TextButton")
-    ResetSkinBtn.Name = "ResetSkinBtn"
-    ResetSkinBtn.Size = UDim2.new(1, -2, 0, 30)
-    ResetSkinBtn.BackgroundColor3 = Color3.fromRGB(120, 25, 25)
-    ResetSkinBtn.BackgroundTransparency = 0.2
-    ResetSkinBtn.Text = "Reset Skin (Voltar ao Normal)"
-    ResetSkinBtn.Font = Theme.Font
-    ResetSkinBtn.TextSize = 12
-    ResetSkinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ResetSkinBtn.LayoutOrder = 4
-    ResetSkinBtn.Parent = Page
-    Instance.new("UICorner", ResetSkinBtn).CornerRadius = UDim.new(0, 6)
-    local rsStroke = Instance.new("UIStroke", ResetSkinBtn)
-    rsStroke.Color = Color3.fromRGB(60, 20, 20)
-    rsStroke.Thickness = 1
-
-    ResetSkinBtn.MouseButton1Click:Connect(function()
-        activeSkinUserId = nil
-        skinEpoch = skinEpoch + 1 -- Incrementa a época para anular aplicações pendentes
-        if skinConn then skinConn:Disconnect() skinConn = nil end
-        if getgenv().FixLoop then getgenv().FixLoop:Disconnect() getgenv().FixLoop = nil end
-        if LocalPlayer.Character then
-            RestoreCharacterAppearance(LocalPlayer.Character)
-        end
-        SendNotification("Skin reset to original!", 3)
-    end)
-
-    -- Input Box do Skin Changer
     local InputContainer = Instance.new("Frame")
     InputContainer.Size = UDim2.new(1, -2, 0, 35)
     InputContainer.Position = UDim2.new(0, 1, 0, 0)
     InputContainer.BackgroundColor3 = Color3.new(0, 0, 0)
     InputContainer.BackgroundTransparency = 0.45
-    InputContainer.LayoutOrder = 5
+    InputContainer.LayoutOrder = 4
     InputContainer.Parent = Page
     Instance.new("UICorner", InputContainer).CornerRadius = UDim.new(0, 6)
     local icStr = Instance.new("UIStroke", InputContainer)
@@ -1500,16 +1531,15 @@ return function(env)
     SearchBtnIcon.ScaleType = Enum.ScaleType.Fit
     SearchBtnIcon.Parent = InputContainer
 
-    -- Presets do Skin Changer (Redesenhados para exibir 3 colunas em vez de 2)
     local PresetsContainer = Instance.new("Frame")
     PresetsContainer.Size = UDim2.new(1, 0, 0, 0)
     PresetsContainer.BackgroundTransparency = 1
     PresetsContainer.AutomaticSize = Enum.AutomaticSize.Y
-    PresetsContainer.LayoutOrder = 6
+    PresetsContainer.LayoutOrder = 5
     PresetsContainer.Parent = Page
 
     local Grid = Instance.new("UIGridLayout")
-    Grid.CellSize = UDim2.new(0.333, -6, 0, 42) -- Grade de 3 Colunas
+    Grid.CellSize = UDim2.new(0.333, -6, 0, 42) 
     Grid.CellPadding = UDim2.new(0, 8, 0, 8)
     Grid.SortOrder = Enum.SortOrder.LayoutOrder
     Grid.Parent = PresetsContainer
@@ -1530,25 +1560,22 @@ return function(env)
                 selectedModalId = id
                 currentModalAction = "Skin"
                 PTitle.Text = "SKIN FOUND"
-                
-                -- Busca o Display Name real em background de forma segura
-                local displayName = text
-                pcall(function()
-                    local playerInstance = Players:GetPlayerByUserId(id)
-                    if playerInstance then
-                        displayName = playerInstance.DisplayName
-                    else
-                        local userInfo = game:GetService("UserService"):GetUserInfosByUserIdsAsync({id})[1]
-                        if userInfo then
-                            displayName = userInfo.DisplayName
-                        end
-                    end
-                end)
-                
-                PDisplayName.Text = displayName
-                PUsername.Text = "@" .. text
                 PApplyBtn.Text = "Apply Skin"
                 
+                -- Carregamento Estilizado de Nomes de Usuário (Assíncrono)
+                task.spawn(function()
+                    local success, result = pcall(function()
+                        return UserService:GetUserInfosByUserIdsAsync({id})
+                    end)
+                    if success and result and result[1] then
+                        PDisplayName.Text = result[1].DisplayName
+                        PUsername.Text = "@" .. result[1].Username
+                    else
+                        PDisplayName.Text = text
+                        PUsername.Text = "@" .. text
+                    end
+                end)
+
                 local thumb, isReady = Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
                 if isReady then
                     PImage.Image = thumb
@@ -1585,33 +1612,33 @@ return function(env)
         AvatarIcon.Parent = Btn
         Instance.new("UICorner", AvatarIcon).CornerRadius = UDim.new(0, 6)
 
-        -- Nome de Exibição (Mais Marcado / GothamBold)
+        -- Exibição de Nome de Exibição (Destaque Principal)
         local DisplayNameLabel = Instance.new("TextLabel")
         DisplayNameLabel.Size = UDim2.new(1, -40, 0, 18)
         DisplayNameLabel.Position = UDim2.new(0, 36, 0, 4)
         DisplayNameLabel.BackgroundTransparency = 1
-        DisplayNameLabel.Text = name -- Fallback inicial com Username
-        DisplayNameLabel.Font = Theme.Font -- GothamBold
+        DisplayNameLabel.Text = name
+        DisplayNameLabel.Font = Enum.Font.GothamBold -- Negrito / Chamativo
         DisplayNameLabel.TextScaled = true
-        local dConst = Instance.new("UITextSizeConstraint", DisplayNameLabel)
-        dConst.MinTextSize = 7
-        dConst.MaxTextSize = 11
-        DisplayNameLabel.TextColor3 = Theme.Text -- Branco brilhante
+        local dnsConst = Instance.new("UITextSizeConstraint", DisplayNameLabel)
+        dnsConst.MinTextSize = 7
+        dnsConst.MaxTextSize = 11
+        DisplayNameLabel.TextColor3 = Theme.Text
         DisplayNameLabel.TextXAlignment = Enum.TextXAlignment.Left
         DisplayNameLabel.Parent = Btn
 
-        -- Nome de Usuário (Normal / Gotham)
+        -- Exibição do Username Real (Sutil e Normal)
         local UsernameLabel = Instance.new("TextLabel")
         UsernameLabel.Size = UDim2.new(1, -40, 0, 14)
         UsernameLabel.Position = UDim2.new(0, 36, 0, 22)
         UsernameLabel.BackgroundTransparency = 1
         UsernameLabel.Text = "@" .. name
-        UsernameLabel.Font = Enum.Font.Gotham
+        UsernameLabel.Font = Enum.Font.Gotham -- Sutil / Normal
         UsernameLabel.TextScaled = true
-        local uConst = Instance.new("UITextSizeConstraint", UsernameLabel)
-        uConst.MinTextSize = 6
-        uConst.MaxTextSize = 9
-        UsernameLabel.TextColor3 = Theme.TextDark -- Cinza suave
+        local unsConst = Instance.new("UITextSizeConstraint", UsernameLabel)
+        unsConst.MinTextSize = 7
+        unsConst.MaxTextSize = 9
+        UsernameLabel.TextColor3 = Theme.TextDark
         UsernameLabel.TextXAlignment = Enum.TextXAlignment.Left
         UsernameLabel.Parent = Btn
 
@@ -1624,46 +1651,17 @@ return function(env)
                 local thumb = Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
                 AvatarIcon.Image = thumb
                 
-                -- Carrega o Display Name real em background e atualiza o label principal do preset
-                pcall(function()
-                    local userInfo = game:GetService("UserService"):GetUserInfosByUserIdsAsync({id})[1]
-                    if userInfo and userInfo.DisplayName then
-                        DisplayNameLabel.Text = userInfo.DisplayName
-                    end
+                -- Sincronizando Display Names e Usernames reais nos cartões
+                local success, result = pcall(function()
+                    return UserService:GetUserInfosByUserIdsAsync({id})
                 end)
+                if success and result and result[1] then
+                    DisplayNameLabel.Text = result[1].DisplayName
+                    UsernameLabel.Text = "@" .. result[1].Username
+                end
             end
         end)
         
         Btn.MouseButton1Click:Connect(function() PerformSearch(name) end)
     end
-
-    -- Sistema de Proteção Ativa Anti-Morte / Anti-Reset (Skin Changer)
-    PApplyBtn.MouseButton1Click:Connect(function() 
-        if selectedModalId and currentModalAction == "Skin" then
-            activeSkinUserId = selectedModalId
-            skinEpoch = skinEpoch + 1
-            local currentEpoch = skinEpoch
-            
-            -- Limpa bundles ativos para evitar conflitos na re-aplicação
-            if currentActiveBundleId then
-                local prevControl = bundleToggleControls[currentActiveBundleId]
-                if prevControl then prevControl.SetVisual(false) end
-                currentActiveBundleId = nil
-                if bundleConn then bundleConn:Disconnect() bundleConn = nil end
-            end
-            
-            task.spawn(function()
-                TransformarSkinSafe(selectedModalId, currentEpoch)
-                if currentEpoch ~= skinEpoch then return end
-                
-                if skinConn then skinConn:Disconnect() end
-                skinConn = LocalPlayer.CharacterAdded:Connect(function(char)
-                    TransformarSkinSafe(selectedModalId, currentEpoch)
-                end)
-            end)
-            
-            ModalOverlay.Visible = false
-            PreviewBox.Visible = false
-        end
-    end)
 end
