@@ -1028,6 +1028,7 @@ return function(env)
     Instance.new("UICorner", BundleInputContainer).CornerRadius = UDim.new(0, 6)
     local bicStr = Instance.new("UIStroke", BundleInputContainer)
     bicStr.Color = Color3.fromRGB(40,40,40)
+    bicStr.Thickness = 1
 
     local BundleInputBox = Instance.new("TextBox")
     BundleInputBox.Size = UDim2.new(1, -40, 1, 0)
@@ -1116,7 +1117,7 @@ return function(env)
     BundleSearchBtnIcon.MouseButton1Click:Connect(function() PerformBundleSearch() end)
 
 
-    -- [COLUNA DIREITA] - ACCESSORIES CHANGER
+    -- [COLUNA DIREITA] - ACCESSORIES CHANGER (DESIGN 100% SINCRONIZADO)
     local ExclusiveSection = Instance.new("Frame")
     ExclusiveSection.Name = "CategoryBox_AccessoriesChanger"
     ExclusiveSection.Size = UDim2.new(1, 0, 0, 0)
@@ -1162,7 +1163,7 @@ return function(env)
     ESLabel.TextXAlignment = Enum.TextXAlignment.Left
     ESLabel.Parent = ESHeader
     
-    -- Barra de Pesquisa de IDs Customizados
+    -- Barra de Pesquisa de IDs Customizados (100% Sincronizada com o Bundle Changer)
     local CustomAssetInputContainer = Instance.new("Frame")
     CustomAssetInputContainer.Name = "CustomAssetInputContainer"
     CustomAssetInputContainer.Size = UDim2.new(1, 0, 0, 35)
@@ -1172,6 +1173,7 @@ return function(env)
     Instance.new("UICorner", CustomAssetInputContainer).CornerRadius = UDim.new(0, 6)
     local caiStr = Instance.new("UIStroke", CustomAssetInputContainer)
     caiStr.Color = Color3.fromRGB(40,40,40)
+    caiStr.Thickness = 1
 
     local CustomAssetInputBox = Instance.new("TextBox")
     CustomAssetInputBox.Size = UDim2.new(1, -40, 1, 0)
@@ -1182,7 +1184,7 @@ return function(env)
     CustomAssetInputBox.TextColor3 = Theme.Text
     CustomAssetInputBox.PlaceholderColor3 = Theme.TextDark
     CustomAssetInputBox.Font = Theme.Font
-    CustomAssetInputBox.TextSize = 11
+    CustomAssetInputBox.TextSize = 13
     CustomAssetInputBox.TextXAlignment = Enum.TextXAlignment.Left
     CustomAssetInputBox.Parent = CustomAssetInputContainer
 
@@ -1505,7 +1507,7 @@ return function(env)
 
 
     -- =======================================================
-    -- [2] SKIN CHANGER (TOTALMENTE IGUAL AO ORIGINAL, LARGURA TOTAL) - BASE
+    -- [2] SKIN CHANGER (LARGURA TOTAL, COM CONFIGURAÇÃO DE 3 COLUNAS)
     -- =======================================================
     local before = #Page:GetChildren()
     Library:CreateSection(Page, "Skin Changer")
@@ -1551,7 +1553,7 @@ return function(env)
     SearchBtnIcon.ScaleType = Enum.ScaleType.Fit
     SearchBtnIcon.Parent = InputContainer
 
-    -- Presets do Skin Changer
+    -- Presets do Skin Changer (Redesenhados para exibir 3 colunas em vez de 2)
     local PresetsContainer = Instance.new("Frame")
     PresetsContainer.Size = UDim2.new(1, 0, 0, 0)
     PresetsContainer.BackgroundTransparency = 1
@@ -1560,7 +1562,7 @@ return function(env)
     PresetsContainer.Parent = Page
 
     local Grid = Instance.new("UIGridLayout")
-    Grid.CellSize = UDim2.new(0.5, -4, 0, 42) 
+    Grid.CellSize = UDim2.new(0.333, -6, 0, 42) -- Modificado de 0.5 para 0.333 (Grade de 3 Colunas)
     Grid.CellPadding = UDim2.new(0, 8, 0, 8)
     Grid.SortOrder = Enum.SortOrder.LayoutOrder
     Grid.Parent = PresetsContainer
