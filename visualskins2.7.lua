@@ -26,13 +26,13 @@ return function(env)
     local scepterEpoch = 0
     local arrowEpoch = 0
 
-    -- Estados de Ativação dos Acessórios (para persistência e reaplicação)
-    local isHeadlessActive = false
-    local isKorbloxActive = false
-    local isSkeletonActive = false
-    local isZombieActive = false
-    local isScepterActive = false
-    local isArrowActive = false
+    -- Estados Ativos de cada Acessório (para reaplicação automática)
+    local headlessToggleActive = false
+    local korbloxToggleActive = false
+    local skeletonToggleActive = false
+    local zombieToggleActive = false
+    local scepterToggleActive = false
+    local arrowToggleActive = false
 
     -- Controle de Estado Exclusivo do Bundle Changer
     local currentActiveBundleId = nil
@@ -41,8 +41,8 @@ return function(env)
     local bundleConn = nil
     local characterBackups = setmetatable({}, {__mode = "k"})
 
-    -- Controle de Estado Exclusivo do Skin Changer
-    local currentActiveSkinUserId = nil
+    -- Controle do Skin Changer (Anti-Reset)
+    local activeSkinUserId = nil
     local skinConn = nil
 
     -- Funções Core de Auxílio
@@ -143,6 +143,20 @@ return function(env)
         handleEquip(asset)
     end
 
+    -- Sistema de Reaplicação Automática de Acessórios ao trocar de visuais
+    local function ReapplyActiveToggles(char)
+        if not char then return end
+        task.spawn(function()
+            task.wait(0.3) -- Breve intervalo assíncrono para garantir que as novas roupas/meshes carreguem primeiro
+            if headlessToggleActive then ApplyHeadless(char, headlessEpoch) end
+            if korbloxToggleActive then ApplyKorblox(char, korbloxEpoch) end
+            if skeletonToggleActive then ApplySkeletonLeg(char, skeletonEpoch) end
+            if zombieToggleActive then ApplyZombieLeg(char, zombieEpoch) end
+            if scepterToggleActive then ApplyScepter(char, scepterEpoch) end
+            if arrowToggleActive then ApplyArrow(char, arrowEpoch) end
+        end)
+    end
+
     local function StartFixLoop(char, colorTable, originalHeadTextureId)
         if getgenv().FixLoop then getgenv().FixLoop:Disconnect() end
         getgenv().FixLoop = RunService.RenderStepped:Connect(function()
@@ -178,6 +192,97 @@ return function(env)
                 end
             end
         end)
+    end
+
+    local function TransformarSkin(userId)
+        local char = LocalPlayer.Character
+        if not char then return end
+        
+        BackupCharacterAppearance(char)
+        
+        local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(userId) end)
+        if not s or not desc then 
+            SendNotification("Não foi possível carregar a skin.", 3)
+            return 
+        end
+        
+        local realColors = { ["Head"] = desc.HeadColor,["Torso"] = desc.TorsoColor,["Left Arm"] = desc.LeftArmColor,["Right Arm"] = desc.RightArmColor,["Left Leg"] = desc.LeftLegColor,["Right Leg"] = desc.RightLegColor }
+        local dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
+        dummy.Name = "AssetSource"
+        dummy.Parent = workspace
+        dummy:SetPrimaryPartCFrame(CFrame.new(0, -500, 0))
+        task.wait(1.0)
+        
+        local targetHeadTexture = ""
+        local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
+        if dummyMesh then targetHeadTexture = dummyMesh.TextureId end
+        
+        for _, v in pairs(char:GetChildren()) do 
+            if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
+                v:Destroy() 
+            end 
+        end
+        if char:FindFirstChild("Head") and char.Head:FindFirstChild("face") then char.Head.face:Destroy() end
+        
+        local myMesh = char.Head:FindFirstChildOfClass("SpecialMesh")
+        if not myMesh then myMesh = Instance.new("SpecialMesh", char.Head) end
+        
+        if dummyMesh then 
+            myMesh.MeshType = dummyMesh.MeshType
+            myMesh.MeshId = dummyMesh.MeshId
+            myMesh.Scale = dummyMesh.Scale
+            myMesh.TextureId = targetHeadTexture
+        else
+            myMesh.MeshType = Enum.MeshType.Head
+            myMesh.MeshId = ""
+            myMesh.Scale = Vector3.new(1.25, 1.25, 1.25)
+            myMesh.TextureId = ""
+        end
+        myMesh.VertexColor = Vector3.new(1,1,1) 
+        
+        for _, item in pairs(dummy:GetChildren()) do if item:IsA("CharacterMesh") then item:Clone().Parent = char end end
+        for _, item in pairs(dummy:GetChildren()) do 
+            if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
+                item:Clone().Parent = char 
+            end 
+        end
+
+        local faceDecal = Instance.new("Decal")
+        faceDecal.Name = "face"
+        local dummyFace = dummy.Head:FindFirstChild("face")
+        
+        if dummyFace then
+            faceDecal.Texture = dummyFace.Texture
+        elseif desc.Face and desc.Face > 0 then
+            faceDecal.Texture = "rbxassetid://" .. desc.Face
+        else
+            faceDecal.Texture = "rbxasset://textures/face.png"
+        end
+        faceDecal.Parent = char.Head
+        
+        local newBC = Instance.new("BodyColors")
+        newBC.HeadColor3 = desc.HeadColor
+        newBC.TorsoColor3 = desc.TorsoColor
+        newBC.LeftArmColor3 = desc.LeftArmColor
+        newBC.RightArmColor3 = desc.RightArmColor
+        newBC.LeftLegColor3 = desc.LeftLegColor
+        newBC.RightLegColor3 = desc.RightLegColor
+        newBC.Parent = char
+        
+        StartFixLoop(char, realColors, targetHeadTexture)
+        
+        for _, item in pairs(dummy:GetChildren()) do 
+            if item:IsA("Accessory") then 
+                local clone = item:Clone()
+                SmartWeld(char, clone) 
+            end 
+        end
+        dummy:Destroy()
+        
+        -- Garante a persistência de acessórios ativos por cima do novo visual
+        ReapplyActiveToggles(char)
+        
+        SendNotification("Skin Applied Successfully!", 3)
     end
 
     -- Sistema de Backup e Restauração local de Personagem (Substitui o LoadCharacter instável)
@@ -271,28 +376,25 @@ return function(env)
         end
     end
 
-    -- Reaplicação automática de itens ativos quando uma skin ou bundle é modificado
-    local function ReapplyActiveAccessories(char)
-        if not char then return end
-        task.spawn(function()
-            task.wait(0.2) -- Aguarda as peças carregarem de forma limpa antes da injeção
-            if isHeadlessActive and cachedHeadlessMesh then
-                ApplyHeadless(char, headlessEpoch)
-            end
-            if isKorbloxActive and cachedKorbloxLeg then
-                ApplyKorblox(char, korbloxEpoch)
-            end
-            if isSkeletonActive and cachedSkeletonLeg then
-                ApplySkeletonLeg(char, skeletonEpoch)
-            end
-            if isZombieActive and cachedZombieLeg then
-                ApplyZombieLeg(char, zombieEpoch)
-            end
-            if isScepterActive then
-                ApplyScepter(char, scepterEpoch)
-            end
-            if isArrowActive then
-                ApplyArrow(char, arrowEpoch)
+    -- Gerenciador Ativo do Skin Changer (Integração de Anti-Reset)
+    local function SetActiveSkin(userId)
+        activeSkinUserId = userId
+        
+        -- Desativa visualmente o bundle anterior se houver
+        if currentActiveBundleId then
+            local prevControl = bundleToggleControls[currentActiveBundleId]
+            if prevControl then prevControl.SetVisual(false) end
+            currentActiveBundleId = nil
+        end
+        if bundleConn then bundleConn:Disconnect() bundleConn = nil end
+        
+        TransformarSkin(userId)
+        
+        if skinConn then skinConn:Disconnect() end
+        skinConn = LocalPlayer.CharacterAdded:Connect(function(char)
+            task.wait(0.5)
+            if activeSkinUserId == userId then
+                TransformarSkin(userId)
             end
         end)
     end
@@ -389,11 +491,13 @@ return function(env)
         end
         dummy:Destroy()
         
-        ReapplyActiveAccessories(char) -- Reaplicar Korblox, etc.
+        -- Garante a persistência de acessórios ativos por cima do novo visual
+        ReapplyActiveToggles(char)
+        
         SendNotification("Bundle Applied Successfully!", 3)
     end
 
-    -- SISTEMA DE APLICAÇÃO PREVENIDO DE RACE CONDITIONS (ACESSÓRIOS CHANGER)
+    -- SISTEMA DE APLICAÇÃO PREVENIDO DE RACE CONDITIONS
     local cachedHeadlessMesh = nil
     local headlessConn = nil
     local headlessBackups = {}
@@ -587,118 +691,214 @@ return function(env)
         end
     end
 
-    -- Lógica de Aplicação Persistente e Protegida do Skin Changer
-    local function ApplySkinLogic(userId)
-        local char = LocalPlayer.Character
-        if not char then return end
-        
-        BackupCharacterAppearance(char)
-        
-        local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(userId) end)
-        if not s or not desc then 
-            SendNotification("Não foi possível carregar a skin.", 3)
-            return 
+    -- Criação do Modal de Confirmação
+    local PreviewBox = Instance.new("Frame")
+    PreviewBox.Size = UDim2.new(0, 260, 0, 130)
+    PreviewBox.AnchorPoint = Vector2.new(0.5, 0.5)
+    PreviewBox.Position = UDim2.new(0.5, 0, 0.5, 0)
+    PreviewBox.BackgroundColor3 = Color3.new(0,0,0)
+    PreviewBox.BackgroundTransparency = 0.15
+    PreviewBox.BorderSizePixel = 0
+    PreviewBox.ZIndex = 11
+    PreviewBox.Visible = false
+    PreviewBox.Parent = ModalOverlay
+
+    local PBStroke = Instance.new("UIStroke")
+    PBStroke.Color = Color3.fromRGB(40, 40, 40)
+    PBStroke.Parent = PreviewBox
+    
+    local PBTopLine = Instance.new("Frame")
+    PBTopLine.Size = UDim2.new(1, 0, 0, 2)
+    PBTopLine.BackgroundColor3 = Theme.Accent
+    PBTopLine.BorderSizePixel = 0
+    PBTopLine.ZIndex = 12
+    PBTopLine.Parent = PreviewBox
+    ApplyGradient(PBTopLine, Theme.Accent, Theme.AccentDark, 0)
+
+    local PTitle = Instance.new("TextLabel")
+    PTitle.Parent = PreviewBox
+    PTitle.Text = "FOUND"
+    PTitle.Font = Theme.Font
+    PTitle.TextSize = 14
+    PTitle.TextColor3 = Theme.Accent
+    PTitle.Size = UDim2.new(1, 0, 0, 35)
+    PTitle.BackgroundTransparency = 1
+    PTitle.ZIndex = 12
+
+    local PImage = Instance.new("ImageLabel")
+    PImage.Size = UDim2.new(0, 46, 0, 46)
+    PImage.Position = UDim2.new(0, 20, 0, 35)
+    PImage.BackgroundColor3 = Theme.SwitchOff
+    PImage.ZIndex = 12
+    PImage.Parent = PreviewBox
+    Instance.new("UICorner", PImage).CornerRadius = UDim.new(0, 6)
+
+    local PName = Instance.new("TextLabel")
+    PName.Text = "Name"
+    PName.Size = UDim2.new(1, -80, 0, 46)
+    PName.Position = UDim2.new(0, 75, 0, 35)
+    PName.BackgroundTransparency = 1
+    PName.TextColor3 = Theme.Text
+    PName.Font = Enum.Font.Gotham
+    PName.TextSize = 13
+    PName.TextXAlignment = Enum.TextXAlignment.Left
+    PName.ZIndex = 12
+    PName.Parent = PreviewBox
+
+    local PApplyBtn = Instance.new("TextButton")
+    PApplyBtn.Text = "Apply"
+    PApplyBtn.Size = UDim2.new(0, 100, 0, 28)
+    PApplyBtn.Position = UDim2.new(0, 20, 0, 90)
+    PApplyBtn.BackgroundColor3 = Theme.Accent
+    PApplyBtn.TextColor3 = Color3.new(0,0,0)
+    PApplyBtn.Font = Theme.Font
+    PApplyBtn.TextSize = 12
+    PApplyBtn.ZIndex = 12
+    PApplyBtn.Parent = PreviewBox
+    Instance.new("UICorner", PApplyBtn).CornerRadius = UDim.new(0, 4)
+    ApplyGradient(PApplyBtn, Theme.Accent, Theme.AccentDark, 90)
+
+    local PCancelBtn = Instance.new("TextButton")
+    PCancelBtn.Text = "Cancel"
+    PCancelBtn.Size = UDim2.new(0, 100, 0, 28)
+    PCancelBtn.Position = UDim2.new(1, -120, 0, 90)
+    PCancelBtn.BackgroundColor3 = Color3.new(0, 0, 0)
+    PCancelBtn.BackgroundTransparency = 0.45
+    PCancelBtn.TextColor3 = Theme.TextDark
+    PCancelBtn.Font = Theme.Font
+    PCancelBtn.TextSize = 12
+    PCancelBtn.ZIndex = 12
+    PCancelBtn.Parent = PreviewBox
+    Instance.new("UICorner", PCancelBtn).CornerRadius = UDim.new(0, 4)
+    local pcbStr = Instance.new("UIStroke", PCancelBtn)
+    pcbStr.Color = Color3.fromRGB(40,40,40)
+
+    PCancelBtn.MouseButton1Click:Connect(function() 
+        ModalOverlay.Visible = false
+        PreviewBox.Visible = false
+        selectedModalId = nil 
+        currentModalAction = nil
+    end)
+    
+    PApplyBtn.MouseButton1Click:Connect(function() 
+        if selectedModalId then
+            if currentModalAction == "Skin" then
+                SetActiveSkin(selectedModalId)
+            elseif currentModalAction == "Bundle" then
+                if currentActiveBundleId then
+                    local prevControl = bundleToggleControls[currentActiveBundleId]
+                    if prevControl then prevControl.SetVisual(false) end
+                end
+                currentActiveBundleId = nil
+                
+                bundleEpoch = bundleEpoch + 1
+                local currentEpoch = bundleEpoch
+                
+                task.spawn(function()
+                    ApplyBundleSafe(selectedModalId, currentEpoch)
+                    if currentEpoch ~= bundleEpoch then return end
+                    if bundleConn then bundleConn:Disconnect() end
+                    bundleConn = LocalPlayer.CharacterAdded:Connect(function(char)
+                        ApplyBundleSafe(selectedModalId, currentEpoch)
+                    end)
+                end)
+            elseif currentModalAction == "Accessory" then
+                EquipAccessoryByID(selectedModalId)
+            end
+            ModalOverlay.Visible = false
+            PreviewBox.Visible = false
         end
-        
-        local realColors = { ["Head"] = desc.HeadColor,["Torso"] = desc.TorsoColor,["Left Arm"] = desc.LeftArmColor,["Right Arm"] = desc.RightArmColor,["Left Leg"] = desc.LeftLegColor,["Right Leg"] = desc.RightLegColor }
-        local dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
-        dummy.Name = "AssetSource"
-        dummy.Parent = workspace
-        dummy:SetPrimaryPartCFrame(CFrame.new(0, -500, 0))
-        task.wait(1.0)
-        
-        local targetHeadTexture = ""
-        local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
-        if dummyMesh then targetHeadTexture = dummyMesh.TextureId end
-        
-        for _, v in pairs(char:GetChildren()) do 
-            if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
-                v:Destroy() 
-            end 
-        end
-        if char:FindFirstChild("Head") and char.Head:FindFirstChild("face") then char.Head.face:Destroy() end
-        
-        local myMesh = char.Head:FindFirstChildOfClass("SpecialMesh")
-        if not myMesh then myMesh = Instance.new("SpecialMesh", char.Head) end
-        
-        if dummyMesh then 
-            myMesh.MeshType = dummyMesh.MeshType
-            myMesh.MeshId = dummyMesh.MeshId
-            myMesh.Scale = dummyMesh.Scale
-            myMesh.TextureId = targetHeadTexture
-        else
-            myMesh.MeshType = Enum.MeshType.Head
-            myMesh.MeshId = ""
-            myMesh.Scale = Vector3.new(1.25, 1.25, 1.25)
-            myMesh.TextureId = ""
-        end
-        myMesh.VertexColor = Vector3.new(1,1,1) 
-        
-        for _, item in pairs(dummy:GetChildren()) do if item:IsA("CharacterMesh") then item:Clone().Parent = char end end
-        for _, item in pairs(dummy:GetChildren()) do 
-            if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
-                item:Clone().Parent = char 
-            end 
+    end)
+
+    -- Função Auxiliar para Criar Toggles no estilo de Cartões de Presets do Bundle Changer (Grid Sincronizado)
+    local function CreateGridToggle(parent, text, iconId, defaultState, callback)
+        local state = defaultState or false
+
+        local Btn = Instance.new("TextButton")
+        Btn.BackgroundColor3 = Color3.new(0, 0, 0)
+        Btn.BackgroundTransparency = 0.45
+        Btn.Text = ""
+        Btn.Parent = parent
+        Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
+
+        local BStroke = Instance.new("UIStroke")
+        BStroke.Color = Color3.fromRGB(40, 40, 40)
+        BStroke.Thickness = 1
+        BStroke.Parent = Btn
+
+        local Icon = Instance.new("ImageLabel")
+        Icon.Size = UDim2.new(0, 28, 0, 28)
+        Icon.Position = UDim2.new(0, 7, 0.5, -14)
+        Icon.BackgroundColor3 = Theme.SwitchOff
+        Icon.BackgroundTransparency = 0.5
+        Icon.Image = iconId
+        Icon.Parent = Btn
+        Instance.new("UICorner", Icon).CornerRadius = UDim.new(0, 6)
+
+        local NameLabel = Instance.new("TextLabel")
+        NameLabel.Size = UDim2.new(1, -40, 1, 0)
+        NameLabel.Position = UDim2.new(0, 36, 0, 0)
+        NameLabel.BackgroundTransparency = 1
+        NameLabel.Text = text
+        NameLabel.Font = Theme.Font
+        NameLabel.TextScaled = true
+        local nsConst = Instance.new("UITextSizeConstraint", NameLabel)
+        nsConst.MinTextSize = 7
+        nsConst.MaxTextSize = 11
+        NameLabel.TextColor3 = Theme.TextDark
+        NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        NameLabel.Parent = Btn
+
+        local Indicator = Instance.new("Frame")
+        Indicator.Size = UDim2.new(0, 6, 0, 6)
+        Indicator.Position = UDim2.new(1, -12, 0, 6)
+        Indicator.BackgroundColor3 = Theme.Accent
+        Indicator.Visible = false
+        Indicator.Parent = Btn
+        Instance.new("UICorner", Indicator).CornerRadius = UDim.new(1, 0)
+        ApplyGradient(Indicator, Theme.Accent, Theme.AccentDark, 90)
+
+        local function Upd(fireCallback)
+            if state then
+                TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
+                TweenService:Create(NameLabel, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
+                Indicator.Visible = true
+            else
+                TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
+                TweenService:Create(NameLabel, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
+                Indicator.Visible = false
+            end
+            if fireCallback then pcall(callback, state) end
         end
 
-        local faceDecal = Instance.new("Decal")
-        faceDecal.Name = "face"
-        local dummyFace = dummy.Head:FindFirstChild("face")
-        
-        if dummyFace then
-            faceDecal.Texture = dummyFace.Texture
-        elseif desc.Face and desc.Face > 0 then
-            faceDecal.Texture = "rbxassetid://" .. desc.Face
-        else
-            faceDecal.Texture = "rbxasset://textures/face.png"
-        end
-        faceDecal.Parent = char.Head
-        
-        local newBC = Instance.new("BodyColors")
-        newBC.HeadColor3 = desc.HeadColor
-        newBC.TorsoColor3 = desc.TorsoColor
-        newBC.LeftArmColor3 = desc.LeftArmColor
-        newBC.RightArmColor3 = desc.RightArmColor
-        newBC.LeftLegColor3 = desc.LeftLegColor
-        newBC.RightLegColor3 = desc.RightLegColor
-        newBC.Parent = char
-        
-        StartFixLoop(char, realColors, targetHeadTexture)
-        
-        for _, item in pairs(dummy:GetChildren()) do 
-            if item:IsA("Accessory") then 
-                local clone = item:Clone()
-                SmartWeld(char, clone) 
-            end 
-        end
-        dummy:Destroy()
-        
-        ReapplyActiveAccessories(char) -- Reaplicação de Korblox/Headless por cima da nova Skin
-        SendNotification("Skin Applied Successfully!", 3)
-    end
-
-    local function TransformarSkin(userId)
-        currentActiveSkinUserId = userId
-        
-        -- Garante a remoção da conexão de bundle caso esteja ativa para evitar conflitos
-        if currentActiveBundleId then
-            local prevControl = bundleToggleControls[currentActiveBundleId]
-            if prevControl then prevControl.SetVisual(false) end
-        end
-        currentActiveBundleId = nil
-        if bundleConn then bundleConn:Disconnect() bundleConn = nil end
-        
-        if LocalPlayer.Character then
-            task.spawn(ApplySkinLogic, userId)
-        end
-        
-        if skinConn then skinConn:Disconnect() end
-        skinConn = LocalPlayer.CharacterAdded:Connect(function(char)
-            task.spawn(ApplySkinLogic, userId)
+        Btn.MouseEnter:Connect(function()
+            if not state then
+                TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(80, 80, 80)}):Play()
+            end
         end)
+        Btn.MouseLeave:Connect(function()
+            if not state then
+                TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
+            end
+        end)
+
+        Btn.MouseButton1Click:Connect(function()
+            state = not state
+            Upd(true)
+        end)
+
+        Upd(false)
+        if state then task.spawn(function() pcall(callback, state) end) end
+
+        return {
+            Set = function(val)
+                state = val
+                Upd(true)
+            end
+        }
     end
 
-    -- RECONEXÃO COMPLETA DO BUNDLE CHANGER COM PROTEÇÃO DE SKIN
+    -- Função Auxiliar para Criar os Presets de Bundle como Toggles Exclusivos (Estilo Radio Button)
     local function SetupBundleToggle(btn, bndl)
         local state = false
         local bId = bndl.Id
@@ -735,8 +935,7 @@ return function(env)
             local currentEpoch = bundleEpoch
 
             if isActive then
-                -- Desativa conexões de Skin Changer se houver
-                currentActiveSkinUserId = nil
+                activeSkinUserId = nil
                 if skinConn then skinConn:Disconnect() skinConn = nil end
 
                 if currentActiveBundleId and currentActiveBundleId ~= bId then
@@ -1058,6 +1257,35 @@ return function(env)
     CustomAssetSearchBtnIcon.ScaleType = Enum.ScaleType.Fit
     CustomAssetSearchBtnIcon.Parent = CustomAssetInputContainer
 
+    local function ProcessCustomAsset()
+        local inputId = tonumber(CustomAssetInputBox.Text)
+        if inputId then
+            task.spawn(function()
+                local name = "Catalog Item"
+                local success, info = pcall(function()
+                    return MarketplaceService:GetProductInfo(inputId)
+                end)
+                if success and info then
+                    name = info.Name
+                end
+                
+                selectedModalId = inputId
+                currentModalAction = "Accessory"
+                PTitle.Text = "EQUIP ITEM"
+                PName.Text = name
+                PApplyBtn.Text = "Equip"
+                PImage.Image = "rbxthumb://type=Asset&id=" .. inputId .. "&w=150&h=150"
+                ModalOverlay.Visible = true
+                PreviewBox.Visible = true
+            end)
+        else
+            SendNotification("Por favor, insira um ID válido.", 3)
+        end
+    end
+
+    CustomAssetInputBox.FocusLost:Connect(function(enter) if enter then ProcessCustomAsset() end end)
+    CustomAssetSearchBtnIcon.MouseButton1Click:Connect(ProcessCustomAsset)
+
     -- Container do Grid de Toggles
     local TogglesGridContainer = Instance.new("Frame")
     TogglesGridContainer.Name = "TogglesGridContainer"
@@ -1075,8 +1303,8 @@ return function(env)
     -- Botões de Toggles Seguros de Race Conditions (Epoch-Safe)
     CreateGridToggle(TogglesGridContainer, "Headless", "rbxthumb://type=BundleThumbnail&id=201&w=150&h=150", false, function(state)
         headlessEpoch = headlessEpoch + 1
+        headlessToggleActive = state
         local currentEpoch = headlessEpoch
-        isHeadlessActive = state
         
         if state then
             task.spawn(function()
@@ -1121,8 +1349,8 @@ return function(env)
     
     CreateGridToggle(TogglesGridContainer, "Korblox", "rbxassetid://93791173513996", false, function(state)
         korbloxEpoch = korbloxEpoch + 1
+        korbloxToggleActive = state
         local currentEpoch = korbloxEpoch
-        isKorbloxActive = state
         
         if state then
             task.spawn(function()
@@ -1168,8 +1396,8 @@ return function(env)
 
     CreateGridToggle(TogglesGridContainer, "Skeleton Leg", "rbxassetid://118599491782541", false, function(state)
         skeletonEpoch = skeletonEpoch + 1
+        skeletonToggleActive = state
         local currentEpoch = skeletonEpoch
-        isSkeletonActive = state
         
         if state then
             task.spawn(function()
@@ -1215,8 +1443,8 @@ return function(env)
 
     CreateGridToggle(TogglesGridContainer, "Zombie Leg", "rbxassetid://137720329950856", false, function(state)
         zombieEpoch = zombieEpoch + 1
+        zombieToggleActive = state
         local currentEpoch = zombieEpoch
-        isZombieActive = state
         
         if state then
             task.spawn(function()
@@ -1262,8 +1490,8 @@ return function(env)
 
     CreateGridToggle(TogglesGridContainer, "Royal Scepter", "rbxthumb://type=Asset&id=123021068422074&w=150&h=150", false, function(state)
         scepterEpoch = scepterEpoch + 1
+        scepterToggleActive = state
         local currentEpoch = scepterEpoch
-        isScepterActive = state
         
         if state then
             task.spawn(function()
@@ -1298,8 +1526,8 @@ return function(env)
 
     CreateGridToggle(TogglesGridContainer, "Mysterious Arrow", "rbxthumb://type=Asset&id=100766397788633&w=150&h=150", false, function(state)
         arrowEpoch = arrowEpoch + 1
+        arrowToggleActive = state
         local currentEpoch = arrowEpoch
-        isArrowActive = state
         
         if state then
             task.spawn(function()
@@ -1459,35 +1687,35 @@ return function(env)
         AvatarIcon.Parent = Btn
         Instance.new("UICorner", AvatarIcon).CornerRadius = UDim.new(0, 6)
 
-        -- Nome de Exibição (Mais Marcado / No topo do cartão)
-        local DisplayNameLabel = Instance.new("TextLabel")
-        DisplayNameLabel.Size = UDim2.new(1, -40, 0, 18)
-        DisplayNameLabel.Position = UDim2.new(0, 36, 0, 4)
-        DisplayNameLabel.BackgroundTransparency = 1
-        DisplayNameLabel.Text = name -- Fallback inicial
-        DisplayNameLabel.Font = Theme.Font
-        DisplayNameLabel.TextScaled = true
-        local dnConst = Instance.new("UITextSizeConstraint", DisplayNameLabel)
-        dnConst.MinTextSize = 7
-        dnConst.MaxTextSize = 11
-        DisplayNameLabel.TextColor3 = Theme.Text
-        DisplayNameLabel.TextXAlignment = Enum.TextXAlignment.Left
-        DisplayNameLabel.Parent = Btn
+        -- Exibe o Display Name do jogador como título principal (mais destacado)
+        local DisplayLabel = Instance.new("TextLabel")
+        DisplayLabel.Size = UDim2.new(1, -40, 0, 18)
+        DisplayLabel.Position = UDim2.new(0, 36, 0, 4)
+        DisplayLabel.BackgroundTransparency = 1
+        DisplayLabel.Text = name -- Texto temporário até carregar
+        DisplayLabel.Font = Theme.Font -- GothamBold
+        DisplayLabel.TextScaled = true
+        local dConst = Instance.new("UITextSizeConstraint", DisplayLabel)
+        dConst.MinTextSize = 7
+        dConst.MaxTextSize = 11
+        DisplayLabel.TextColor3 = Theme.Text -- Bolder / white
+        DisplayLabel.TextXAlignment = Enum.TextXAlignment.Left
+        DisplayLabel.Parent = Btn
 
-        -- Nome Principal com @ (Mais discreto / Embaixo do nome de exibição)
-        local UsernameLabel = Instance.new("TextLabel")
-        UsernameLabel.Size = UDim2.new(1, -40, 0, 14)
-        UsernameLabel.Position = UDim2.new(0, 36, 0, 21)
-        UsernameLabel.BackgroundTransparency = 1
-        UsernameLabel.Text = "@" .. name
-        UsernameLabel.Font = Enum.Font.Gotham
-        UsernameLabel.TextScaled = true
-        local unConst = Instance.new("UITextSizeConstraint", UsernameLabel)
-        unConst.MinTextSize = 6
-        unConst.MaxTextSize = 9
-        UsernameLabel.TextColor3 = Theme.TextDark
-        UsernameLabel.TextXAlignment = Enum.TextXAlignment.Left
-        UsernameLabel.Parent = Btn
+        -- Exibe o Username do jogador embaixo (normal/darker)
+        local UserLabel = Instance.new("TextLabel")
+        UserLabel.Size = UDim2.new(1, -40, 0, 14)
+        UserLabel.Position = UDim2.new(0, 36, 0, 22)
+        UserLabel.BackgroundTransparency = 1
+        UserLabel.Text = "@" .. name
+        UserLabel.Font = Enum.Font.Gotham
+        UserLabel.TextScaled = true
+        local uConst = Instance.new("UITextSizeConstraint", UserLabel)
+        uConst.MinTextSize = 6
+        uConst.MaxTextSize = 9
+        UserLabel.TextColor3 = Theme.TextDark -- Normal / dimmer / gray
+        UserLabel.TextXAlignment = Enum.TextXAlignment.Left
+        UserLabel.Parent = Btn
 
         Btn.MouseEnter:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play() end)
         Btn.MouseLeave:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
@@ -1498,20 +1726,15 @@ return function(env)
                 local thumb = Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
                 AvatarIcon.Image = thumb
                 
-                -- Busca o DisplayName de forma assíncrona protegida
-                local displayName = name
-                local success, userInfo = pcall(function()
-                    return game:GetService("UserService"):GetUserInfosByUserIdsAsync({id})[1]
-                end)
-                if success and userInfo and userInfo.DisplayName then
-                    displayName = userInfo.DisplayName
+                -- Busca o Display Name real do jogador de forma assíncrona
+                local success, userInfo = pcall(function() return Players:GetUserInformationAsync(id) end)
+                if success and userInfo then
+                    DisplayLabel.Text = userInfo.DisplayName
+                    UserLabel.Text = "@" .. userInfo.Username
                 end
-                
-                DisplayNameLabel.Text = displayName
-                UsernameLabel.Text = "@" .. name
             end
         end)
         
-        Btn.MouseButton1Click:Connect(function() TransformarSkin(id) end)
+        Btn.MouseButton1Click:Connect(function() PerformSearch(name) end)
     end
 end
