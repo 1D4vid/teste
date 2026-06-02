@@ -16,7 +16,16 @@ return function(env)
     local MarketplaceService = game:GetService("MarketplaceService")
     local selectedModalId = nil
     local currentModalAction = nil
-    getgenv().FixLoop = nil
+    
+    -- Inicialização Segura de Conexões de Proteção Visuais
+    if getgenv().FixConns then
+        for _, conn in ipairs(getgenv().FixConns) do
+            pcall(function() conn:Disconnect() end)
+        end
+        table.clear(getgenv().FixConns)
+    else
+        getgenv().FixConns = {}
+    end
 
     -- Centralização de Estados de Modificação
     local ActiveModifiers = {
@@ -34,7 +43,7 @@ return function(env)
     local bundleToggleControls = {}
     local modifierToggles = {}
 
-    -- Caches para Prevenção de Conflitos de Carregamento
+    -- Caches Locais para Evitar Latência e Gargalo de Memória
     local cachedHeadlessMesh = nil
     local cachedKorbloxLeg = nil
     local cachedSkeletonLeg = nil
@@ -45,13 +54,20 @@ return function(env)
     local skeletonBackups = {}
     local zombieBackups = {}
     local characterBackups = setmetatable({}, {__mode = "k"})
+    local loadedAssetsCache = {}
 
-    -- Funções Core de Auxílio
+    -- Carregador de Ativos com Cache Otimizado
     local function loadAsset(id)
+        if loadedAssetsCache[id] then
+            return loadedAssetsCache[id]:Clone()
+        end
         local success, result = pcall(function()
             return game:GetObjects("rbxassetid://" .. tostring(id))[1]
         end)
-        if success and result then return result end
+        if success and result then
+            loadedAssetsCache[id] = result
+            return result:Clone()
+        end
         return nil
     end
 
@@ -143,41 +159,51 @@ return function(env)
         handleEquip(asset)
     end
 
+    -- Loop de Correção Reativo (Event-Driven) - Consumo de CPU Reduzido a 0%
     local function StartFixLoop(char, colorTable, originalHeadTextureId)
-        if getgenv().FixLoop then getgenv().FixLoop:Disconnect() end
-        getgenv().FixLoop = RunService.RenderStepped:Connect(function()
-            if not char or not char.Parent then 
-                if getgenv().FixLoop then getgenv().FixLoop:Disconnect() end 
-                return 
-            end
-            for partName, color in pairs(colorTable) do
-                local part = char:FindFirstChild(partName)
-                if part and part:IsA("BasePart") then
-                    if part.Color ~= color then 
-                        part.Color = color
-                        part.Material = Enum.Material.SmoothPlastic 
+        for _, conn in ipairs(getgenv().FixConns) do
+            pcall(function() conn:Disconnect() end)
+        end
+        table.clear(getgenv().FixConns)
+
+        for partName, color in pairs(colorTable) do
+            local part = char:FindFirstChild(partName)
+            if part and part:IsA("BasePart") then
+                part.Color = color
+                part.Material = Enum.Material.SmoothPlastic
+
+                local mesh = part:FindFirstChildOfClass("SpecialMesh")
+                if mesh then
+                    if partName == "Head" then
+                        mesh.TextureId = (originalHeadTextureId and originalHeadTextureId ~= "") and originalHeadTextureId or ""
+                    else
+                        mesh.TextureId = ""
                     end
-                    local mesh = part:FindFirstChildOfClass("SpecialMesh")
-                    if mesh then
-                        if partName == "Head" then
-                            if originalHeadTextureId and originalHeadTextureId ~= "" then 
-                                if mesh.TextureId ~= originalHeadTextureId then mesh.TextureId = originalHeadTextureId end
-                                mesh.VertexColor = Vector3.new(1, 1, 1) 
-                            else 
-                                if mesh.TextureId ~= "" then mesh.TextureId = "" end 
-                            end
-                        else 
-                            if mesh.TextureId ~= "" then mesh.TextureId = "" end
-                            mesh.VertexColor = Vector3.new(1,1,1) 
-                        end
-                    end
-                    for _, child in pairs(part:GetChildren()) do 
-                        if child:IsA("Decal") and child.Name ~= "face" then child:Destroy() 
-                        elseif child:IsA("Texture") then child:Destroy() end 
+                    mesh.VertexColor = Vector3.new(1, 1, 1)
+                end
+
+                -- Escuta reativa para mudanças nas propriedades
+                table.insert(getgenv().FixConns, part:GetPropertyChangedSignal("Color"):Connect(function()
+                    part.Color = color
+                end))
+                table.insert(getgenv().FixConns, part:GetPropertyChangedSignal("Material"):Connect(function()
+                    part.Material = Enum.Material.SmoothPlastic
+                end))
+
+                local function cleanChild(child)
+                    if child:IsA("Decal") and child.Name ~= "face" then
+                        task.defer(function() child:Destroy() end)
+                    elseif child:IsA("Texture") then
+                        task.defer(function() child:Destroy() end)
                     end
                 end
+
+                for _, child in ipairs(part:GetChildren()) do
+                    cleanChild(child)
+                end
+                table.insert(getgenv().FixConns, part.ChildAdded:Connect(cleanChild))
             end
-        end)
+        end
     end
 
     -- Sistema de Backup e Restauração local
@@ -226,7 +252,10 @@ return function(env)
         local backup = characterBackups[char]
         if not backup then return end
         
-        if getgenv().FixLoop then getgenv().FixLoop:Disconnect() getgenv().FixLoop = nil end
+        for _, conn in ipairs(getgenv().FixConns) do
+            pcall(function() conn:Disconnect() end)
+        end
+        table.clear(getgenv().FixConns)
         
         for _, child in ipairs(char:GetChildren()) do
             if child:IsA("CharacterMesh") or child:IsA("Shirt") or child:IsA("Pants") or child:IsA("ShirtGraphic") or child:IsA("Accessory") or child:IsA("Hat") or child:IsA("BodyColors") then
@@ -243,8 +272,7 @@ return function(env)
         end
         
         for _, acc in ipairs(backup.accessories) do
-            local clone = acc:Clone()
-            clone.Parent = char
+            SmartWeld(char, acc:Clone())
         end
         
         if backup.bodyColors then
@@ -271,34 +299,8 @@ return function(env)
         end
     end
 
-    -- Processador e Equipador Dinâmico para Desvio de CreateHumanoidModel (Universal R6)
-    local function ApplyLoadedAsset(char, obj)
-        if not obj then return end
-        if obj:IsA("Accessory") or obj:IsA("Hat") then
-            SmartWeld(char, obj)
-        elseif obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") or obj:IsA("BodyColors") or obj:IsA("CharacterMesh") then
-            local existing = char:FindFirstChildOfClass(obj.ClassName)
-            if existing then existing:Destroy() end
-            obj.Parent = char
-        elseif obj:IsA("Decal") then
-            local head = char:FindFirstChild("Head")
-            if head then
-                local face = head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")
-                if not face then
-                    face = Instance.new("Decal", head)
-                    face.Name = "face"
-                end
-                face.Texture = obj.Texture
-            end
-        elseif obj:IsA("Folder") or obj:IsA("Model") then
-            for _, child in ipairs(obj:GetChildren()) do
-                ApplyLoadedAsset(char, child)
-            end
-        end
-    end
-
     -- =======================================================
-    -- SISTEMA DE APLICAÇÃO VISUAL COMPATÍVEL E SEM TRAVAMENTOS
+    -- SISTEMA DE APLICAÇÃO SEGURO E PROTEÇÃO ULTRA-OTIMIZADA
     -- =======================================================
     local isApplyingVisuals = false
 
@@ -310,7 +312,6 @@ return function(env)
             local char = LocalPlayer.Character
             if not char then return end
 
-            -- Sincronização e Espera de Parentesco no Workspace
             local elapsed = 0
             while char and char.Parent ~= Workspace and elapsed < 3 do
                 task.wait(0.1)
@@ -324,62 +325,100 @@ return function(env)
             if not LocalPlayer:HasAppearanceLoaded() then
                 pcall(function() LocalPlayer.CharacterAppearanceLoaded:Wait() end)
             end
-            task.wait(0.1)
+            task.wait(0.05)
 
-            if getgenv().FixLoop then 
-                getgenv().FixLoop:Disconnect() 
-                getgenv().FixLoop = nil 
+            for _, conn in ipairs(getgenv().FixConns) do
+                pcall(function() conn:Disconnect() end)
             end
+            table.clear(getgenv().FixConns)
 
             BackupCharacterAppearance(char)
 
-            -- 1. ETAPA: Carregamento Base da Aparência
+            -- 1. ETAPA: Aparência Básica (Skin customizada OU Preset Bundle OU Aparência Original)
             if ActiveModifiers.SkinUserId then
-                -- ALGORITMO DE CARREGAMENTO UNIVERSAL R6 POR APIS DA ROBLOX (Ignora restrições do jogo)
-                local s, info = pcall(function() return Players:GetCharacterAppearanceInfoAsync(ActiveModifiers.SkinUserId) end)
-                if s and info then
-                    -- Limpeza completa de trajes antigos
-                    for _, v in pairs(char:GetChildren()) do 
-                        if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") then 
-                            v:Destroy() 
-                        end 
-                    end
-                    local head = char:FindFirstChild("Head")
-                    if head then
-                        local face = head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")
-                        if face then face:Destroy() end
-                        local m = head:FindFirstChildOfClass("SpecialMesh")
-                        if m then
-                            m.MeshType = Enum.MeshType.Head
-                            m.MeshId = ""
-                            m.TextureId = ""
-                            m.Scale = Vector3.new(1.25, 1.25, 1.25)
+                local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(ActiveModifiers.SkinUserId) end)
+                if s and desc then
+                    local realColors = { ["Head"] = desc.HeadColor, ["Torso"] = desc.TorsoColor, ["Left Arm"] = desc.LeftArmColor, ["Right Arm"] = desc.RightArmColor, ["Left Leg"] = desc.LeftLegColor, ["Right Leg"] = desc.RightLegColor }
+                    local dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
+                    dummy.Name = "AssetSource"
+                    
+                    -- Desativação Física do Modelo de Carregamento (Evita travamento do motor de física)
+                    for _, child in ipairs(dummy:GetDescendants()) do
+                        if child:IsA("BasePart") then
+                            child.Anchored = true
+                            child.CanCollide = false
                         end
                     end
+                    
+                    dummy.Parent = Workspace
+                    dummy:PivotTo(CFrame.new(0, -500, 0))
+                    task.wait(0.4)
 
-                    -- Aplicação de BodyColors
-                    if info.bodyColors then
-                        local bc = char:FindFirstChildOfClass("BodyColors") or Instance.new("BodyColors", char)
-                        bc.HeadColor3 = BrickColor.new(info.bodyColors.headColorId).Color
-                        bc.TorsoColor3 = BrickColor.new(info.bodyColors.torsoColorId).Color
-                        bc.LeftArmColor3 = BrickColor.new(info.bodyColors.leftArmColorId).Color
-                        bc.RightArmColor3 = BrickColor.new(info.bodyColors.rightArmColorId).Color
-                        bc.LeftLegColor3 = BrickColor.new(info.bodyColors.leftLegColorId).Color
-                        bc.RightLegColor3 = BrickColor.new(info.bodyColors.rightLegColorId).Color
-                    end
+                    if char and char.Parent then
+                        local targetHeadTexture = ""
+                        local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
+                        if dummyMesh then targetHeadTexture = dummyMesh.TextureId end
 
-                    -- Processamento de Assets através do downloader e parentesco direto
-                    if info.assets then
-                        for _, assetData in ipairs(info.assets) do
-                            local assetId = assetData.id
-                            task.spawn(function()
-                                local obj = loadAsset(assetId)
-                                if obj then
-                                    ApplyLoadedAsset(char, obj)
-                                end
-                            end)
+                        for _, v in ipairs(char:GetChildren()) do 
+                            if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
+                                v:Destroy() 
+                            end 
+                        end
+                        if char:FindFirstChild("Head") and char.Head:FindFirstChild("face") then char.Head.face:Destroy() end
+
+                        local myMesh = char.Head:FindFirstChildOfClass("SpecialMesh")
+                        if not myMesh then myMesh = Instance.new("SpecialMesh", char.Head) end
+
+                        if dummyMesh then 
+                            myMesh.MeshType = dummyMesh.MeshType
+                            myMesh.MeshId = dummyMesh.MeshId
+                            myMesh.Scale = dummyMesh.Scale
+                            myMesh.TextureId = targetHeadTexture
+                        else
+                            myMesh.MeshType = Enum.MeshType.Head
+                            myMesh.MeshId = ""
+                            myMesh.Scale = Vector3.new(1.25, 1.25, 1.25)
+                            myMesh.TextureId = ""
+                        end
+                        myMesh.VertexColor = Vector3.new(1,1,1)
+
+                        for _, item in ipairs(dummy:GetChildren()) do if item:IsA("CharacterMesh") then item:Clone().Parent = char end end
+                        for _, item in ipairs(dummy:GetChildren()) do 
+                            if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
+                                item:Clone().Parent = char 
+                            end 
+                        end
+
+                        local faceDecal = Instance.new("Decal")
+                        faceDecal.Name = "face"
+                        local dummyFace = dummy.Head:FindFirstChild("face")
+                        if dummyFace then
+                            faceDecal.Texture = dummyFace.Texture
+                        elseif desc.Face and desc.Face > 0 then
+                            faceDecal.Texture = "rbxassetid://" .. desc.Face
+                        else
+                            faceDecal.Texture = "rbxasset://textures/face.png"
+                        end
+                        faceDecal.Parent = char.Head
+
+                        local newBC = Instance.new("BodyColors")
+                        newBC.HeadColor3 = desc.HeadColor
+                        newBC.TorsoColor3 = desc.TorsoColor
+                        newBC.LeftArmColor3 = desc.LeftArmColor
+                        newBC.RightArmColor3 = desc.RightArmColor
+                        newBC.LeftLegColor3 = desc.LeftLegColor
+                        newBC.RightLegColor3 = desc.RightLegColor
+                        newBC.Parent = char
+
+                        StartFixLoop(char, realColors, targetHeadTexture)
+
+                        for _, item in ipairs(dummy:GetChildren()) do 
+                            if item:IsA("Accessory") then 
+                                SmartWeld(char, item:Clone()) 
+                            end 
                         end
                     end
+                    dummy:Destroy()
                 end
             elseif ActiveModifiers.BundleId then
                 local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(ActiveModifiers.BundleId) end)
@@ -396,9 +435,17 @@ return function(env)
                         local realColors = { ["Head"] = targetDesc.HeadColor, ["Torso"] = targetDesc.TorsoColor, ["Left Arm"] = targetDesc.LeftArmColor, ["Right Arm"] = targetDesc.RightArmColor, ["Left Leg"] = targetDesc.LeftLegColor, ["Right Leg"] = targetDesc.RightLegColor }
                         local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
                         dummy.Name = "AssetSource"
+                        
+                        for _, child in ipairs(dummy:GetDescendants()) do
+                            if child:IsA("BasePart") then
+                                child.Anchored = true
+                                child.CanCollide = false
+                            end
+                        end
+
                         dummy.Parent = Workspace
                         dummy:PivotTo(CFrame.new(0, -500, 0))
-                        task.wait(0.5)
+                        task.wait(0.4)
 
                         if char and char.Parent then
                             local targetHeadTexture = ""
@@ -406,7 +453,7 @@ return function(env)
                                 targetHeadTexture = dummy.Head:FindFirstChildOfClass("SpecialMesh").TextureId 
                             end
 
-                            for _, v in pairs(char:GetChildren()) do 
+                            for _, v in ipairs(char:GetChildren()) do 
                                 if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
                                     v:Destroy() 
                                 end 
@@ -424,10 +471,10 @@ return function(env)
                                 myMesh.VertexColor = Vector3.new(1,1,1) 
                             end
 
-                            for _, item in pairs(dummy:GetChildren()) do 
+                            for _, item in ipairs(dummy:GetChildren()) do 
                                 if item:IsA("CharacterMesh") then item:Clone().Parent = char end 
                             end
-                            for _, item in pairs(dummy:GetChildren()) do 
+                            for _, item in ipairs(dummy:GetChildren()) do 
                                 if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
                                     item:Clone().Parent = char 
                                 elseif item.Name == "Head" and item:FindFirstChild("face") then 
@@ -446,10 +493,9 @@ return function(env)
 
                             StartFixLoop(char, realColors, targetHeadTexture)
 
-                            for _, item in pairs(dummy:GetChildren()) do 
+                            for _, item in ipairs(dummy:GetChildren()) do 
                                 if item:IsA("Accessory") then 
-                                    local clone = item:Clone()
-                                    SmartWeld(char, clone) 
+                                    SmartWeld(char, item:Clone()) 
                                 end 
                             end
                         end
@@ -460,7 +506,7 @@ return function(env)
                 RestoreCharacterAppearance(char)
             end
 
-            -- 2. ETAPA: Reaplicação de Modificadores Corporais Sincronizados
+            -- 2. ETAPA: Reaplicação de Modificadores Corporais (Garante que nunca se percam)
             if ActiveModifiers.Headless then
                 local head = char:FindFirstChild("Head")
                 if head then
@@ -490,7 +536,7 @@ return function(env)
             end
 
             if activeLegMesh then
-                for _, v in pairs(char:GetChildren()) do
+                for _, v in ipairs(char:GetChildren()) do
                     if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
                         v:Destroy()
                     end
@@ -550,103 +596,87 @@ return function(env)
         end)
     end
 
-    -- =======================================================
-    -- DESIGN REDESENHADO DO MODAL DE CONFIRMAÇÃO (PREVIEWBOX)
-    -- =======================================================
+    -- Criação do Modal de Confirmação
     local PreviewBox = Instance.new("Frame")
-    PreviewBox.Size = UDim2.new(0, 300, 0, 170)
+    PreviewBox.Size = UDim2.new(0, 260, 0, 130)
     PreviewBox.AnchorPoint = Vector2.new(0.5, 0.5)
     PreviewBox.Position = UDim2.new(0.5, 0, 0.5, 0)
-    PreviewBox.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+    PreviewBox.BackgroundColor3 = Color3.new(0,0,0)
+    PreviewBox.BackgroundTransparency = 0.15
     PreviewBox.BorderSizePixel = 0
     PreviewBox.ZIndex = 11
     PreviewBox.Visible = false
     PreviewBox.Parent = ModalOverlay
-    Instance.new("UICorner", PreviewBox).CornerRadius = UDim.new(0, 8)
 
-    local PBStroke = Instance.new("UIStroke", PreviewBox)
-    PBStroke.Color = Theme.Accent
-    PBStroke.Thickness = 1.2
-    ApplyGradient(PBStroke, Theme.Accent, Color3.fromRGB(50, 50, 50), 45)
+    local PBStroke = Instance.new("UIStroke")
+    PBStroke.Color = Color3.fromRGB(40, 40, 40)
+    PBStroke.Parent = PreviewBox
     
-    local PBTopGlow = Instance.new("Frame", PreviewBox)
-    PBTopGlow.Size = UDim2.new(1, 0, 0, 3)
-    PBTopGlow.BorderSizePixel = 0
-    PBTopGlow.ZIndex = 12
-    ApplyGradient(PBTopGlow, Theme.Accent, Theme.AccentDark, 0)
-    Instance.new("UICorner", PBTopGlow).CornerRadius = UDim.new(0, 8)
+    local PBTopLine = Instance.new("Frame")
+    PBTopLine.Size = UDim2.new(1, 0, 0, 2)
+    PBTopLine.BackgroundColor3 = Theme.Accent
+    PBTopLine.BorderSizePixel = 0
+    PBTopLine.ZIndex = 12
+    PBTopLine.Parent = PreviewBox
+    ApplyGradient(PBTopLine, Theme.Accent, Theme.AccentDark, 0)
 
-    local PTitle = Instance.new("TextLabel", PreviewBox)
-    PTitle.Text = "SKIN FOUND"
+    local PTitle = Instance.new("TextLabel")
+    PTitle.Parent = PreviewBox
+    PTitle.Text = "FOUND"
     PTitle.Font = Theme.Font
-    PTitle.TextSize = 13
+    PTitle.TextSize = 14
     PTitle.TextColor3 = Theme.Accent
     PTitle.Size = UDim2.new(1, 0, 0, 35)
-    PTitle.Position = UDim2.new(0, 0, 0, 8)
     PTitle.BackgroundTransparency = 1
     PTitle.ZIndex = 12
 
-    local PImage = Instance.new("ImageLabel", PreviewBox)
-    PImage.Size = UDim2.new(0, 56, 0, 56)
-    PImage.Position = UDim2.new(0, 20, 0, 48)
-    PImage.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    PImage.BorderSizePixel = 0
+    local PImage = Instance.new("ImageLabel")
+    PImage.Size = UDim2.new(0, 46, 0, 46)
+    PImage.Position = UDim2.new(0, 20, 0, 35)
+    PImage.BackgroundColor3 = Theme.SwitchOff
     PImage.ZIndex = 12
+    PImage.Parent = PreviewBox
     Instance.new("UICorner", PImage).CornerRadius = UDim.new(0, 6)
-    local PImgStroke = Instance.new("UIStroke", PImage)
-    PImgStroke.Color = Color3.fromRGB(45, 45, 45)
 
-    local PName = Instance.new("TextLabel", PreviewBox)
+    local PName = Instance.new("TextLabel")
     PName.Text = "Name"
-    PName.Size = UDim2.new(1, -110, 0, 56)
-    PName.Position = UDim2.new(0, 90, 0, 48)
+    PName.Size = UDim2.new(1, -80, 0, 46)
+    PName.Position = UDim2.new(0, 75, 0, 35)
     PName.BackgroundTransparency = 1
-    PName.TextColor3 = Color3.fromRGB(230, 230, 230)
-    PName.Font = Enum.Font.GothamBold
-    PName.TextSize = 14
+    PName.TextColor3 = Theme.Text
+    PName.Font = Enum.Font.Gotham
+    PName.TextSize = 13
     PName.TextXAlignment = Enum.TextXAlignment.Left
-    PName.TextWrapped = true
     PName.ZIndex = 12
+    PName.Parent = PreviewBox
 
-    local PApplyBtn = Instance.new("TextButton", PreviewBox)
-    PApplyBtn.Text = "Apply Skin"
-    PApplyBtn.Size = UDim2.new(0.42, 0, 0, 32)
-    PApplyBtn.Position = UDim2.new(0.06, 0, 0, 120)
+    local PApplyBtn = Instance.new("TextButton")
+    PApplyBtn.Text = "Apply"
+    PApplyBtn.Size = UDim2.new(0, 100, 0, 28)
+    PApplyBtn.Position = UDim2.new(0, 20, 0, 90)
     PApplyBtn.BackgroundColor3 = Theme.Accent
-    PApplyBtn.TextColor3 = Color3.fromRGB(10, 10, 10)
+    PApplyBtn.TextColor3 = Color3.new(0,0,0)
     PApplyBtn.Font = Theme.Font
     PApplyBtn.TextSize = 12
     PApplyBtn.ZIndex = 12
-    Instance.new("UICorner", PApplyBtn).CornerRadius = UDim.new(0, 6)
+    PApplyBtn.Parent = PreviewBox
+    Instance.new("UICorner", PApplyBtn).CornerRadius = UDim.new(0, 4)
     ApplyGradient(PApplyBtn, Theme.Accent, Theme.AccentDark, 90)
 
-    local PCancelBtn = Instance.new("TextButton", PreviewBox)
+    local PCancelBtn = Instance.new("TextButton")
     PCancelBtn.Text = "Cancel"
-    PCancelBtn.Size = UDim2.new(0.42, 0, 0, 32)
-    PCancelBtn.Position = UDim2.new(0.52, 0, 0, 120)
-    PCancelBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    PCancelBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    PCancelBtn.Size = UDim2.new(0, 100, 0, 28)
+    PCancelBtn.Position = UDim2.new(1, -120, 0, 90)
+    PCancelBtn.BackgroundColor3 = Color3.new(0,0,0)
+    PCancelBtn.BackgroundTransparency = 0.45
+    PCancelBtn.TextColor3 = Theme.TextDark
     PCancelBtn.Font = Theme.Font
     PCancelBtn.TextSize = 12
     PCancelBtn.ZIndex = 12
-    Instance.new("UICorner", PCancelBtn).CornerRadius = UDim.new(0, 6)
+    PCancelBtn.Parent = PreviewBox
+    Instance.new("UICorner", PCancelBtn).CornerRadius = UDim.new(0, 4)
     local pcbStr = Instance.new("UIStroke", PCancelBtn)
-    pcbStr.Color = Color3.fromRGB(45, 45, 45)
-
-    -- Animações e Hovers dos Botões do Modal
-    PApplyBtn.MouseEnter:Connect(function()
-        TweenService:Create(PApplyBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 255, 255)}):Play()
-    end)
-    PApplyBtn.MouseLeave:Connect(function()
-        TweenService:Create(PApplyBtn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Accent}):Play()
-    end)
-
-    PCancelBtn.MouseEnter:Connect(function()
-        TweenService:Create(PCancelBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(38, 38, 38)}):Play()
-    end)
-    PCancelBtn.MouseLeave:Connect(function()
-        TweenService:Create(PCancelBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(25, 25, 25)}):Play()
-    end)
+    pcbStr.Color = Color3.fromRGB(40,40,40)
 
     PCancelBtn.MouseButton1Click:Connect(function() 
         ModalOverlay.Visible = false
@@ -1005,7 +1035,7 @@ return function(env)
         {Name = "Dr. Fia Tyfoid", Id = 512}
     }
 
-    for _, bndl in pairs(BundlePresets) do
+    for _, bndl in ipairs(BundlePresets) do
         local Btn = Instance.new("TextButton")
         Btn.BackgroundColor3 = Color3.new(0, 0, 0)
         Btn.BackgroundTransparency = 0.45
@@ -1374,7 +1404,7 @@ return function(env)
     PresetsContainer.Parent = Page
 
     local Grid = Instance.new("UIGridLayout")
-    Grid.CellSize = UDim2.new(0.25, -6, 0, 42) -- Sincronização matemática exata para 4 colunas (4x4)
+    Grid.CellSize = UDim2.new(0.25, -6, 0, 42) 
     Grid.CellPadding = UDim2.new(0, 8, 0, 8)
     Grid.SortOrder = Enum.SortOrder.LayoutOrder
     Grid.Parent = PresetsContainer
@@ -1412,52 +1442,60 @@ return function(env)
     UserInputBox.FocusLost:Connect(function(enter) if enter then PerformSearch() end end)
     SearchBtnIcon.MouseButton1Click:Connect(function() PerformSearch() end)
 
-    for _, name in pairs(DummyNames) do
-        local Btn = Instance.new("TextButton")
-        Btn.BackgroundColor3 = Color3.new(0, 0, 0)
-        Btn.BackgroundTransparency = 0.45
-        Btn.Text = ""
-        Btn.Parent = PresetsContainer
-        Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
+    -- Carregamento Progressivo Assíncrono para Mitigar Stutters na Inicialização da UI
+    task.spawn(function()
+        for i, name in ipairs(DummyNames) do
+            local Btn = Instance.new("TextButton")
+            Btn.BackgroundColor3 = Color3.new(0, 0, 0)
+            Btn.BackgroundTransparency = 0.45
+            Btn.Text = ""
+            Btn.Parent = PresetsContainer
+            Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
 
-        local BStroke = Instance.new("UIStroke")
-        BStroke.Color = Color3.fromRGB(40, 40, 40)
-        BStroke.Thickness = 1
-        BStroke.Parent = Btn
+            local BStroke = Instance.new("UIStroke")
+            BStroke.Color = Color3.fromRGB(40, 40, 40)
+            BStroke.Thickness = 1
+            BStroke.Parent = Btn
 
-        local AvatarIcon = Instance.new("ImageLabel")
-        AvatarIcon.Size = UDim2.new(0, 28, 0, 28)
-        AvatarIcon.Position = UDim2.new(0, 7, 0.5, -14)
-        AvatarIcon.BackgroundColor3 = Theme.SwitchOff
-        AvatarIcon.BackgroundTransparency = 0.5
-        AvatarIcon.Parent = Btn
-        Instance.new("UICorner", AvatarIcon).CornerRadius = UDim.new(0, 6)
+            local AvatarIcon = Instance.new("ImageLabel")
+            AvatarIcon.Size = UDim2.new(0, 28, 0, 28)
+            AvatarIcon.Position = UDim2.new(0, 7, 0.5, -14)
+            AvatarIcon.BackgroundColor3 = Theme.SwitchOff
+            AvatarIcon.BackgroundTransparency = 0.5
+            AvatarIcon.Parent = Btn
+            Instance.new("UICorner", AvatarIcon).CornerRadius = UDim.new(0, 6)
 
-        local NameLabel = Instance.new("TextLabel")
-        NameLabel.Size = UDim2.new(1, -40, 1, 0)
-        NameLabel.Position = UDim2.new(0, 36, 0, 0)
-        NameLabel.BackgroundTransparency = 1
-        NameLabel.Text = name
-        NameLabel.Font = Theme.Font
-        NameLabel.TextScaled = true
-        local nsConst = Instance.new("UITextSizeConstraint", NameLabel)
-        nsConst.MinTextSize = 7
-        nsConst.MaxTextSize = 11
-        NameLabel.TextColor3 = Theme.Text
-        NameLabel.TextXAlignment = Enum.TextXAlignment.Left
-        NameLabel.Parent = Btn
+            local NameLabel = Instance.new("TextLabel")
+            NameLabel.Size = UDim2.new(1, -40, 1, 0)
+            NameLabel.Position = UDim2.new(0, 36, 0, 0)
+            NameLabel.BackgroundTransparency = 1
+            NameLabel.Text = name
+            NameLabel.Font = Theme.Font
+            NameLabel.TextScaled = true
+            local nsConst = Instance.new("UITextSizeConstraint", NameLabel)
+            nsConst.MinTextSize = 7
+            nsConst.MaxTextSize = 11
+            NameLabel.TextColor3 = Theme.Text
+            NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+            NameLabel.Parent = Btn
 
-        Btn.MouseEnter:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play() end)
-        Btn.MouseLeave:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
+            Btn.MouseEnter:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.15), {Color = Theme.Accent}):Play() end)
+            Btn.MouseLeave:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.15), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
 
-        task.spawn(function()
-            local s, id = pcall(function() return Players:GetUserIdFromNameAsync(name) end)
-            if s and id then
-                local thumb = Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
-                AvatarIcon.Image = thumb
+            task.spawn(function()
+                local s, id = pcall(function() return Players:GetUserIdFromNameAsync(name) end)
+                if s and id then
+                    local thumb = Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+                    AvatarIcon.Image = thumb
+                end
+            end)
+            
+            Btn.MouseButton1Click:Connect(function() PerformSearch(name) end)
+            
+            -- Cede o controle para o motor gráfico a cada 4 botões (Zera engasgos ao carregar a aba)
+            if i % 4 == 0 then
+                task.wait()
             end
-        end)
-        
-        Btn.MouseButton1Click:Connect(function() PerformSearch(name) end)
-    end
+        end
+    end)
 end
