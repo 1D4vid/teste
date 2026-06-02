@@ -16,16 +16,7 @@ return function(env)
     local MarketplaceService = game:GetService("MarketplaceService")
     local selectedModalId = nil
     local currentModalAction = nil
-    
-    -- Limpeza de Conexões Visuais Anteriores
-    if getgenv().FixConns then
-        for _, conn in ipairs(getgenv().FixConns) do
-            pcall(function() conn:Disconnect() end)
-        end
-        table.clear(getgenv().FixConns)
-    else
-        getgenv().FixConns = {}
-    end
+    getgenv().FixLoop = nil
 
     -- Centralização de Estados de Modificação
     local ActiveModifiers = {
@@ -43,7 +34,7 @@ return function(env)
     local bundleToggleControls = {}
     local modifierToggles = {}
 
-    -- Caches Locais para Otimização de Memória
+    -- Caches para Prevenção de Conflitos de Carregamento
     local cachedHeadlessMesh = nil
     local cachedKorbloxLeg = nil
     local cachedSkeletonLeg = nil
@@ -54,20 +45,13 @@ return function(env)
     local skeletonBackups = {}
     local zombieBackups = {}
     local characterBackups = setmetatable({}, {__mode = "k"})
-    local loadedAssetsCache = {}
 
-    -- Carregador de Ativos Otimizado com Retorno Instantâneo
+    -- Funções Core de Auxílio
     local function loadAsset(id)
-        if loadedAssetsCache[id] then
-            return loadedAssetsCache[id]:Clone()
-        end
         local success, result = pcall(function()
             return game:GetObjects("rbxassetid://" .. tostring(id))[1]
         end)
-        if success and result then
-            loadedAssetsCache[id] = result
-            return result:Clone()
-        end
+        if success and result then return result end
         return nil
     end
 
@@ -159,50 +143,41 @@ return function(env)
         handleEquip(asset)
     end
 
-    -- Loop de Correção Baseado em Evento Otimizado (0% Uso de CPU)
     local function StartFixLoop(char, colorTable, originalHeadTextureId)
-        for _, conn in ipairs(getgenv().FixConns) do
-            pcall(function() conn:Disconnect() end)
-        end
-        table.clear(getgenv().FixConns)
-
-        for partName, color in pairs(colorTable) do
-            local part = char:FindFirstChild(partName)
-            if part and part:IsA("BasePart") then
-                part.Color = color
-                part.Material = Enum.Material.SmoothPlastic
-
-                local mesh = part:FindFirstChildOfClass("SpecialMesh")
-                if mesh then
-                    if partName == "Head" then
-                        mesh.TextureId = (originalHeadTextureId and originalHeadTextureId ~= "") and originalHeadTextureId or ""
-                    else
-                        mesh.TextureId = ""
-                    end
-                    mesh.VertexColor = Vector3.new(1, 1, 1)
-                end
-
-                table.insert(getgenv().FixConns, part:GetPropertyChangedSignal("Color"):Connect(function()
-                    part.Color = color
-                end))
-                table.insert(getgenv().FixConns, part:GetPropertyChangedSignal("Material"):Connect(function()
-                    part.Material = Enum.Material.SmoothPlastic
-                end))
-
-                local function cleanChild(child)
-                    if child:IsA("Decal") and child.Name ~= "face" then
-                        task.defer(function() child:Destroy() end)
-                    elseif child:IsA("Texture") then
-                        task.defer(function() child:Destroy() end)
-                    end
-                end
-
-                for _, child in ipairs(part:GetChildren()) do
-                    cleanChild(child)
-                end
-                table.insert(getgenv().FixConns, part.ChildAdded:Connect(cleanChild))
+        if getgenv().FixLoop then getgenv().FixLoop:Disconnect() end
+        getgenv().FixLoop = RunService.RenderStepped:Connect(function()
+            if not char or not char.Parent then 
+                if getgenv().FixLoop then getgenv().FixLoop:Disconnect() end 
+                return 
             end
-        end
+            for partName, color in pairs(colorTable) do
+                local part = char:FindFirstChild(partName)
+                if part and part:IsA("BasePart") then
+                    if part.Color ~= color then 
+                        part.Color = color
+                        part.Material = Enum.Material.SmoothPlastic 
+                    end
+                    local mesh = part:FindFirstChildOfClass("SpecialMesh")
+                    if mesh then
+                        if partName == "Head" then
+                            if originalHeadTextureId and originalHeadTextureId ~= "" then 
+                                if mesh.TextureId ~= originalHeadTextureId then mesh.TextureId = originalHeadTextureId end
+                                mesh.VertexColor = Vector3.new(1, 1, 1) 
+                            else 
+                                if mesh.TextureId ~= "" then mesh.TextureId = "" end 
+                            end
+                        else 
+                            if mesh.TextureId ~= "" then mesh.TextureId = "" end
+                            mesh.VertexColor = Vector3.new(1,1,1) 
+                        end
+                    end
+                    for _, child in pairs(part:GetChildren()) do 
+                        if child:IsA("Decal") and child.Name ~= "face" then child:Destroy() 
+                        elseif child:IsA("Texture") then child:Destroy() end 
+                    end
+                end
+            end
+        end)
     end
 
     -- Sistema de Backup e Restauração local
@@ -251,10 +226,7 @@ return function(env)
         local backup = characterBackups[char]
         if not backup then return end
         
-        for _, conn in ipairs(getgenv().FixConns) do
-            pcall(function() conn:Disconnect() end)
-        end
-        table.clear(getgenv().FixConns)
+        if getgenv().FixLoop then getgenv().FixLoop:Disconnect() getgenv().FixLoop = nil end
         
         for _, child in ipairs(char:GetChildren()) do
             if child:IsA("CharacterMesh") or child:IsA("Shirt") or child:IsA("Pants") or child:IsA("ShirtGraphic") or child:IsA("Accessory") or child:IsA("Hat") or child:IsA("BodyColors") then
@@ -271,7 +243,8 @@ return function(env)
         end
         
         for _, acc in ipairs(backup.accessories) do
-            SmartWeld(char, acc:Clone())
+            local clone = acc:Clone()
+            clone.Parent = char
         end
         
         if backup.bodyColors then
@@ -299,8 +272,10 @@ return function(env)
     end
 
     -- =======================================================
-    -- PROCESSAMENTO VIRTUAL SEM RENDERING (SEM CONGELAMENTO)
+    -- SISTEMA DE APLICAÇÃO PROTEGIDO CONTRA FALHAS (RESPAWN)
     -- =======================================================
+    local isApplyingVisuals = false
+
     local function ApplyBaseAppearanceAndModifiers()
         if isApplyingVisuals then return end
         isApplyingVisuals = true
@@ -309,6 +284,7 @@ return function(env)
             local char = LocalPlayer.Character
             if not char then return end
 
+            -- Aguarda o personagem ser devidamente introduzido ao Workspace
             local elapsed = 0
             while char and char.Parent ~= Workspace and elapsed < 3 do
                 task.wait(0.1)
@@ -316,36 +292,39 @@ return function(env)
             end
             if not char or char.Parent ~= Workspace then return end
 
+            -- Assegura a integridade das partes R6
             char:WaitForChild("Head", 5)
             char:WaitForChild("Torso", 5)
 
             if not LocalPlayer:HasAppearanceLoaded() then
                 pcall(function() LocalPlayer.CharacterAppearanceLoaded:Wait() end)
             end
+            task.wait(0.15)
 
-            for _, conn in ipairs(getgenv().FixConns) do
-                pcall(function() conn:Disconnect() end)
+            if getgenv().FixLoop then 
+                getgenv().FixLoop:Disconnect() 
+                getgenv().FixLoop = nil 
             end
-            table.clear(getgenv().FixConns)
 
             BackupCharacterAppearance(char)
 
-            -- 1. ETAPA: Carregamento no Cache da Memória Interna (Spawning em nil para 0ms de lag)
+            -- 1. ETAPA: Aparência Básica (Skin customizada OU Preset Bundle OU Aparência Original)
             if ActiveModifiers.SkinUserId then
                 local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(ActiveModifiers.SkinUserId) end)
                 if s and desc then
                     local realColors = { ["Head"] = desc.HeadColor, ["Torso"] = desc.TorsoColor, ["Left Arm"] = desc.LeftArmColor, ["Right Arm"] = desc.RightArmColor, ["Left Leg"] = desc.LeftLegColor, ["Right Leg"] = desc.RightLegColor }
-                    
-                    -- Dummy gerado em 'nil' (Evita renderização física 3D e travamentos)
                     local dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
+                    dummy.Name = "AssetSource"
+                    dummy.Parent = Workspace
+                    dummy:PivotTo(CFrame.new(0, -500, 0))
+                    task.wait(0.5)
 
                     if char and char.Parent then
                         local targetHeadTexture = ""
-                        local dummyHead = dummy:FindFirstChild("Head")
-                        local dummyMesh = dummyHead and dummyHead:FindFirstChildOfClass("SpecialMesh")
+                        local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
                         if dummyMesh then targetHeadTexture = dummyMesh.TextureId end
 
-                        for _, v in ipairs(char:GetChildren()) do 
+                        for _, v in pairs(char:GetChildren()) do 
                             if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
                                 v:Destroy() 
                             end 
@@ -368,8 +347,8 @@ return function(env)
                         end
                         myMesh.VertexColor = Vector3.new(1,1,1)
 
-                        for _, item in ipairs(dummy:GetChildren()) do if item:IsA("CharacterMesh") then item:Clone().Parent = char end end
-                        for _, item in ipairs(dummy:GetChildren()) do 
+                        for _, item in pairs(dummy:GetChildren()) do if item:IsA("CharacterMesh") then item:Clone().Parent = char end end
+                        for _, item in pairs(dummy:GetChildren()) do 
                             if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
                                 item:Clone().Parent = char 
                             end 
@@ -377,7 +356,7 @@ return function(env)
 
                         local faceDecal = Instance.new("Decal")
                         faceDecal.Name = "face"
-                        local dummyFace = dummyHead and dummyHead:FindFirstChild("face")
+                        local dummyFace = dummy.Head:FindFirstChild("face")
                         if dummyFace then
                             faceDecal.Texture = dummyFace.Texture
                         elseif desc.Face and desc.Face > 0 then
@@ -398,9 +377,10 @@ return function(env)
 
                         StartFixLoop(char, realColors, targetHeadTexture)
 
-                        for _, item in ipairs(dummy:GetChildren()) do 
+                        for _, item in pairs(dummy:GetChildren()) do 
                             if item:IsA("Accessory") then 
-                                SmartWeld(char, item:Clone()) 
+                                local clone = item:Clone()
+                                SmartWeld(char, clone) 
                             end 
                         end
                     end
@@ -420,22 +400,25 @@ return function(env)
                     if targetDesc then
                         local realColors = { ["Head"] = targetDesc.HeadColor, ["Torso"] = targetDesc.TorsoColor, ["Left Arm"] = targetDesc.LeftArmColor, ["Right Arm"] = targetDesc.RightArmColor, ["Left Leg"] = targetDesc.LeftLegColor, ["Right Leg"] = targetDesc.RightLegColor }
                         local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
+                        dummy.Name = "AssetSource"
+                        dummy.Parent = Workspace
+                        dummy:PivotTo(CFrame.new(0, -500, 0))
+                        task.wait(0.5)
 
                         if char and char.Parent then
                             local targetHeadTexture = ""
-                            local dummyHead = dummy:FindFirstChild("Head")
-                            if dummyHead and dummyHead:FindFirstChildOfClass("SpecialMesh") then 
-                                targetHeadTexture = dummyHead:FindFirstChildOfClass("SpecialMesh").TextureId 
+                            if dummy.Head:FindFirstChildOfClass("SpecialMesh") then 
+                                targetHeadTexture = dummy.Head:FindFirstChildOfClass("SpecialMesh").TextureId 
                             end
 
-                            for _, v in ipairs(char:GetChildren()) do 
+                            for _, v in pairs(char:GetChildren()) do 
                                 if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
                                     v:Destroy() 
                                 end 
                             end
                             if char:FindFirstChild("Head") and char.Head:FindFirstChild("face") then char.Head.face:Destroy() end
 
-                            local dummyMesh = dummyHead and dummyHead:FindFirstChildOfClass("SpecialMesh")
+                            local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
                             local myMesh = char.Head:FindFirstChildOfClass("SpecialMesh")
                             if dummyMesh then 
                                 if not myMesh then myMesh = Instance.new("SpecialMesh", char.Head) end
@@ -446,10 +429,10 @@ return function(env)
                                 myMesh.VertexColor = Vector3.new(1,1,1) 
                             end
 
-                            for _, item in ipairs(dummy:GetChildren()) do 
+                            for _, item in pairs(dummy:GetChildren()) do 
                                 if item:IsA("CharacterMesh") then item:Clone().Parent = char end 
                             end
-                            for _, item in ipairs(dummy:GetChildren()) do 
+                            for _, item in pairs(dummy:GetChildren()) do 
                                 if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
                                     item:Clone().Parent = char 
                                 elseif item.Name == "Head" and item:FindFirstChild("face") then 
@@ -468,11 +451,12 @@ return function(env)
 
                             StartFixLoop(char, realColors, targetHeadTexture)
 
-                            for _, item in ipairs(dummy:GetChildren()) do 
+                            for _, item in pairs(dummy:GetChildren()) do 
                                 if item:IsA("Accessory") then 
-                                    SmartWeld(char, item:Clone()) 
+                                    local clone = item:Clone()
+                                    SmartWeld(char, clone) 
                                 end 
-                            end
+                        end
                         end
                         dummy:Destroy()
                     end
@@ -511,7 +495,7 @@ return function(env)
             end
 
             if activeLegMesh then
-                for _, v in ipairs(char:GetChildren()) do
+                for _, v in pairs(char:GetChildren()) do
                     if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
                         v:Destroy()
                     end
@@ -541,7 +525,7 @@ return function(env)
         end)
         
         if not ok then
-            warn("Erro ao reaplicar modificações visuais: ", err)
+            warn("Erro ao reaplicar modificacoes visuais: ", err)
         end
         isApplyingVisuals = false
     end
@@ -1010,7 +994,7 @@ return function(env)
         {Name = "Dr. Fia Tyfoid", Id = 512}
     }
 
-    for _, bndl in ipairs(BundlePresets) do
+    for _, bndl in pairs(BundlePresets) do
         local Btn = Instance.new("TextButton")
         Btn.BackgroundColor3 = Color3.new(0, 0, 0)
         Btn.BackgroundTransparency = 0.45
@@ -1379,7 +1363,7 @@ return function(env)
     PresetsContainer.Parent = Page
 
     local Grid = Instance.new("UIGridLayout")
-    Grid.CellSize = UDim2.new(0.25, -6, 0, 42) 
+    Grid.CellSize = UDim2.new(0.25, -6, 0, 42) -- Dimensionamento matemático exato para 4 colunas (4x4)
     Grid.CellPadding = UDim2.new(0, 8, 0, 8)
     Grid.SortOrder = Enum.SortOrder.LayoutOrder
     Grid.Parent = PresetsContainer
@@ -1417,61 +1401,52 @@ return function(env)
     UserInputBox.FocusLost:Connect(function(enter) if enter then PerformSearch() end end)
     SearchBtnIcon.MouseButton1Click:Connect(function() PerformSearch() end)
 
-    -- Carregamento Progressivo Otimizado com Fila Estável (Sem Stutters ou Latência de Rede)
-    task.spawn(function()
-        for i, name in ipairs(DummyNames) do
-            local Btn = Instance.new("TextButton")
-            Btn.BackgroundColor3 = Color3.new(0, 0, 0)
-            Btn.BackgroundTransparency = 0.45
-            Btn.Text = ""
-            Btn.Parent = PresetsContainer
-            Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
+    for _, name in pairs(DummyNames) do
+        local Btn = Instance.new("TextButton")
+        Btn.BackgroundColor3 = Color3.new(0, 0, 0)
+        Btn.BackgroundTransparency = 0.45
+        Btn.Text = ""
+        Btn.Parent = PresetsContainer
+        Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
 
-            local BStroke = Instance.new("UIStroke")
-            BStroke.Color = Color3.fromRGB(40, 40, 40)
-            BStroke.Thickness = 1
-            BStroke.Parent = Btn
+        local BStroke = Instance.new("UIStroke")
+        BStroke.Color = Color3.fromRGB(40, 40, 40)
+        BStroke.Thickness = 1
+        BStroke.Parent = Btn
 
-            local AvatarIcon = Instance.new("ImageLabel")
-            AvatarIcon.Size = UDim2.new(0, 28, 0, 28)
-            AvatarIcon.Position = UDim2.new(0, 7, 0.5, -14)
-            AvatarIcon.BackgroundColor3 = Theme.SwitchOff
-            AvatarIcon.BackgroundTransparency = 0.5
-            AvatarIcon.Parent = Btn
-            Instance.new("UICorner", AvatarIcon).CornerRadius = UDim.new(0, 6)
+        local AvatarIcon = Instance.new("ImageLabel")
+        AvatarIcon.Size = UDim2.new(0, 28, 0, 28)
+        AvatarIcon.Position = UDim2.new(0, 7, 0.5, -14)
+        AvatarIcon.BackgroundColor3 = Theme.SwitchOff
+        AvatarIcon.BackgroundTransparency = 0.5
+        AvatarIcon.Parent = Btn
+        Instance.new("UICorner", AvatarIcon).CornerRadius = UDim.new(0, 6)
 
-            local NameLabel = Instance.new("TextLabel")
-            NameLabel.Size = UDim2.new(1, -40, 1, 0)
-            NameLabel.Position = UDim2.new(0, 36, 0, 0)
-            NameLabel.BackgroundTransparency = 1
-            NameLabel.Text = name
-            NameLabel.Font = Theme.Font
-            NameLabel.TextScaled = true
-            local nsConst = Instance.new("UITextSizeConstraint", NameLabel)
-            nsConst.MinTextSize = 7
-            nsConst.MaxTextSize = 11
-            NameLabel.TextColor3 = Theme.Text
-            NameLabel.TextXAlignment = Enum.TextXAlignment.Left
-            NameLabel.Parent = Btn
+        local NameLabel = Instance.new("TextLabel")
+        NameLabel.Size = UDim2.new(1, -40, 1, 0)
+        NameLabel.Position = UDim2.new(0, 36, 0, 0)
+        NameLabel.BackgroundTransparency = 1
+        NameLabel.Text = name
+        NameLabel.Font = Theme.Font
+        NameLabel.TextScaled = true
+        local nsConst = Instance.new("UITextSizeConstraint", NameLabel)
+        nsConst.MinTextSize = 7
+        nsConst.MaxTextSize = 11
+        NameLabel.TextColor3 = Theme.Text
+        NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        NameLabel.Parent = Btn
 
-            Btn.MouseEnter:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.15), {Color = Theme.Accent}):Play() end)
-            Btn.MouseLeave:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.15), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
+        Btn.MouseEnter:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play() end)
+        Btn.MouseLeave:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
 
-            -- Carregamento sequencial debounced com rbxthumb:// nativo em C++ (Bypassa chamadas Lua lentas)
-            task.spawn(function()
-                task.wait(i * 0.12) -- Escalona as chamadas web para evitar gargalo de DNS/HTTP
-                local s, id = pcall(function() return Players:GetUserIdFromNameAsync(name) end)
-                if s and id then
-                    AvatarIcon.Image = "rbxthumb://type=AvatarHeadShot&id=" .. id .. "&w=150&h=150"
-                end
-            end)
-            
-            Btn.MouseButton1Click:Connect(function() PerformSearch(name) end)
-            
-            -- Distribui a renderização visual por frames para evitar lag spikes ao abrir a aba
-            if i % 8 == 0 then
-                task.wait()
+        task.spawn(function()
+            local s, id = pcall(function() return Players:GetUserIdFromNameAsync(name) end)
+            if s and id then
+                local thumb = Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+                AvatarIcon.Image = thumb
             end
-        end
-    end)
+        end)
+        
+        Btn.MouseButton1Click:Connect(function() PerformSearch(name) end)
+    end
 end
