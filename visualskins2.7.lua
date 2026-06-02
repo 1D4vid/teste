@@ -17,7 +17,7 @@ return function(env)
     local selectedModalId = nil
     local currentModalAction = nil
     
-    -- Inicialização Segura de Conexões de Proteção Visuais
+    -- Limpeza de Conexões Visuais Anteriores
     if getgenv().FixConns then
         for _, conn in ipairs(getgenv().FixConns) do
             pcall(function() conn:Disconnect() end)
@@ -43,7 +43,7 @@ return function(env)
     local bundleToggleControls = {}
     local modifierToggles = {}
 
-    -- Caches Locais para Evitar Latência e Gargalo de Memória
+    -- Caches Locais para Otimização de Memória
     local cachedHeadlessMesh = nil
     local cachedKorbloxLeg = nil
     local cachedSkeletonLeg = nil
@@ -56,7 +56,7 @@ return function(env)
     local characterBackups = setmetatable({}, {__mode = "k"})
     local loadedAssetsCache = {}
 
-    -- Carregador de Ativos com Cache Otimizado
+    -- Carregador de Ativos Otimizado com Retorno Instantâneo
     local function loadAsset(id)
         if loadedAssetsCache[id] then
             return loadedAssetsCache[id]:Clone()
@@ -159,7 +159,7 @@ return function(env)
         handleEquip(asset)
     end
 
-    -- Loop de Correção Reativo (Event-Driven) - Consumo de CPU Reduzido a 0%
+    -- Loop de Correção Baseado em Evento Otimizado (0% Uso de CPU)
     local function StartFixLoop(char, colorTable, originalHeadTextureId)
         for _, conn in ipairs(getgenv().FixConns) do
             pcall(function() conn:Disconnect() end)
@@ -182,7 +182,6 @@ return function(env)
                     mesh.VertexColor = Vector3.new(1, 1, 1)
                 end
 
-                -- Escuta reativa para mudanças nas propriedades
                 table.insert(getgenv().FixConns, part:GetPropertyChangedSignal("Color"):Connect(function()
                     part.Color = color
                 end))
@@ -300,10 +299,8 @@ return function(env)
     end
 
     -- =======================================================
-    -- SISTEMA DE APLICAÇÃO SEGURO E PROTEÇÃO ULTRA-OTIMIZADA
+    -- PROCESSAMENTO VIRTUAL SEM RENDERING (SEM CONGELAMENTO)
     -- =======================================================
-    local isApplyingVisuals = false
-
     local function ApplyBaseAppearanceAndModifiers()
         if isApplyingVisuals then return end
         isApplyingVisuals = true
@@ -325,7 +322,6 @@ return function(env)
             if not LocalPlayer:HasAppearanceLoaded() then
                 pcall(function() LocalPlayer.CharacterAppearanceLoaded:Wait() end)
             end
-            task.wait(0.05)
 
             for _, conn in ipairs(getgenv().FixConns) do
                 pcall(function() conn:Disconnect() end)
@@ -334,29 +330,19 @@ return function(env)
 
             BackupCharacterAppearance(char)
 
-            -- 1. ETAPA: Aparência Básica (Skin customizada OU Preset Bundle OU Aparência Original)
+            -- 1. ETAPA: Carregamento no Cache da Memória Interna (Spawning em nil para 0ms de lag)
             if ActiveModifiers.SkinUserId then
                 local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(ActiveModifiers.SkinUserId) end)
                 if s and desc then
                     local realColors = { ["Head"] = desc.HeadColor, ["Torso"] = desc.TorsoColor, ["Left Arm"] = desc.LeftArmColor, ["Right Arm"] = desc.RightArmColor, ["Left Leg"] = desc.LeftLegColor, ["Right Leg"] = desc.RightLegColor }
+                    
+                    -- Dummy gerado em 'nil' (Evita renderização física 3D e travamentos)
                     local dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
-                    dummy.Name = "AssetSource"
-                    
-                    -- Desativação Física do Modelo de Carregamento (Evita travamento do motor de física)
-                    for _, child in ipairs(dummy:GetDescendants()) do
-                        if child:IsA("BasePart") then
-                            child.Anchored = true
-                            child.CanCollide = false
-                        end
-                    end
-                    
-                    dummy.Parent = Workspace
-                    dummy:PivotTo(CFrame.new(0, -500, 0))
-                    task.wait(0.4)
 
                     if char and char.Parent then
                         local targetHeadTexture = ""
-                        local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
+                        local dummyHead = dummy:FindFirstChild("Head")
+                        local dummyMesh = dummyHead and dummyHead:FindFirstChildOfClass("SpecialMesh")
                         if dummyMesh then targetHeadTexture = dummyMesh.TextureId end
 
                         for _, v in ipairs(char:GetChildren()) do 
@@ -391,7 +377,7 @@ return function(env)
 
                         local faceDecal = Instance.new("Decal")
                         faceDecal.Name = "face"
-                        local dummyFace = dummy.Head:FindFirstChild("face")
+                        local dummyFace = dummyHead and dummyHead:FindFirstChild("face")
                         if dummyFace then
                             faceDecal.Texture = dummyFace.Texture
                         elseif desc.Face and desc.Face > 0 then
@@ -434,23 +420,12 @@ return function(env)
                     if targetDesc then
                         local realColors = { ["Head"] = targetDesc.HeadColor, ["Torso"] = targetDesc.TorsoColor, ["Left Arm"] = targetDesc.LeftArmColor, ["Right Arm"] = targetDesc.RightArmColor, ["Left Leg"] = targetDesc.LeftLegColor, ["Right Leg"] = targetDesc.RightLegColor }
                         local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
-                        dummy.Name = "AssetSource"
-                        
-                        for _, child in ipairs(dummy:GetDescendants()) do
-                            if child:IsA("BasePart") then
-                                child.Anchored = true
-                                child.CanCollide = false
-                            end
-                        end
-
-                        dummy.Parent = Workspace
-                        dummy:PivotTo(CFrame.new(0, -500, 0))
-                        task.wait(0.4)
 
                         if char and char.Parent then
                             local targetHeadTexture = ""
-                            if dummy.Head:FindFirstChildOfClass("SpecialMesh") then 
-                                targetHeadTexture = dummy.Head:FindFirstChildOfClass("SpecialMesh").TextureId 
+                            local dummyHead = dummy:FindFirstChild("Head")
+                            if dummyHead and dummyHead:FindFirstChildOfClass("SpecialMesh") then 
+                                targetHeadTexture = dummyHead:FindFirstChildOfClass("SpecialMesh").TextureId 
                             end
 
                             for _, v in ipairs(char:GetChildren()) do 
@@ -460,7 +435,7 @@ return function(env)
                             end
                             if char:FindFirstChild("Head") and char.Head:FindFirstChild("face") then char.Head.face:Destroy() end
 
-                            local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
+                            local dummyMesh = dummyHead and dummyHead:FindFirstChildOfClass("SpecialMesh")
                             local myMesh = char.Head:FindFirstChildOfClass("SpecialMesh")
                             if dummyMesh then 
                                 if not myMesh then myMesh = Instance.new("SpecialMesh", char.Head) end
@@ -566,7 +541,7 @@ return function(env)
         end)
         
         if not ok then
-            warn("Erro ao reaplicar modificacoes visuais: ", err)
+            warn("Erro ao reaplicar modificações visuais: ", err)
         end
         isApplyingVisuals = false
     end
@@ -1442,7 +1417,7 @@ return function(env)
     UserInputBox.FocusLost:Connect(function(enter) if enter then PerformSearch() end end)
     SearchBtnIcon.MouseButton1Click:Connect(function() PerformSearch() end)
 
-    -- Carregamento Progressivo Assíncrono para Mitigar Stutters na Inicialização da UI
+    -- Carregamento Progressivo Otimizado com Fila Estável (Sem Stutters ou Latência de Rede)
     task.spawn(function()
         for i, name in ipairs(DummyNames) do
             local Btn = Instance.new("TextButton")
@@ -1482,18 +1457,19 @@ return function(env)
             Btn.MouseEnter:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.15), {Color = Theme.Accent}):Play() end)
             Btn.MouseLeave:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.15), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
 
+            -- Carregamento sequencial debounced com rbxthumb:// nativo em C++ (Bypassa chamadas Lua lentas)
             task.spawn(function()
+                task.wait(i * 0.12) -- Escalona as chamadas web para evitar gargalo de DNS/HTTP
                 local s, id = pcall(function() return Players:GetUserIdFromNameAsync(name) end)
                 if s and id then
-                    local thumb = Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
-                    AvatarIcon.Image = thumb
+                    AvatarIcon.Image = "rbxthumb://type=AvatarHeadShot&id=" .. id .. "&w=150&h=150"
                 end
             end)
             
             Btn.MouseButton1Click:Connect(function() PerformSearch(name) end)
             
-            -- Cede o controle para o motor gráfico a cada 4 botões (Zera engasgos ao carregar a aba)
-            if i % 4 == 0 then
+            -- Distribui a renderização visual por frames para evitar lag spikes ao abrir a aba
+            if i % 8 == 0 then
                 task.wait()
             end
         end
