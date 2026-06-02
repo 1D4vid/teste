@@ -253,18 +253,94 @@ return function(env)
         SendNotification("Skin Applied Successfully!", 3)
     end
 
-    -- Recarrega o personagem original sem perder o CFrame (Posição) do mapa
-    local function ReloadDefaultCharacter()
+    -- Recarrega a aparência original do jogador de forma segura via Client-Side (100% Funcional e Permitido)
+    local function ApplyDefaultLookSafe(epoch)
         local char = LocalPlayer.Character
-        local oldCF = char and char:FindFirstChild("HumanoidRootPart") and char.HumanoidRootPart.CFrame
-        LocalPlayer:LoadCharacter()
-        if oldCF then
-            task.spawn(function()
-                local newChar = LocalPlayer.CharacterAdded:Wait()
-                local root = newChar:WaitForChild("HumanoidRootPart", 5)
-                if root then root.CFrame = oldCF end
-            end)
+        if not char then return end
+        
+        local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(LocalPlayer.UserId) end)
+        if epoch ~= bundleEpoch then return end
+        if not s or not desc then return end
+        
+        local realColors = { 
+            ["Head"] = desc.HeadColor, 
+            ["Torso"] = desc.TorsoColor,
+            ["Left Arm"] = desc.LeftArmColor,
+            ["Right Arm"] = desc.RightArmColor,
+            ["Left Leg"] = desc.LeftLegColor,
+            ["Right Leg"] = desc.RightLegColor 
+        }
+        
+        local dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
+        if epoch ~= bundleEpoch then dummy:Destroy() return end
+        
+        dummy.Name = "AssetSourceDefault"
+        dummy.Parent = workspace
+        dummy:SetPrimaryPartCFrame(CFrame.new(0, -500, 0))
+        task.wait(1.0)
+        if epoch ~= bundleEpoch then dummy:Destroy() return end
+        
+        local targetHeadTexture = ""
+        if dummy.Head:FindFirstChildOfClass("SpecialMesh") then 
+            targetHeadTexture = dummy.Head:FindFirstChildOfClass("SpecialMesh").TextureId 
         end
+        
+        for _, v in pairs(char:GetChildren()) do 
+            if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
+                v:Destroy() 
+            end 
+        end
+        if char:FindFirstChild("Head") and char.Head:FindFirstChild("face") then char.Head.face:Destroy() end
+        
+        local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
+        local myMesh = char.Head:FindFirstChildOfClass("SpecialMesh")
+        if dummyMesh then 
+            if not myMesh then myMesh = Instance.new("SpecialMesh", char.Head) end
+            myMesh.MeshType = Enum.MeshType.FileMesh
+            myMesh.MeshId = dummyMesh.MeshId
+            myMesh.Scale = dummyMesh.Scale
+            myMesh.TextureId = targetHeadTexture
+            myMesh.VertexColor = Vector3.new(1,1,1) 
+        else
+            if myMesh then
+                myMesh.MeshType = Enum.MeshType.Head
+                myMesh.MeshId = ""
+                myMesh.Scale = Vector3.new(1.25, 1.25, 1.25)
+                myMesh.TextureId = ""
+            end
+        end
+        
+        for _, item in pairs(dummy:GetChildren()) do 
+            if item:IsA("CharacterMesh") then item:Clone().Parent = char end 
+        end
+        for _, item in pairs(dummy:GetChildren()) do 
+            if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
+                item:Clone().Parent = char 
+            elseif item.Name == "Head" and item:FindFirstChild("face") then 
+                item.face:Clone().Parent = char:FindFirstChild("Head") 
+            end 
+        end
+        
+        local newBC = Instance.new("BodyColors")
+        newBC.HeadColor3 = desc.HeadColor
+        newBC.TorsoColor3 = desc.TorsoColor
+        newBC.LeftArmColor3 = desc.LeftArmColor
+        newBC.RightArmColor3 = desc.RightArmColor
+        newBC.LeftLegColor3 = desc.LeftLegColor
+        newBC.RightLegColor3 = desc.RightLegColor
+        newBC.Parent = char
+        
+        StartFixLoop(char, realColors, targetHeadTexture)
+        
+        for _, item in pairs(dummy:GetChildren()) do 
+            if item:IsA("Accessory") then 
+                local clone = item:Clone()
+                SmartWeld(char, clone) 
+            end 
+        end
+        dummy:Destroy()
+        
+        SendNotification("Default Look Restored!", 3)
     end
 
     local function ApplyBundleSafe(bundleId, epoch)
@@ -554,214 +630,6 @@ return function(env)
         end
     end
 
-    -- Criação do Modal de Confirmação
-    local PreviewBox = Instance.new("Frame")
-    PreviewBox.Size = UDim2.new(0, 260, 0, 130)
-    PreviewBox.AnchorPoint = Vector2.new(0.5, 0.5)
-    PreviewBox.Position = UDim2.new(0.5, 0, 0.5, 0)
-    PreviewBox.BackgroundColor3 = Color3.new(0,0,0)
-    PreviewBox.BackgroundTransparency = 0.15
-    PreviewBox.BorderSizePixel = 0
-    PreviewBox.ZIndex = 11
-    PreviewBox.Visible = false
-    PreviewBox.Parent = ModalOverlay
-
-    local PBStroke = Instance.new("UIStroke")
-    PBStroke.Color = Color3.fromRGB(40, 40, 40)
-    PBStroke.Parent = PreviewBox
-    
-    local PBTopLine = Instance.new("Frame")
-    PBTopLine.Size = UDim2.new(1, 0, 0, 2)
-    PBTopLine.BackgroundColor3 = Theme.Accent
-    PBTopLine.BorderSizePixel = 0
-    PBTopLine.ZIndex = 12
-    PBTopLine.Parent = PreviewBox
-    ApplyGradient(PBTopLine, Theme.Accent, Theme.AccentDark, 0)
-
-    local PTitle = Instance.new("TextLabel")
-    PTitle.Parent = PreviewBox
-    PTitle.Text = "FOUND"
-    PTitle.Font = Theme.Font
-    PTitle.TextSize = 14
-    PTitle.TextColor3 = Theme.Accent
-    PTitle.Size = UDim2.new(1, 0, 0, 35)
-    PTitle.BackgroundTransparency = 1
-    PTitle.ZIndex = 12
-
-    local PImage = Instance.new("ImageLabel")
-    PImage.Size = UDim2.new(0, 46, 0, 46)
-    PImage.Position = UDim2.new(0, 20, 0, 35)
-    PImage.BackgroundColor3 = Theme.SwitchOff
-    PImage.ZIndex = 12
-    PImage.Parent = PreviewBox
-    Instance.new("UICorner", PImage).CornerRadius = UDim.new(0, 6)
-
-    local PName = Instance.new("TextLabel")
-    PName.Text = "Name"
-    PName.Size = UDim2.new(1, -80, 0, 46)
-    PName.Position = UDim2.new(0, 75, 0, 35)
-    PName.BackgroundTransparency = 1
-    PName.TextColor3 = Theme.Text
-    PName.Font = Enum.Font.Gotham
-    PName.TextSize = 13
-    PName.TextXAlignment = Enum.TextXAlignment.Left
-    PName.ZIndex = 12
-    PName.Parent = PreviewBox
-
-    local PApplyBtn = Instance.new("TextButton")
-    PApplyBtn.Text = "Apply"
-    PApplyBtn.Size = UDim2.new(0, 100, 0, 28)
-    PApplyBtn.Position = UDim2.new(0, 20, 0, 90)
-    PApplyBtn.BackgroundColor3 = Theme.Accent
-    PApplyBtn.TextColor3 = Color3.new(0,0,0)
-    PApplyBtn.Font = Theme.Font
-    PApplyBtn.TextSize = 12
-    PApplyBtn.ZIndex = 12
-    PApplyBtn.Parent = PreviewBox
-    Instance.new("UICorner", PApplyBtn).CornerRadius = UDim.new(0, 4)
-    ApplyGradient(PApplyBtn, Theme.Accent, Theme.AccentDark, 90)
-
-    local PCancelBtn = Instance.new("TextButton")
-    PCancelBtn.Text = "Cancel"
-    PCancelBtn.Size = UDim2.new(0, 100, 0, 28)
-    PCancelBtn.Position = UDim2.new(1, -120, 0, 90)
-    PCancelBtn.BackgroundColor3 = Color3.new(0,0,0)
-    PCancelBtn.BackgroundTransparency = 0.45
-    PCancelBtn.TextColor3 = Theme.TextDark
-    PCancelBtn.Font = Theme.Font
-    PCancelBtn.TextSize = 12
-    PCancelBtn.ZIndex = 12
-    PCancelBtn.Parent = PreviewBox
-    Instance.new("UICorner", PCancelBtn).CornerRadius = UDim.new(0, 4)
-    local pcbStr = Instance.new("UIStroke", PCancelBtn)
-    pcbStr.Color = Color3.fromRGB(40,40,40)
-
-    PCancelBtn.MouseButton1Click:Connect(function() 
-        ModalOverlay.Visible = false
-        PreviewBox.Visible = false
-        selectedModalId = nil 
-        currentModalAction = nil
-    end)
-    
-    PApplyBtn.MouseButton1Click:Connect(function() 
-        if selectedModalId then
-            if currentModalAction == "Skin" then
-                TransformarSkin(selectedModalId)
-            elseif currentModalAction == "Bundle" then
-                -- Desliga qualquer toggle de bundle visualmente ativo antes de aplicar a busca customizada
-                if currentActiveBundleId then
-                    local prevControl = bundleToggleControls[currentActiveBundleId]
-                    if prevControl then prevControl.SetVisual(false) end
-                end
-                currentActiveBundleId = nil -- Como é customizado, limpa a referência ativa dos presets
-                
-                bundleEpoch = bundleEpoch + 1
-                local currentEpoch = bundleEpoch
-                
-                task.spawn(function()
-                    ApplyBundleSafe(selectedModalId, currentEpoch)
-                    if currentEpoch ~= bundleEpoch then return end
-                    if bundleConn then bundleConn:Disconnect() end
-                    bundleConn = LocalPlayer.CharacterAdded:Connect(function(char)
-                        ApplyBundleSafe(selectedModalId, currentEpoch)
-                    end)
-                end)
-            elseif currentModalAction == "Accessory" then
-                EquipAccessoryByID(selectedModalId)
-            end
-            ModalOverlay.Visible = false
-            PreviewBox.Visible = false
-        end
-    end)
-
-    -- Função Auxiliar para Criar Toggles no estilo de Cartões de Presets do Bundle Changer (Grid Sincronizado)
-    local function CreateGridToggle(parent, text, iconId, defaultState, callback)
-        local state = defaultState or false
-
-        local Btn = Instance.new("TextButton")
-        Btn.BackgroundColor3 = Color3.new(0, 0, 0)
-        Btn.BackgroundTransparency = 0.45
-        Btn.Text = ""
-        Btn.Parent = parent
-        Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
-
-        local BStroke = Instance.new("UIStroke")
-        BStroke.Color = Color3.fromRGB(40, 40, 40)
-        BStroke.Thickness = 1
-        BStroke.Parent = Btn
-
-        local Icon = Instance.new("ImageLabel")
-        Icon.Size = UDim2.new(0, 28, 0, 28)
-        Icon.Position = UDim2.new(0, 7, 0.5, -14)
-        Icon.BackgroundColor3 = Theme.SwitchOff
-        Icon.BackgroundTransparency = 0.5
-        Icon.Image = iconId
-        Icon.Parent = Btn
-        Instance.new("UICorner", Icon).CornerRadius = UDim.new(0, 6)
-
-        local NameLabel = Instance.new("TextLabel")
-        NameLabel.Size = UDim2.new(1, -40, 1, 0)
-        NameLabel.Position = UDim2.new(0, 36, 0, 0)
-        NameLabel.BackgroundTransparency = 1
-        NameLabel.Text = text
-        NameLabel.Font = Theme.Font
-        NameLabel.TextScaled = true
-        local nsConst = Instance.new("UITextSizeConstraint", NameLabel)
-        nsConst.MinTextSize = 7
-        nsConst.MaxTextSize = 11
-        NameLabel.TextColor3 = Theme.TextDark
-        NameLabel.TextXAlignment = Enum.TextXAlignment.Left
-        NameLabel.Parent = Btn
-
-        local Indicator = Instance.new("Frame")
-        Indicator.Size = UDim2.new(0, 6, 0, 6)
-        Indicator.Position = UDim2.new(1, -12, 0, 6)
-        Indicator.BackgroundColor3 = Theme.Accent
-        Indicator.Visible = false
-        Indicator.Parent = Btn
-        Instance.new("UICorner", Indicator).CornerRadius = UDim.new(1, 0)
-        ApplyGradient(Indicator, Theme.Accent, Theme.AccentDark, 90)
-
-        local function Upd(fireCallback)
-            if state then
-                TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
-                TweenService:Create(NameLabel, TweenInfo.new(0.2), {TextColor3 = Theme.Text}):Play()
-                Indicator.Visible = true
-            else
-                TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
-                TweenService:Create(NameLabel, TweenInfo.new(0.2), {TextColor3 = Theme.TextDark}):Play()
-                Indicator.Visible = false
-            end
-            if fireCallback then pcall(callback, state) end
-        end
-
-        Btn.MouseEnter:Connect(function()
-            if not state then
-                TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(80, 80, 80)}):Play()
-            end
-        end)
-        Btn.MouseLeave:Connect(function()
-            if not state then
-                TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
-            end
-        end)
-
-        Btn.MouseButton1Click:Connect(function()
-            state = not state
-            Upd(true)
-        end)
-
-        Upd(false)
-        if state then task.spawn(function() pcall(callback, state) end) end
-
-        return {
-            Set = function(val)
-                state = val
-                Upd(true)
-            end
-        }
-    end
-
     -- Função Auxiliar para Criar os Presets de Bundle como Toggles Exclusivos (Estilo Radio Button)
     local function SetupBundleToggle(btn, bndl)
         local state = false
@@ -799,11 +667,13 @@ return function(env)
             local currentEpoch = bundleEpoch
 
             if isActive then
-                -- Desativa visualmente o bundle anterior se houver
+                -- Desativa visualmente o bundle anterior se houver outro ativo
                 if currentActiveBundleId and currentActiveBundleId ~= bId then
                     local prevControl = bundleToggleControls[currentActiveBundleId]
                     if prevControl then
                         prevControl.SetVisual(false)
+                        if bundleConn then bundleConn:Disconnect() bundleConn = nil end
+                        if getgenv().FixLoop then getgenv().FixLoop:Disconnect() getgenv().FixLoop = nil end
                     end
                 end
                 currentActiveBundleId = bId
@@ -818,12 +688,14 @@ return function(env)
                     end)
                 end)
             else
-                -- Desativação manual do bundle ativo atual
+                -- Desativação manual do bundle ativo atual (Usa o restaurador cliente-safe)
                 if currentActiveBundleId == bId then
                     currentActiveBundleId = nil
                     if bundleConn then bundleConn:Disconnect() bundleConn = nil end
                     if getgenv().FixLoop then getgenv().FixLoop:Disconnect() getgenv().FixLoop = nil end
-                    ReloadDefaultCharacter()
+                    task.spawn(function()
+                        ApplyDefaultLookSafe(currentEpoch)
+                    end)
                 end
             end
         end
@@ -857,7 +729,7 @@ return function(env)
     end
 
     -- =======================================================
-    -- [1] COLUNA SPLIT (BUNDLE CHANGER + PARTS & ACCESSORIES) - TOPO
+    -- [1] COLUNA SPLIT (BUNDLE CHANGER + ACCESSORIES CHANGER) - TOPO
     -- =======================================================
     local ColumnsContainer = Instance.new("Frame")
     ColumnsContainer.Name = "ColumnsContainer"
@@ -1038,9 +910,9 @@ return function(env)
     BundleSearchBtnIcon.MouseButton1Click:Connect(function() PerformBundleSearch() end)
 
 
-    -- [COLUNA DIREITA] - PARTS AND ACCESSORIES PACKAGES (CONECTADA VIA EPOCH CONTROL)
+    -- [COLUNA DIREITA] - ACESSORIES CHANGER (NOME CORRIGIDO E ÍCONES PERSONALIZADOS)
     local ExclusiveSection = Instance.new("Frame")
-    ExclusiveSection.Name = "CategoryBox_PartsAndAccessories"
+    ExclusiveSection.Name = "CategoryBox_AccessoriesChanger"
     ExclusiveSection.Size = UDim2.new(1, 0, 0, 0)
     ExclusiveSection.AutomaticSize = Enum.AutomaticSize.Y
     ExclusiveSection.BackgroundColor3 = Color3.new(0, 0, 0)
@@ -1076,8 +948,8 @@ return function(env)
     local ESLabel = Instance.new("TextLabel")
     ESLabel.Size = UDim2.new(1, 0, 1, 0)
     ESLabel.BackgroundTransparency = 1
-    ESLabel.Text = "Parts and accessories packages"
-    ESLabel:SetAttribute("OriginalText", "Parts and accessories packages")
+    ESLabel.Text = "acessories changer"
+    ESLabel:SetAttribute("OriginalText", "acessories changer")
     ESLabel.Font = Theme.Font
     ESLabel.TextSize = 12
     ESLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -1206,7 +1078,8 @@ return function(env)
         end
     end)
     
-    CreateGridToggle(TogglesGridContainer, "Korblox", "rbxthumb://type=BundleThumbnail&id=192&w=150&h=150", false, function(state)
+    -- Korblox com Imagem de catálogo customizada
+    CreateGridToggle(TogglesGridContainer, "Korblox", "rbxassetid://93791173513996", false, function(state)
         korbloxEpoch = korbloxEpoch + 1
         local currentEpoch = korbloxEpoch
         
@@ -1252,7 +1125,8 @@ return function(env)
         end
     end)
 
-    CreateGridToggle(TogglesGridContainer, "Skeleton Leg", "rbxthumb://type=BundleThumbnail&id=295&w=150&h=150", false, function(state)
+    -- Skeleton Leg com Imagem de catálogo customizada
+    CreateGridToggle(TogglesGridContainer, "Skeleton Leg", "rbxassetid://118599491782541", false, function(state)
         skeletonEpoch = skeletonEpoch + 1
         local currentEpoch = skeletonEpoch
         
@@ -1298,7 +1172,8 @@ return function(env)
         end
     end)
 
-    CreateGridToggle(TogglesGridContainer, "Zombie Leg", "rbxthumb://type=BundleThumbnail&id=291&w=150&h=150", false, function(state)
+    -- Zombie Leg com Imagem de catálogo customizada
+    CreateGridToggle(TogglesGridContainer, "Zombie Leg", "rbxassetid://137720329950856", false, function(state)
         zombieEpoch = zombieEpoch + 1
         local currentEpoch = zombieEpoch
         
