@@ -19,7 +19,7 @@ return function(env)
     local currentModalAction = nil
     getgenv().FixLoop = nil
 
-    -- IDs de Época para prevenção absoluta de Race Conditions
+    -- Declaração Prévia de Variáveis de Época para prevenção de Race Conditions
     local headlessEpoch = 0
     local korbloxEpoch = 0
     local skeletonEpoch = 0
@@ -1067,7 +1067,7 @@ return function(env)
     BCLabel.TextXAlignment = Enum.TextXAlignment.Left
     BCLabel.Parent = BCHeader
 
-    -- Input Box do Bundle Changer
+    -- Input Box do Bundle Changer (100% Sincronizado)
     local BundleInputContainer = Instance.new("Frame")
     BundleInputContainer.Size = UDim2.new(1, 0, 0, 35)
     BundleInputContainer.BackgroundColor3 = Color3.new(0, 0, 0)
@@ -1165,7 +1165,7 @@ return function(env)
     SearchBtnIcon.MouseButton1Click:Connect(function() PerformBundleSearch() end)
 
 
-    -- [COLUNA DIREITA] - ACCESSORIES CHANGER
+    -- [COLUNA DIREITA] - ACCESSORIES CHANGER (DESIGN 100% SINCRONIZADO COM BUNDLE CHANGER)
     local ExclusiveSection = Instance.new("Frame")
     ExclusiveSection.Name = "CategoryBox_AccessoriesChanger"
     ExclusiveSection.Size = UDim2.new(1, 0, 0, 0)
@@ -1211,7 +1211,7 @@ return function(env)
     ESLabel.TextXAlignment = Enum.TextXAlignment.Left
     ESLabel.Parent = ESHeader
     
-    -- Barra de Pesquisa de IDs Customizados (100% Sincronizada)
+    -- Barra de Pesquisa de IDs Customizados (100% Simétrica e Idêntica)
     local CustomAssetInputContainer = Instance.new("Frame")
     CustomAssetInputContainer.Name = "CustomAssetInputContainer"
     CustomAssetInputContainer.Size = UDim2.new(1, 0, 0, 35)
@@ -1350,6 +1350,7 @@ return function(env)
                         for _, item in ipairs(bundleDetails.Items) do
                             if item.Type == "UserOutfit" then
                                 local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
+                                if s wholesaler then targetDesc = desc break end
                                 if s and desc then targetDesc = desc break end
                             end
                         end
