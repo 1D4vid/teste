@@ -1,5 +1,5 @@
 return function(env)
-    -- Importando as variáveis do script principal
+    -- Localização de Serviços e Variáveis do Ambiente para ganho de performance
     local Library = env.Library
     local Page = env.Page
     local Workspace = env.Workspace
@@ -14,6 +14,14 @@ return function(env)
 
     local AssetService = game:GetService("AssetService")
     local MarketplaceService = game:GetService("MarketplaceService")
+    
+    -- Localização de Construtores nativos do Roblox (Luau Local Optimization)
+    local Instance_new = Instance.new
+    local CFrame_new = CFrame.new
+    local CFrame_Angles = CFrame.Angles
+    local Vector3_new = Vector3.new
+    local math_rad = math.rad
+    
     local selectedModalId = nil
     local currentModalAction = nil
     getgenv().FixLoop = nil
@@ -34,7 +42,7 @@ return function(env)
     local bundleToggleControls = {}
     local modifierToggles = {}
 
-    -- Caches Locais para Otimização de Performance e Rede
+    -- Caches Locais para Redução de Latência e Requisições
     local assetCache = {}
     local nameToIdCache = {}
 
@@ -45,7 +53,7 @@ return function(env)
     local zombieBackups = setmetatable({}, {__mode = "k"})
     local characterBackups = setmetatable({}, {__mode = "k"})
 
-    -- Função de Carregamento de Ativos Otimizada com Cache
+    -- Função de Carregamento de Ativos com Cache
     local function loadAsset(id)
         if assetCache[id] then
             return assetCache[id]:Clone()
@@ -85,7 +93,7 @@ return function(env)
                 targetPart = rArm
             end
         end
-        local weld = Instance.new("Weld")
+        local weld = Instance_new("Weld")
         weld.Part1 = handle
         if charAtt and targetPart then 
             weld.Part0 = targetPart
@@ -95,7 +103,7 @@ return function(env)
             targetPart = char:FindFirstChild("Right Arm")
             if targetPart then 
                 weld.Part0 = targetPart
-                weld.C0 = CFrame.new(0, -1, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+                weld.C0 = CFrame_new(0, -1, 0) * CFrame_Angles(math_rad(-90), 0, 0)
             end 
         end
         if weld.Part0 then weld.Parent = handle end
@@ -125,7 +133,9 @@ return function(env)
                 SendNotification("Clothing Equipped!", 3)
             elseif obj:IsA("Model") then
                 local hasEquipped = false
-                for _, child in ipairs(obj:GetChildren()) do
+                local children = obj:GetChildren()
+                for i = 1, #children do
+                    local child = children[i]
                     if child:IsA("Accessory") or child:IsA("Hat") or child:IsA("Tool") or child:IsA("Shirt") or child:IsA("Pants") then
                         handleEquip(child)
                         hasEquipped = true
@@ -137,10 +147,10 @@ return function(env)
                     if primary then
                         primary.Anchored = false
                         primary.CanCollide = false
-                        local weld = Instance.new("Weld")
+                        local weld = Instance_new("Weld")
                         weld.Part0 = char:FindFirstChild("Head") or char.PrimaryPart
                         weld.Part1 = primary
-                        weld.C0 = CFrame.new(0, 0, 0)
+                        weld.C0 = CFrame_new(0, 0, 0)
                         weld.Parent = primary
                     end
                     SendNotification("Model Attached!", 3)
@@ -152,37 +162,61 @@ return function(env)
         handleEquip(asset)
     end
 
+    -- Loop de Correção de Textura Altamente Otimizado com Caching de Instâncias
     local function StartFixLoop(char, colorTable, originalHeadTextureId)
         if getgenv().FixLoop then getgenv().FixLoop:Disconnect() end
+        
+        -- Cache de partes e SpecialMeshes pré-processados fora do frame renderizado
+        local cachedParts = {}
+        for partName, color in pairs(colorTable) do
+            local part = char:FindFirstChild(partName)
+            if part and part:IsA("BasePart") then
+                cachedParts[#cachedParts + 1] = {
+                    Instance = part,
+                    Name = partName,
+                    Color = color,
+                    Mesh = part:FindFirstChildOfClass("SpecialMesh")
+                }
+            end
+        end
+
         getgenv().FixLoop = RunService.RenderStepped:Connect(function()
             if not char or not char.Parent then 
                 if getgenv().FixLoop then getgenv().FixLoop:Disconnect() end 
                 return 
             end
-            for partName, color in pairs(colorTable) do
-                local part = char:FindFirstChild(partName)
-                if part and part:IsA("BasePart") then
-                    if part.Color ~= color then 
-                        part.Color = color
+            
+            for i = 1, #cachedParts do
+                local data = cachedParts[i]
+                local part = data.Instance
+                if part and part.Parent then
+                    if part.Color ~= data.Color then 
+                        part.Color = data.Color
                         part.Material = Enum.Material.SmoothPlastic 
                     end
-                    local mesh = part:FindFirstChildOfClass("SpecialMesh")
-                    if mesh then
-                        if partName == "Head" then
+                    local mesh = data.Mesh
+                    if mesh and mesh.Parent then
+                        if data.Name == "Head" then
                             if originalHeadTextureId and originalHeadTextureId ~= "" then 
                                 if mesh.TextureId ~= originalHeadTextureId then mesh.TextureId = originalHeadTextureId end
-                                mesh.VertexColor = Vector3.new(1, 1, 1) 
+                                mesh.VertexColor = Vector3_new(1, 1, 1) 
                             else 
                                 if mesh.TextureId ~= "" then mesh.TextureId = "" end 
                             end
                         else 
                             if mesh.TextureId ~= "" then mesh.TextureId = "" end
-                            mesh.VertexColor = Vector3.new(1,1,1) 
+                            mesh.VertexColor = Vector3_new(1, 1, 1) 
                         end
                     end
-                    for _, child in ipairs(part:GetChildren()) do 
-                        if child:IsA("Decal") and child.Name ~= "face" then child:Destroy() 
-                        elseif child:IsA("Texture") then child:Destroy() end 
+                    
+                    local children = part:GetChildren()
+                    for j = 1, #children do
+                        local child = children[j]
+                        if child:IsA("Decal") and child.Name ~= "face" then 
+                            child:Destroy() 
+                        elseif child:IsA("Texture") then 
+                            child:Destroy() 
+                        end
                     end
                 end
             end
@@ -202,7 +236,9 @@ return function(env)
             headMesh = nil
         }
         
-        for _, child in ipairs(char:GetChildren()) do
+        local children = char:GetChildren()
+        for i = 1, #children do
+            local child = children[i]
             if child:IsA("CharacterMesh") then
                 table.insert(backup.meshes, child:Clone())
             elseif child:IsA("Shirt") or child:IsA("Pants") or child:IsA("ShirtGraphic") then
@@ -236,23 +272,24 @@ return function(env)
         
         if getgenv().FixLoop then getgenv().FixLoop:Disconnect() getgenv().FixLoop = nil end
         
-        for _, child in ipairs(char:GetChildren()) do
+        local children = char:GetChildren()
+        for i = 1, #children do
+            local child = children[i]
             if child:IsA("CharacterMesh") or child:IsA("Shirt") or child:IsA("Pants") or child:IsA("ShirtGraphic") or child:IsA("Accessory") or child:IsA("Hat") or child:IsA("BodyColors") then
                 child:Destroy()
             end
         end
         
-        for _, mesh in ipairs(backup.meshes) do
-            mesh:Clone().Parent = char
+        for i = 1, #backup.meshes do
+            backup.meshes[i]:Clone().Parent = char
         end
         
-        for _, cloth in ipairs(backup.clothes) do
-            cloth:Clone().Parent = char
+        for i = 1, #backup.clothes do
+            backup.clothes[i]:Clone().Parent = char
         end
         
-        for _, acc in ipairs(backup.accessories) do
-            local clone = acc:Clone()
-            clone.Parent = char
+        for i = 1, #backup.accessories do
+            backup.accessories[i]:Clone().Parent = char
         end
         
         if backup.bodyColors then
@@ -263,7 +300,7 @@ return function(env)
         if head then
             local face = head:FindFirstChild("face") or head:FindFirstChildOfClass("Decal")
             if not face then
-                face = Instance.new("Decal", head)
+                face = Instance_new("Decal", head)
                 face.Name = "face"
             end
             face.Texture = backup.faceTexture or "rbxasset://textures/face.png"
@@ -273,8 +310,8 @@ return function(env)
             if backup.headMesh then
                 backup.headMesh:Clone().Parent = head
             else
-                local defaultMesh = Instance.new("SpecialMesh", head)
-                defaultMesh.Scale = Vector3.new(1.25, 1.25, 1.25)
+                local defaultMesh = Instance_new("SpecialMesh", head)
+                defaultMesh.Scale = Vector3_new(1.25, 1.25, 1.25)
             end
         end
     end
@@ -323,7 +360,7 @@ return function(env)
                     local dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
                     dummy.Name = "AssetSource"
                     dummy.Parent = Workspace
-                    dummy:PivotTo(CFrame.new(0, -500, 0))
+                    dummy:PivotTo(CFrame_new(0, -500, 0))
                     task.wait(0.5)
 
                     if char and char.Parent then
@@ -331,7 +368,9 @@ return function(env)
                         local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
                         if dummyMesh then targetHeadTexture = dummyMesh.TextureId end
 
-                        for _, v in ipairs(char:GetChildren()) do 
+                        local charChildren = char:GetChildren()
+                        for i = 1, #charChildren do
+                            local v = charChildren[i]
                             if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
                                 v:Destroy() 
                             end 
@@ -339,7 +378,7 @@ return function(env)
                         if head:FindFirstChild("face") then head.face:Destroy() end
 
                         local myMesh = head:FindFirstChildOfClass("SpecialMesh")
-                        if not myMesh then myMesh = Instance.new("SpecialMesh", head) end
+                        if not myMesh then myMesh = Instance_new("SpecialMesh", head) end
 
                         if dummyMesh then 
                             myMesh.MeshType = dummyMesh.MeshType
@@ -349,19 +388,22 @@ return function(env)
                         else
                             myMesh.MeshType = Enum.MeshType.Head
                             myMesh.MeshId = ""
-                            myMesh.Scale = Vector3.new(1.25, 1.25, 1.25)
+                            myMesh.Scale = Vector3_new(1.25, 1.25, 1.25)
                             myMesh.TextureId = ""
                         end
-                        myMesh.VertexColor = Vector3.new(1,1,1)
+                        myMesh.VertexColor = Vector3_new(1,1,1)
 
-                        for _, item in ipairs(dummy:GetChildren()) do if item:IsA("CharacterMesh") then item:Clone().Parent = char end end
-                        for _, item in ipairs(dummy:GetChildren()) do 
-                            if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
+                        local dummyChildren = dummy:GetChildren()
+                        for i = 1, #dummyChildren do
+                            local item = dummyChildren[i]
+                            if item:IsA("CharacterMesh") then 
+                                item:Clone().Parent = char 
+                            elseif item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
                                 item:Clone().Parent = char 
                             end 
                         end
 
-                        local faceDecal = Instance.new("Decal")
+                        local faceDecal = Instance_new("Decal")
                         faceDecal.Name = "face"
                         local dummyFace = dummy.Head:FindFirstChild("face")
                         if dummyFace then
@@ -373,7 +415,7 @@ return function(env)
                         end
                         faceDecal.Parent = head
 
-                        local newBC = Instance.new("BodyColors")
+                        local newBC = Instance_new("BodyColors")
                         newBC.HeadColor3 = desc.HeadColor
                         newBC.TorsoColor3 = desc.TorsoColor
                         newBC.LeftArmColor3 = desc.LeftArmColor
@@ -384,7 +426,8 @@ return function(env)
 
                         StartFixLoop(char, realColors, targetHeadTexture)
 
-                        for _, item in ipairs(dummy:GetChildren()) do 
+                        for i = 1, #dummyChildren do
+                            local item = dummyChildren[i]
                             if item:IsA("Accessory") then 
                                 local clone = item:Clone()
                                 SmartWeld(char, clone) 
@@ -397,7 +440,9 @@ return function(env)
                 local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(ActiveModifiers.BundleId) end)
                 if success and bundleDetails and bundleDetails.Items then
                     local targetDesc = nil
-                    for _, item in ipairs(bundleDetails.Items) do
+                    local items = bundleDetails.Items
+                    for i = 1, #items do
+                        local item = items[i]
                         if item.Type == "UserOutfit" then
                             local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
                             if s and desc then targetDesc = desc break end
@@ -409,7 +454,7 @@ return function(env)
                         local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
                         dummy.Name = "AssetSource"
                         dummy.Parent = Workspace
-                        dummy:PivotTo(CFrame.new(0, -500, 0))
+                        dummy:PivotTo(CFrame_new(0, -500, 0))
                         task.wait(0.5)
 
                         if char and char.Parent then
@@ -418,7 +463,9 @@ return function(env)
                                 targetHeadTexture = dummy.Head:FindFirstChildOfClass("SpecialMesh").TextureId 
                             end
 
-                            for _, v in ipairs(char:GetChildren()) do 
+                            local charChildren = char:GetChildren()
+                            for i = 1, #charChildren do
+                                local v = charChildren[i]
                                 if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
                                     v:Destroy() 
                                 end 
@@ -428,26 +475,27 @@ return function(env)
                             local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
                             local myMesh = head:FindFirstChildOfClass("SpecialMesh")
                             if dummyMesh then 
-                                if not myMesh then myMesh = Instance.new("SpecialMesh", head) end
+                                if not myMesh then myMesh = Instance_new("SpecialMesh", head) end
                                 myMesh.MeshType = Enum.MeshType.FileMesh
                                 myMesh.MeshId = dummyMesh.MeshId
                                 myMesh.Scale = dummyMesh.Scale
                                 myMesh.TextureId = targetHeadTexture
-                                myMesh.VertexColor = Vector3.new(1,1,1) 
+                                myMesh.VertexColor = Vector3_new(1,1,1) 
                             end
 
-                            for _, item in ipairs(dummy:GetChildren()) do 
-                                if item:IsA("CharacterMesh") then item:Clone().Parent = char end 
-                            end
-                            for _, item in ipairs(dummy:GetChildren()) do 
-                                if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
+                            local dummyChildren = dummy:GetChildren()
+                            for i = 1, #dummyChildren do
+                                local item = dummyChildren[i]
+                                if item:IsA("CharacterMesh") then 
+                                    item:Clone().Parent = char 
+                                elseif item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
                                     item:Clone().Parent = char 
                                 elseif item.Name == "Head" and item:FindFirstChild("face") then 
                                     item.face:Clone().Parent = head 
                                 end 
                             end
 
-                            local newBC = Instance.new("BodyColors")
+                            local newBC = Instance_new("BodyColors")
                             newBC.HeadColor3 = targetDesc.HeadColor
                             newBC.TorsoColor3 = targetDesc.TorsoColor
                             newBC.LeftArmColor3 = targetDesc.LeftArmColor
@@ -458,7 +506,8 @@ return function(env)
 
                             StartFixLoop(char, realColors, targetHeadTexture)
 
-                            for _, item in ipairs(dummy:GetChildren()) do 
+                            for i = 1, #dummyChildren do
+                                local item = dummyChildren[i]
                                 if item:IsA("Accessory") then 
                                     local clone = item:Clone()
                                     SmartWeld(char, clone) 
@@ -501,7 +550,9 @@ return function(env)
             end
 
             if activeLegMesh then
-                for _, v in ipairs(char:GetChildren()) do
+                local charChildren = char:GetChildren()
+                for i = 1, #charChildren do
+                    local v = charChildren[i]
                     if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
                         v:Destroy()
                     end
@@ -562,7 +613,7 @@ return function(env)
     end
 
     -- Criação do Modal de Confirmação
-    local PreviewBox = Instance.new("Frame")
+    local PreviewBox = Instance_new("Frame")
     PreviewBox.Size = UDim2.new(0, 260, 0, 130)
     PreviewBox.AnchorPoint = Vector2.new(0.5, 0.5)
     PreviewBox.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -573,11 +624,11 @@ return function(env)
     PreviewBox.Visible = false
     PreviewBox.Parent = ModalOverlay
 
-    local PBStroke = Instance.new("UIStroke")
+    local PBStroke = Instance_new("UIStroke")
     PBStroke.Color = Color3.fromRGB(40, 40, 40)
     PBStroke.Parent = PreviewBox
     
-    local PBTopLine = Instance.new("Frame")
+    local PBTopLine = Instance_new("Frame")
     PBTopLine.Size = UDim2.new(1, 0, 0, 2)
     PBTopLine.BackgroundColor3 = Theme.Accent
     PBTopLine.BorderSizePixel = 0
@@ -585,7 +636,7 @@ return function(env)
     PBTopLine.Parent = PreviewBox
     ApplyGradient(PBTopLine, Theme.Accent, Theme.AccentDark, 0)
 
-    local PTitle = Instance.new("TextLabel")
+    local PTitle = Instance_new("TextLabel")
     PTitle.Parent = PreviewBox
     PTitle.Text = "FOUND"
     PTitle.Font = Theme.Font
@@ -595,15 +646,15 @@ return function(env)
     PTitle.BackgroundTransparency = 1
     PTitle.ZIndex = 12
 
-    local PImage = Instance.new("ImageLabel")
+    local PImage = Instance_new("ImageLabel")
     PImage.Size = UDim2.new(0, 46, 0, 46)
     PImage.Position = UDim2.new(0, 20, 0, 35)
     PImage.BackgroundColor3 = Theme.SwitchOff
     PImage.ZIndex = 12
     PImage.Parent = PreviewBox
-    Instance.new("UICorner", PImage).CornerRadius = UDim.new(0, 6)
+    Instance_new("UICorner", PImage).CornerRadius = UDim.new(0, 6)
 
-    local PName = Instance.new("TextLabel")
+    local PName = Instance_new("TextLabel")
     PName.Text = "Name"
     PName.Size = UDim2.new(1, -80, 0, 46)
     PName.Position = UDim2.new(0, 75, 0, 35)
@@ -615,7 +666,7 @@ return function(env)
     PName.ZIndex = 12
     PName.Parent = PreviewBox
 
-    local PApplyBtn = Instance.new("TextButton")
+    local PApplyBtn = Instance_new("TextButton")
     PApplyBtn.Text = "Apply"
     PApplyBtn.Size = UDim2.new(0, 100, 0, 28)
     PApplyBtn.Position = UDim2.new(0, 20, 0, 90)
@@ -625,10 +676,10 @@ return function(env)
     PApplyBtn.TextSize = 12
     PApplyBtn.ZIndex = 12
     PApplyBtn.Parent = PreviewBox
-    Instance.new("UICorner", PApplyBtn).CornerRadius = UDim.new(0, 4)
+    Instance_new("UICorner", PApplyBtn).CornerRadius = UDim.new(0, 4)
     ApplyGradient(PApplyBtn, Theme.Accent, Theme.AccentDark, 90)
 
-    local PCancelBtn = Instance.new("TextButton")
+    local PCancelBtn = Instance_new("TextButton")
     PCancelBtn.Text = "Cancel"
     PCancelBtn.Size = UDim2.new(0, 100, 0, 28)
     PCancelBtn.Position = UDim2.new(1, -120, 0, 90)
@@ -639,8 +690,8 @@ return function(env)
     PCancelBtn.TextSize = 12
     PCancelBtn.ZIndex = 12
     PCancelBtn.Parent = PreviewBox
-    Instance.new("UICorner", PCancelBtn).CornerRadius = UDim.new(0, 4)
-    local pcbStr = Instance.new("UIStroke", PCancelBtn)
+    Instance_new("UICorner", PCancelBtn).CornerRadius = UDim.new(0, 4)
+    local pcbStr = Instance_new("UIStroke", PCancelBtn)
     pcbStr.Color = Color3.fromRGB(40,40,40)
 
     PCancelBtn.MouseButton1Click:Connect(function() 
@@ -675,48 +726,48 @@ return function(env)
     local function CreateGridToggle(parent, text, iconId, defaultState, callback)
         local state = defaultState or false
 
-        local Btn = Instance.new("TextButton")
+        local Btn = Instance_new("TextButton")
         Btn.BackgroundColor3 = Color3.new(0, 0, 0)
         Btn.BackgroundTransparency = 0.45
         Btn.Text = ""
         Btn.Parent = parent
-        Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
+        Instance_new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
 
-        local BStroke = Instance.new("UIStroke")
+        local BStroke = Instance_new("UIStroke")
         BStroke.Color = Color3.fromRGB(40, 40, 40)
         BStroke.Thickness = 1
         BStroke.Parent = Btn
 
-        local Icon = Instance.new("ImageLabel")
+        local Icon = Instance_new("ImageLabel")
         Icon.Size = UDim2.new(0, 28, 0, 28)
         Icon.Position = UDim2.new(0, 7, 0.5, -14)
         Icon.BackgroundColor3 = Theme.SwitchOff
         Icon.BackgroundTransparency = 0.5
         Icon.Image = iconId
         Icon.Parent = Btn
-        Instance.new("UICorner", Icon).CornerRadius = UDim.new(0, 6)
+        Instance_new("UICorner", Icon).CornerRadius = UDim.new(0, 6)
 
-        local NameLabel = Instance.new("TextLabel")
+        local NameLabel = Instance_new("TextLabel")
         NameLabel.Size = UDim2.new(1, -40, 1, 0)
         NameLabel.Position = UDim2.new(0, 36, 0, 0)
         NameLabel.BackgroundTransparency = 1
         NameLabel.Text = text
         NameLabel.Font = Theme.Font
         NameLabel.TextScaled = true
-        local nsConst = Instance.new("UITextSizeConstraint", NameLabel)
+        local nsConst = Instance_new("UITextSizeConstraint", NameLabel)
         nsConst.MinTextSize = 7
         nsConst.MaxTextSize = 11
         NameLabel.TextColor3 = Theme.TextDark
         NameLabel.TextXAlignment = Enum.TextXAlignment.Left
         NameLabel.Parent = Btn
 
-        local Indicator = Instance.new("Frame")
+        local Indicator = Instance_new("Frame")
         Indicator.Size = UDim2.new(0, 6, 0, 6)
         Indicator.Position = UDim2.new(1, -12, 0, 6)
         Indicator.BackgroundColor3 = Theme.Accent
         Indicator.Visible = false
         Indicator.Parent = Btn
-        Instance.new("UICorner", Indicator).CornerRadius = UDim.new(1, 0)
+        Instance_new("UICorner", Indicator).CornerRadius = UDim.new(1, 0)
         ApplyGradient(Indicator, Theme.Accent, Theme.AccentDark, 90)
 
         local function Upd(fireCallback)
@@ -764,14 +815,14 @@ return function(env)
         local state = false
         local bId = bndl.Id
 
-        local Indicator = Instance.new("Frame")
+        local Indicator = Instance_new("Frame")
         Indicator.Name = "Indicator"
         Indicator.Size = UDim2.new(0, 6, 0, 6)
         Indicator.Position = UDim2.new(1, -12, 0, 6)
         Indicator.BackgroundColor3 = Theme.Accent
         Indicator.Visible = false
         Indicator.Parent = btn
-        Instance.new("UICorner", Indicator).CornerRadius = UDim.new(1, 0)
+        Instance_new("UICorner", Indicator).CornerRadius = UDim.new(1, 0)
         ApplyGradient(Indicator, Theme.Accent, Theme.AccentDark, 90)
 
         local function UpdVisuals(isActive)
@@ -842,7 +893,7 @@ return function(env)
     -- =======================================================
     -- [1] COLUNA SPLIT (BUNDLE CHANGER + PARTS & ACCESSORIES) - TOPO
     -- =======================================================
-    local ColumnsContainer = Instance.new("Frame")
+    local ColumnsContainer = Instance_new("Frame")
     ColumnsContainer.Name = "ColumnsContainer"
     ColumnsContainer.Size = UDim2.new(1, 0, 0, 0)
     ColumnsContainer.AutomaticSize = Enum.AutomaticSize.Y
@@ -850,36 +901,36 @@ return function(env)
     ColumnsContainer.LayoutOrder = 1
     ColumnsContainer.Parent = Page
 
-    local CCLayout = Instance.new("UIListLayout")
+    local CCLayout = Instance_new("UIListLayout")
     CCLayout.FillDirection = Enum.FillDirection.Horizontal
     CCLayout.Padding = UDim.new(0, 12)
     CCLayout.SortOrder = Enum.SortOrder.LayoutOrder
     CCLayout.Parent = ColumnsContainer
 
-    local LeftCol = Instance.new("Frame")
+    local LeftCol = Instance_new("Frame")
     LeftCol.Name = "LeftCol"
     LeftCol.Size = UDim2.new(0.5, -6, 0, 0)
     LeftCol.AutomaticSize = Enum.AutomaticSize.Y
     LeftCol.BackgroundTransparency = 1
     LeftCol.Parent = ColumnsContainer
-    local LL = Instance.new("UIListLayout")
+    local LL = Instance_new("UIListLayout")
     LL.Padding = UDim.new(0, 10)
     LL.SortOrder = Enum.SortOrder.LayoutOrder
     LL.Parent = LeftCol
 
-    local RightCol = Instance.new("Frame")
+    local RightCol = Instance_new("Frame")
     RightCol.Name = "RightCol"
     RightCol.Size = UDim2.new(0.5, -6, 0, 0)
     RightCol.AutomaticSize = Enum.AutomaticSize.Y
     RightCol.BackgroundTransparency = 1
     RightCol.Parent = ColumnsContainer
-    local RL = Instance.new("UIListLayout")
+    local RL = Instance_new("UIListLayout")
     RL.Padding = UDim.new(0, 10)
     RL.SortOrder = Enum.SortOrder.LayoutOrder
     RL.Parent = RightCol
 
     -- [COLUNA ESQUERDA] - BUNDLE CHANGER
-    local BundleChangerSection = Instance.new("Frame")
+    local BundleChangerSection = Instance_new("Frame")
     BundleChangerSection.Name = "CategoryBox_BundleChanger"
     BundleChangerSection.Size = UDim2.new(1, 0, 0, 0)
     BundleChangerSection.AutomaticSize = Enum.AutomaticSize.Y
@@ -888,31 +939,31 @@ return function(env)
     BundleChangerSection.BorderSizePixel = 0
     BundleChangerSection.Parent = LeftCol
 
-    Instance.new("UICorner", BundleChangerSection).CornerRadius = UDim.new(0, 6)
-    local BCStroke = Instance.new("UIStroke")
+    Instance_new("UICorner", BundleChangerSection).CornerRadius = UDim.new(0, 6)
+    local BCStroke = Instance_new("UIStroke")
     BCStroke.Color = Color3.fromRGB(40, 40, 40)
     BCStroke.Thickness = 1
     BCStroke.Parent = BundleChangerSection
 
-    local BCLayout = Instance.new("UIListLayout")
+    local BCLayout = Instance_new("UIListLayout")
     BCLayout.SortOrder = Enum.SortOrder.LayoutOrder
     BCLayout.Padding = UDim.new(0, 8)
     BCLayout.Parent = BundleChangerSection
 
-    local BCPadding = Instance.new("UIPadding")
+    local BCPadding = Instance_new("UIPadding")
     BCPadding.PaddingTop = UDim.new(0, 8)
     BCPadding.PaddingBottom = UDim.new(0, 8)
     BCPadding.PaddingLeft = UDim.new(0, 10)
     BCPadding.PaddingRight = UDim.new(0, 10)
     BCPadding.Parent = BundleChangerSection
 
-    local BCHeader = Instance.new("Frame")
+    local BCHeader = Instance_new("Frame")
     BCHeader.Name = "HeaderContainer"
     BCHeader.Size = UDim2.new(1, 0, 0, 20)
     BCHeader.BackgroundTransparency = 1
     BCHeader.Parent = BundleChangerSection
 
-    local BCLabel = Instance.new("TextLabel")
+    local BCLabel = Instance_new("TextLabel")
     BCLabel.Size = UDim2.new(1, 0, 1, 0)
     BCLabel.BackgroundTransparency = 1
     BCLabel.Text = "Bundle Changer"
@@ -923,17 +974,17 @@ return function(env)
     BCLabel.TextXAlignment = Enum.TextXAlignment.Left
     BCLabel.Parent = BCHeader
 
-    local BundleInputContainer = Instance.new("Frame")
+    local BundleInputContainer = Instance_new("Frame")
     BundleInputContainer.Size = UDim2.new(1, 0, 0, 35)
     BundleInputContainer.BackgroundColor3 = Color3.new(0, 0, 0)
     BundleInputContainer.BackgroundTransparency = 0.45
     BundleInputContainer.Parent = BundleChangerSection
-    Instance.new("UICorner", BundleInputContainer).CornerRadius = UDim.new(0, 6)
-    local bicStr = Instance.new("UIStroke", BundleInputContainer)
+    Instance_new("UICorner", BundleInputContainer).CornerRadius = UDim.new(0, 6)
+    local bicStr = Instance_new("UIStroke", BundleInputContainer)
     bicStr.Color = Color3.fromRGB(40,40,40)
     bicStr.Thickness = 1
 
-    local BundleInputBox = Instance.new("TextBox")
+    local BundleInputBox = Instance_new("TextBox")
     BundleInputBox.Size = UDim2.new(1, -40, 1, 0)
     BundleInputBox.Position = UDim2.new(0, 10, 0, 0)
     BundleInputBox.BackgroundTransparency = 1
@@ -946,7 +997,7 @@ return function(env)
     BundleInputBox.TextXAlignment = Enum.TextXAlignment.Left
     BundleInputBox.Parent = BundleInputContainer
 
-    local BundleSearchBtnIcon = Instance.new("ImageButton")
+    local BundleSearchBtnIcon = Instance_new("ImageButton")
     BundleSearchBtnIcon.Size = UDim2.new(0, 20, 0, 20)
     BundleSearchBtnIcon.Position = UDim2.new(1, -28, 0.5, -10)
     BundleSearchBtnIcon.BackgroundTransparency = 1
@@ -979,13 +1030,13 @@ return function(env)
         end
     end
 
-    local BundlePresetsContainer = Instance.new("Frame")
+    local BundlePresetsContainer = Instance_new("Frame")
     BundlePresetsContainer.Size = UDim2.new(1, 0, 0, 0)
     BundlePresetsContainer.BackgroundTransparency = 1
     BundlePresetsContainer.AutomaticSize = Enum.AutomaticSize.Y
     BundlePresetsContainer.Parent = BundleChangerSection
 
-    local GridBundle = Instance.new("UIGridLayout")
+    local GridBundle = Instance_new("UIGridLayout")
     GridBundle.CellSize = UDim2.new(0.5, -4, 0, 42) 
     GridBundle.CellPadding = UDim2.new(0, 8, 0, 8)
     GridBundle.SortOrder = Enum.SortOrder.LayoutOrder
@@ -1001,35 +1052,35 @@ return function(env)
     }
 
     for _, bndl in ipairs(BundlePresets) do
-        local Btn = Instance.new("TextButton")
+        local Btn = Instance_new("TextButton")
         Btn.BackgroundColor3 = Color3.new(0, 0, 0)
         Btn.BackgroundTransparency = 0.45
         Btn.Text = ""
         Btn.Parent = BundlePresetsContainer
-        Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
+        Instance_new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
 
-        local BStroke = Instance.new("UIStroke")
+        local BStroke = Instance_new("UIStroke")
         BStroke.Color = Color3.fromRGB(40, 40, 40)
         BStroke.Thickness = 1
         BStroke.Parent = Btn
 
-        local BundleIcon = Instance.new("ImageLabel")
+        local BundleIcon = Instance_new("ImageLabel")
         BundleIcon.Size = UDim2.new(0, 28, 0, 28)
         BundleIcon.Position = UDim2.new(0, 7, 0.5, -14)
         BundleIcon.BackgroundColor3 = Theme.SwitchOff
         BundleIcon.BackgroundTransparency = 0.5
         BundleIcon.Image = "rbxthumb://type=BundleThumbnail&id=" .. bndl.Id .. "&w=150&h=150"
         BundleIcon.Parent = Btn
-        Instance.new("UICorner", BundleIcon).CornerRadius = UDim.new(0, 6)
+        Instance_new("UICorner", BundleIcon).CornerRadius = UDim.new(0, 6)
 
-        local NameLabel = Instance.new("TextLabel")
+        local NameLabel = Instance_new("TextLabel")
         NameLabel.Size = UDim2.new(1, -40, 1, 0)
         NameLabel.Position = UDim2.new(0, 36, 0, 0)
         NameLabel.BackgroundTransparency = 1
         NameLabel.Text = bndl.Name
         NameLabel.Font = Theme.Font
         NameLabel.TextScaled = true
-        local nsConst = Instance.new("UITextSizeConstraint", NameLabel)
+        local nsConst = Instance_new("UITextSizeConstraint", NameLabel)
         nsConst.MinTextSize = 7
         nsConst.MaxTextSize = 11
         NameLabel.TextColor3 = Theme.TextDark
@@ -1044,7 +1095,7 @@ return function(env)
 
 
     -- [COLUNA DIREITA] - ACCESSORIES CHANGER
-    local ExclusiveSection = Instance.new("Frame")
+    local ExclusiveSection = Instance_new("Frame")
     ExclusiveSection.Name = "CategoryBox_AccessoriesChanger"
     ExclusiveSection.Size = UDim2.new(1, 0, 0, 0)
     ExclusiveSection.AutomaticSize = Enum.AutomaticSize.Y
@@ -1053,31 +1104,31 @@ return function(env)
     ExclusiveSection.BorderSizePixel = 0
     ExclusiveSection.Parent = RightCol
 
-    Instance.new("UICorner", ExclusiveSection).CornerRadius = UDim.new(0, 6)
-    local ESStroke = Instance.new("UIStroke")
+    Instance_new("UICorner", ExclusiveSection).CornerRadius = UDim.new(0, 6)
+    local ESStroke = Instance_new("UIStroke")
     ESStroke.Color = Color3.fromRGB(40, 40, 40)
     ESStroke.Thickness = 1
     ESStroke.Parent = ExclusiveSection
 
-    local ESLayout = Instance.new("UIListLayout")
+    local ESLayout = Instance_new("UIListLayout")
     ESLayout.SortOrder = Enum.SortOrder.LayoutOrder
     ESLayout.Padding = UDim.new(0, 8)
     ESLayout.Parent = ExclusiveSection
 
-    local ESPadding = Instance.new("UIPadding")
+    local ESPadding = Instance_new("UIPadding")
     ESPadding.PaddingTop = UDim.new(0, 8)
     ESPadding.PaddingBottom = UDim.new(0, 8)
     ESPadding.PaddingLeft = UDim.new(0, 10)
     ESPadding.PaddingRight = UDim.new(0, 10)
     ESPadding.Parent = ExclusiveSection
 
-    local ESHeader = Instance.new("Frame")
+    local ESHeader = Instance_new("Frame")
     ESHeader.Name = "HeaderContainer"
     ESHeader.Size = UDim2.new(1, 0, 0, 20)
     ESHeader.BackgroundTransparency = 1
     ESHeader.Parent = ExclusiveSection
 
-    local ESLabel = Instance.new("TextLabel")
+    local ESLabel = Instance_new("TextLabel")
     ESLabel.Size = UDim2.new(1, 0, 1, 0)
     ESLabel.BackgroundTransparency = 1
     ESLabel.Text = "Accessories Changer"
@@ -1088,18 +1139,18 @@ return function(env)
     ESLabel.TextXAlignment = Enum.TextXAlignment.Left
     ESLabel.Parent = ESHeader
     
-    local CustomAssetInputContainer = Instance.new("Frame")
+    local CustomAssetInputContainer = Instance_new("Frame")
     CustomAssetInputContainer.Name = "CustomAssetInputContainer"
     CustomAssetInputContainer.Size = UDim2.new(1, 0, 0, 35)
     CustomAssetInputContainer.BackgroundColor3 = Color3.new(0, 0, 0)
     CustomAssetInputContainer.BackgroundTransparency = 0.45
     CustomAssetInputContainer.Parent = ExclusiveSection
-    Instance.new("UICorner", CustomAssetInputContainer).CornerRadius = UDim.new(0, 6)
-    local caiStr = Instance.new("UIStroke", CustomAssetInputContainer)
+    Instance_new("UICorner", CustomAssetInputContainer).CornerRadius = UDim.new(0, 6)
+    local caiStr = Instance_new("UIStroke", CustomAssetInputContainer)
     caiStr.Color = Color3.fromRGB(40,40,40)
     caiStr.Thickness = 1
 
-    local CustomAssetInputBox = Instance.new("TextBox")
+    local CustomAssetInputBox = Instance_new("TextBox")
     CustomAssetInputBox.Size = UDim2.new(1, -40, 1, 0)
     CustomAssetInputBox.Position = UDim2.new(0, 10, 0, 0)
     CustomAssetInputBox.BackgroundTransparency = 1
@@ -1112,7 +1163,7 @@ return function(env)
     CustomAssetInputBox.TextXAlignment = Enum.TextXAlignment.Left
     CustomAssetInputBox.Parent = CustomAssetInputContainer
 
-    local CustomAssetSearchBtnIcon = Instance.new("ImageButton")
+    local CustomAssetSearchBtnIcon = Instance_new("ImageButton")
     CustomAssetSearchBtnIcon.Size = UDim2.new(0, 20, 0, 20)
     CustomAssetSearchBtnIcon.Position = UDim2.new(1, -28, 0.5, -10)
     CustomAssetSearchBtnIcon.BackgroundTransparency = 1
@@ -1148,14 +1199,14 @@ return function(env)
     CustomAssetInputBox.FocusLost:Connect(function(enter) if enter then ProcessCustomAsset() end end)
     CustomAssetSearchBtnIcon.MouseButton1Click:Connect(ProcessCustomAsset)
 
-    local TogglesGridContainer = Instance.new("Frame")
+    local TogglesGridContainer = Instance_new("Frame")
     TogglesGridContainer.Name = "TogglesGridContainer"
     TogglesGridContainer.Size = UDim2.new(1, 0, 0, 0)
     TogglesGridContainer.BackgroundTransparency = 1
     TogglesGridContainer.AutomaticSize = Enum.AutomaticSize.Y
     TogglesGridContainer.Parent = ExclusiveSection
 
-    local GridTgl = Instance.new("UIGridLayout")
+    local GridTgl = Instance_new("UIGridLayout")
     GridTgl.CellSize = UDim2.new(0.5, -4, 0, 42)
     GridTgl.CellPadding = UDim2.new(0, 8, 0, 8)
     GridTgl.SortOrder = Enum.SortOrder.LayoutOrder
@@ -1169,7 +1220,9 @@ return function(env)
                 local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(201) end)
                 if success and bundleDetails and bundleDetails.Items then
                     local targetDesc = nil
-                    for _, item in ipairs(bundleDetails.Items) do
+                    local items = bundleDetails.Items
+                    for i = 1, #items do
+                        local item = items[i]
                         if item.Type == "UserOutfit" then
                             local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
                             if s and desc then targetDesc = desc break end
@@ -1205,7 +1258,9 @@ return function(env)
                 local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(192) end)
                 if success and bundleDetails and bundleDetails.Items then
                     local targetDesc = nil
-                    for _, item in ipairs(bundleDetails.Items) do
+                    local items = bundleDetails.Items
+                    for i = 1, #items do
+                        local item = items[i]
                         if item.Type == "UserOutfit" then
                             local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
                             if s and desc then targetDesc = desc break end
@@ -1213,7 +1268,9 @@ return function(env)
                     end
                     if targetDesc then
                         local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
-                        for _, item in ipairs(dummy:GetChildren()) do
+                        local dummyChildren = dummy:GetChildren()
+                        for i = 1, #dummyChildren do
+                            local item = dummyChildren[i]
                             if item:IsA("CharacterMesh") and item.BodyPart == Enum.BodyPart.RightLeg then
                                 cachedKorbloxLeg = item:Clone()
                                 break
@@ -1240,7 +1297,9 @@ return function(env)
                 local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(295) end)
                 if success and bundleDetails and bundleDetails.Items then
                     local targetDesc = nil
-                    for _, item in ipairs(bundleDetails.Items) do
+                    local items = bundleDetails.Items
+                    for i = 1, #items do
+                        local item = items[i]
                         if item.Type == "UserOutfit" then
                             local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
                             if s and desc then targetDesc = desc break end
@@ -1248,7 +1307,9 @@ return function(env)
                     end
                     if targetDesc then
                         local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
-                        for _, item in ipairs(dummy:GetChildren()) do
+                        local dummyChildren = dummy:GetChildren()
+                        for i = 1, #dummyChildren do
+                            local item = dummyChildren[i]
                             if item:IsA("CharacterMesh") and item.BodyPart == Enum.BodyPart.RightLeg then
                                 cachedSkeletonLeg = item:Clone()
                                 break
@@ -1275,7 +1336,9 @@ return function(env)
                 local success, bundleDetails = pcall(function() return AssetService:GetBundleDetailsAsync(291) end)
                 if success and bundleDetails and bundleDetails.Items then
                     local targetDesc = nil
-                    for _, item in ipairs(bundleDetails.Items) do
+                    local items = bundleDetails.Items
+                    for i = 1, #items do
+                        local item = items[i]
                         if item.Type == "UserOutfit" then
                             local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(item.Id) end)
                             if s and desc then targetDesc = desc break end
@@ -1283,7 +1346,9 @@ return function(env)
                     end
                     if targetDesc then
                         local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
-                        for _, item in ipairs(dummy:GetChildren()) do
+                        local dummyChildren = dummy:GetChildren()
+                        for i = 1, #dummyChildren do
+                            local item = dummyChildren[i]
                             if item:IsA("CharacterMesh") and item.BodyPart == Enum.BodyPart.RightLeg then
                                 cachedZombieLeg = item:Clone()
                                 break
@@ -1311,7 +1376,7 @@ return function(env)
     -- =======================================================
     -- [ESPAÇADOR] - ENTRE O TOPO E O SKIN CHANGER
     -- =======================================================
-    local LayoutSpacer = Instance.new("Frame")
+    local LayoutSpacer = Instance_new("Frame")
     LayoutSpacer.Name = "LayoutSpacer"
     LayoutSpacer.Size = UDim2.new(1, 0, 0, 10)
     LayoutSpacer.BackgroundTransparency = 1
@@ -1331,18 +1396,18 @@ return function(env)
         lastSectionHeader.LayoutOrder = 3
     end
 
-    local InputContainer = Instance.new("Frame")
+    local InputContainer = Instance_new("Frame")
     InputContainer.Size = UDim2.new(1, -2, 0, 35)
     InputContainer.Position = UDim2.new(0, 1, 0, 0)
     InputContainer.BackgroundColor3 = Color3.new(0, 0, 0)
     InputContainer.BackgroundTransparency = 0.45
     InputContainer.LayoutOrder = 4
     InputContainer.Parent = Page
-    Instance.new("UICorner", InputContainer).CornerRadius = UDim.new(0, 6)
-    local icStr = Instance.new("UIStroke", InputContainer)
+    Instance_new("UICorner", InputContainer).CornerRadius = UDim.new(0, 6)
+    local icStr = Instance_new("UIStroke", InputContainer)
     icStr.Color = Color3.fromRGB(40,40,40)
 
-    local UserInputBox = Instance.new("TextBox")
+    local UserInputBox = Instance_new("TextBox")
     UserInputBox.Size = UDim2.new(1, -40, 1, 0)
     UserInputBox.Position = UDim2.new(0, 10, 0, 0)
     UserInputBox.BackgroundTransparency = 1
@@ -1355,7 +1420,7 @@ return function(env)
     UserInputBox.TextXAlignment = Enum.TextXAlignment.Left
     UserInputBox.Parent = InputContainer
 
-    local SearchBtnIcon = Instance.new("ImageButton")
+    local SearchBtnIcon = Instance_new("ImageButton")
     SearchBtnIcon.Size = UDim2.new(0, 20, 0, 20)
     SearchBtnIcon.Position = UDim2.new(1, -28, 0.5, -10)
     SearchBtnIcon.BackgroundTransparency = 1
@@ -1364,15 +1429,15 @@ return function(env)
     SearchBtnIcon.ScaleType = Enum.ScaleType.Fit
     SearchBtnIcon.Parent = InputContainer
 
-    local PresetsContainer = Instance.new("Frame")
+    local PresetsContainer = Instance_new("Frame")
     PresetsContainer.Size = UDim2.new(1, 0, 0, 0)
     PresetsContainer.BackgroundTransparency = 1
     PresetsContainer.AutomaticSize = Enum.AutomaticSize.Y
     PresetsContainer.LayoutOrder = 5
     PresetsContainer.Parent = Page
 
-    local Grid = Instance.new("UIGridLayout")
-    Grid.CellSize = UDim2.new(0.25, -6, 0, 42) -- Dimensionamento matemático exato para 4 colunas (4x4)
+    local Grid = Instance_new("UIGridLayout")
+    Grid.CellSize = UDim2.new(0.25, -6, 0, 42) -- Grid matemático 4x4
     Grid.CellPadding = UDim2.new(0, 8, 0, 8)
     Grid.SortOrder = Enum.SortOrder.LayoutOrder
     Grid.Parent = PresetsContainer
@@ -1410,34 +1475,34 @@ return function(env)
     SearchBtnIcon.MouseButton1Click:Connect(function() PerformSearch() end)
 
     for index, name in ipairs(DummyNames) do
-        local Btn = Instance.new("TextButton")
+        local Btn = Instance_new("TextButton")
         Btn.BackgroundColor3 = Color3.new(0, 0, 0)
         Btn.BackgroundTransparency = 0.45
         Btn.Text = ""
         Btn.Parent = PresetsContainer
-        Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
+        Instance_new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
 
-        local BStroke = Instance.new("UIStroke")
+        local BStroke = Instance_new("UIStroke")
         BStroke.Color = Color3.fromRGB(40, 40, 40)
         BStroke.Thickness = 1
         BStroke.Parent = Btn
 
-        local AvatarIcon = Instance.new("ImageLabel")
+        local AvatarIcon = Instance_new("ImageLabel")
         AvatarIcon.Size = UDim2.new(0, 28, 0, 28)
         AvatarIcon.Position = UDim2.new(0, 7, 0.5, -14)
         AvatarIcon.BackgroundColor3 = Theme.SwitchOff
         AvatarIcon.BackgroundTransparency = 0.5
         AvatarIcon.Parent = Btn
-        Instance.new("UICorner", AvatarIcon).CornerRadius = UDim.new(0, 6)
+        Instance_new("UICorner", AvatarIcon).CornerRadius = UDim.new(0, 6)
 
-        local NameLabel = Instance.new("TextLabel")
+        local NameLabel = Instance_new("TextLabel")
         NameLabel.Size = UDim2.new(1, -40, 1, 0)
         NameLabel.Position = UDim2.new(0, 36, 0, 0)
         NameLabel.BackgroundTransparency = 1
         NameLabel.Text = name
         NameLabel.Font = Theme.Font
         NameLabel.TextScaled = true
-        local nsConst = Instance.new("UITextSizeConstraint", NameLabel)
+        local nsConst = Instance_new("UITextSizeConstraint", NameLabel)
         nsConst.MinTextSize = 7
         nsConst.MaxTextSize = 11
         NameLabel.TextColor3 = Theme.Text
@@ -1448,9 +1513,8 @@ return function(env)
         Btn.MouseLeave:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
 
         task.spawn(function()
-            -- Staggering (Escalonamento): Aguarda frações de segundo adicionais com base no índice 
-            -- para não disparar 46 requisições HTTP na mesma CFrame/Frame e evitar erro HTTP 429
-            task.wait(index * 0.05)
+            -- Staggering (Escalonamento) Otimizado para 30ms para preenchimento de imagens mais responsivo
+            task.wait(index * 0.03)
             
             local id = nameToIdCache[name]
             if not id then
@@ -1461,7 +1525,6 @@ return function(env)
                 end
             end
             if id then
-                -- Otimização: rbxthumb carrega instantaneamente do cache interno sem yield de lua
                 AvatarIcon.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(id) .. "&w=150&h=150"
             end
         end)
