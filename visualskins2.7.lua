@@ -34,24 +34,29 @@ return function(env)
     local bundleToggleControls = {}
     local modifierToggles = {}
 
-    -- Caches para Prevenção de Conflitos de Carregamento
-    local cachedHeadlessMesh = nil
-    local cachedKorbloxLeg = nil
-    local cachedSkeletonLeg = nil
-    local cachedZombieLeg = nil
+    -- Caches Locais para Otimização de Performance e Rede
+    local assetCache = {}
+    local nameToIdCache = {}
 
-    local headlessBackups = {}
-    local korbloxBackups = {}
-    local skeletonBackups = {}
-    local zombieBackups = {}
+    -- Chaves fracas para evitar vazamento de memória com instâncias antigas de personagens
+    local headlessBackups = setmetatable({}, {__mode = "k"})
+    local korbloxBackups = setmetatable({}, {__mode = "k"})
+    local skeletonBackups = setmetatable({}, {__mode = "k"})
+    local zombieBackups = setmetatable({}, {__mode = "k"})
     local characterBackups = setmetatable({}, {__mode = "k"})
 
-    -- Funções Core de Auxílio
+    -- Função de Carregamento de Ativos Otimizada com Cache
     local function loadAsset(id)
+        if assetCache[id] then
+            return assetCache[id]:Clone()
+        end
         local success, result = pcall(function()
             return game:GetObjects("rbxassetid://" .. tostring(id))[1]
         end)
-        if success and result then return result end
+        if success and result then
+            assetCache[id] = result
+            return result:Clone()
+        end
         return nil
     end
 
@@ -65,15 +70,19 @@ return function(env)
         local accAtt = handle:FindFirstChildWhichIsA("Attachment")
         local charAtt, targetPart = nil, nil
         if accAtt then
-            if char:FindFirstChild("Head") and char.Head:FindFirstChild(accAtt.Name) then 
-                charAtt = char.Head[accAtt.Name]
-                targetPart = char.Head
-            elseif char:FindFirstChild("Torso") and char.Torso:FindFirstChild(accAtt.Name) then 
-                charAtt = char.Torso[accAtt.Name]
-                targetPart = char.Torso 
-            elseif char:FindFirstChild("Right Arm") and char["Right Arm"]:FindFirstChild(accAtt.Name) then
-                charAtt = char["Right Arm"][accAtt.Name]
-                targetPart = char["Right Arm"]
+            local head = char:FindFirstChild("Head")
+            local torso = char:FindFirstChild("Torso")
+            local rArm = char:FindFirstChild("Right Arm")
+            
+            if head and head:FindFirstChild(accAtt.Name) then 
+                charAtt = head[accAtt.Name]
+                targetPart = head
+            elseif torso and torso:FindFirstChild(accAtt.Name) then 
+                charAtt = torso[accAtt.Name]
+                targetPart = torso 
+            elseif rArm and rArm:FindFirstChild(accAtt.Name) then
+                charAtt = rArm[accAtt.Name]
+                targetPart = rArm
             end
         end
         local weld = Instance.new("Weld")
@@ -171,7 +180,7 @@ return function(env)
                             mesh.VertexColor = Vector3.new(1,1,1) 
                         end
                     end
-                    for _, child in pairs(part:GetChildren()) do 
+                    for _, child in ipairs(part:GetChildren()) do 
                         if child:IsA("Decal") and child.Name ~= "face" then child:Destroy() 
                         elseif child:IsA("Texture") then child:Destroy() end 
                     end
@@ -180,7 +189,6 @@ return function(env)
         end)
     end
 
-    -- Sistema de Backup e Restauração local
     local function BackupCharacterAppearance(char)
         if not char then return end
         if characterBackups[char] then return end
@@ -272,7 +280,7 @@ return function(env)
     end
 
     -- =======================================================
-    -- SISTEMA DE APLICAÇÃO PROTEGIDO CONTRA FALHAS (RESPAWN)
+    -- SISTEMA DE APLICAÇÃO ATÔMICA DA APARÊNCIA E RESPONSIVIDADE
     -- =======================================================
     local isApplyingVisuals = false
 
@@ -284,7 +292,6 @@ return function(env)
             local char = LocalPlayer.Character
             if not char then return end
 
-            -- Aguarda o personagem ser devidamente introduzido ao Workspace
             local elapsed = 0
             while char and char.Parent ~= Workspace and elapsed < 3 do
                 task.wait(0.1)
@@ -292,14 +299,14 @@ return function(env)
             end
             if not char or char.Parent ~= Workspace then return end
 
-            -- Assegura a integridade das partes R6
-            char:WaitForChild("Head", 5)
-            char:WaitForChild("Torso", 5)
+            local head = char:FindFirstChild("Head") or char:WaitForChild("Head", 5)
+            local torso = char:FindFirstChild("Torso") or char:WaitForChild("Torso", 5)
+            if not head or not torso then return end
 
             if not LocalPlayer:HasAppearanceLoaded() then
                 pcall(function() LocalPlayer.CharacterAppearanceLoaded:Wait() end)
             end
-            task.wait(0.15)
+            task.wait(0.1)
 
             if getgenv().FixLoop then 
                 getgenv().FixLoop:Disconnect() 
@@ -308,7 +315,7 @@ return function(env)
 
             BackupCharacterAppearance(char)
 
-            -- 1. ETAPA: Aparência Básica (Skin customizada OU Preset Bundle OU Aparência Original)
+            -- 1. ETAPA: Base Visual (Skin ou Bundle)
             if ActiveModifiers.SkinUserId then
                 local s, desc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(ActiveModifiers.SkinUserId) end)
                 if s and desc then
@@ -324,15 +331,15 @@ return function(env)
                         local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
                         if dummyMesh then targetHeadTexture = dummyMesh.TextureId end
 
-                        for _, v in pairs(char:GetChildren()) do 
+                        for _, v in ipairs(char:GetChildren()) do 
                             if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
                                 v:Destroy() 
                             end 
                         end
-                        if char:FindFirstChild("Head") and char.Head:FindFirstChild("face") then char.Head.face:Destroy() end
+                        if head:FindFirstChild("face") then head.face:Destroy() end
 
-                        local myMesh = char.Head:FindFirstChildOfClass("SpecialMesh")
-                        if not myMesh then myMesh = Instance.new("SpecialMesh", char.Head) end
+                        local myMesh = head:FindFirstChildOfClass("SpecialMesh")
+                        if not myMesh then myMesh = Instance.new("SpecialMesh", head) end
 
                         if dummyMesh then 
                             myMesh.MeshType = dummyMesh.MeshType
@@ -347,8 +354,8 @@ return function(env)
                         end
                         myMesh.VertexColor = Vector3.new(1,1,1)
 
-                        for _, item in pairs(dummy:GetChildren()) do if item:IsA("CharacterMesh") then item:Clone().Parent = char end end
-                        for _, item in pairs(dummy:GetChildren()) do 
+                        for _, item in ipairs(dummy:GetChildren()) do if item:IsA("CharacterMesh") then item:Clone().Parent = char end end
+                        for _, item in ipairs(dummy:GetChildren()) do 
                             if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
                                 item:Clone().Parent = char 
                             end 
@@ -364,7 +371,7 @@ return function(env)
                         else
                             faceDecal.Texture = "rbxasset://textures/face.png"
                         end
-                        faceDecal.Parent = char.Head
+                        faceDecal.Parent = head
 
                         local newBC = Instance.new("BodyColors")
                         newBC.HeadColor3 = desc.HeadColor
@@ -377,7 +384,7 @@ return function(env)
 
                         StartFixLoop(char, realColors, targetHeadTexture)
 
-                        for _, item in pairs(dummy:GetChildren()) do 
+                        for _, item in ipairs(dummy:GetChildren()) do 
                             if item:IsA("Accessory") then 
                                 local clone = item:Clone()
                                 SmartWeld(char, clone) 
@@ -411,17 +418,17 @@ return function(env)
                                 targetHeadTexture = dummy.Head:FindFirstChildOfClass("SpecialMesh").TextureId 
                             end
 
-                            for _, v in pairs(char:GetChildren()) do 
+                            for _, v in ipairs(char:GetChildren()) do 
                                 if v:IsA("Accessory") or v:IsA("Hat") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("ShirtGraphic") or v:IsA("CharacterMesh") or v:IsA("BodyColors") then 
                                     v:Destroy() 
                                 end 
                             end
-                            if char:FindFirstChild("Head") and char.Head:FindFirstChild("face") then char.Head.face:Destroy() end
+                            if head:FindFirstChild("face") then head.face:Destroy() end
 
                             local dummyMesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
-                            local myMesh = char.Head:FindFirstChildOfClass("SpecialMesh")
+                            local myMesh = head:FindFirstChildOfClass("SpecialMesh")
                             if dummyMesh then 
-                                if not myMesh then myMesh = Instance.new("SpecialMesh", char.Head) end
+                                if not myMesh then myMesh = Instance.new("SpecialMesh", head) end
                                 myMesh.MeshType = Enum.MeshType.FileMesh
                                 myMesh.MeshId = dummyMesh.MeshId
                                 myMesh.Scale = dummyMesh.Scale
@@ -429,14 +436,14 @@ return function(env)
                                 myMesh.VertexColor = Vector3.new(1,1,1) 
                             end
 
-                            for _, item in pairs(dummy:GetChildren()) do 
+                            for _, item in ipairs(dummy:GetChildren()) do 
                                 if item:IsA("CharacterMesh") then item:Clone().Parent = char end 
                             end
-                            for _, item in pairs(dummy:GetChildren()) do 
+                            for _, item in ipairs(dummy:GetChildren()) do 
                                 if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then 
                                     item:Clone().Parent = char 
                                 elseif item.Name == "Head" and item:FindFirstChild("face") then 
-                                    item.face:Clone().Parent = char:FindFirstChild("Head") 
+                                    item.face:Clone().Parent = head 
                                 end 
                             end
 
@@ -451,12 +458,12 @@ return function(env)
 
                             StartFixLoop(char, realColors, targetHeadTexture)
 
-                            for _, item in pairs(dummy:GetChildren()) do 
+                            for _, item in ipairs(dummy:GetChildren()) do 
                                 if item:IsA("Accessory") then 
                                     local clone = item:Clone()
                                     SmartWeld(char, clone) 
                                 end 
-                        end
+                            end
                         end
                         dummy:Destroy()
                     end
@@ -465,9 +472,8 @@ return function(env)
                 RestoreCharacterAppearance(char)
             end
 
-            -- 2. ETAPA: Reaplicação de Modificadores Corporais (Garante que nunca se percam)
+            -- 2. ETAPA: Modificadores Corporais Activos
             if ActiveModifiers.Headless then
-                local head = char:FindFirstChild("Head")
                 if head then
                     if not headlessBackups[char] then
                         headlessBackups[char] = {
@@ -495,7 +501,7 @@ return function(env)
             end
 
             if activeLegMesh then
-                for _, v in pairs(char:GetChildren()) do
+                for _, v in ipairs(char:GetChildren()) do
                     if v:IsA("CharacterMesh") and v.BodyPart == Enum.BodyPart.RightLeg then
                         v:Destroy()
                     end
@@ -994,7 +1000,7 @@ return function(env)
         {Name = "Dr. Fia Tyfoid", Id = 512}
     }
 
-    for _, bndl in pairs(BundlePresets) do
+    for _, bndl in ipairs(BundlePresets) do
         local Btn = Instance.new("TextButton")
         Btn.BackgroundColor3 = Color3.new(0, 0, 0)
         Btn.BackgroundTransparency = 0.45
@@ -1171,9 +1177,12 @@ return function(env)
                     end
                     if targetDesc then
                         local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
-                        if dummy and dummy:FindFirstChild("Head") then
-                            local mesh = dummy.Head:FindFirstChildOfClass("SpecialMesh")
-                            if mesh then cachedHeadlessMesh = mesh:Clone() end
+                        if dummy then
+                            local dHead = dummy:FindFirstChild("Head")
+                            if dHead then
+                                local mesh = dHead:FindFirstChildOfClass("SpecialMesh")
+                                if mesh then cachedHeadlessMesh = mesh:Clone() end
+                            end
                         end
                         dummy:Destroy()
                     end
@@ -1204,7 +1213,7 @@ return function(env)
                     end
                     if targetDesc then
                         local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
-                        for _, item in pairs(dummy:GetChildren()) do
+                        for _, item in ipairs(dummy:GetChildren()) do
                             if item:IsA("CharacterMesh") and item.BodyPart == Enum.BodyPart.RightLeg then
                                 cachedKorbloxLeg = item:Clone()
                                 break
@@ -1239,7 +1248,7 @@ return function(env)
                     end
                     if targetDesc then
                         local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
-                        for _, item in pairs(dummy:GetChildren()) do
+                        for _, item in ipairs(dummy:GetChildren()) do
                             if item:IsA("CharacterMesh") and item.BodyPart == Enum.BodyPart.RightLeg then
                                 cachedSkeletonLeg = item:Clone()
                                 break
@@ -1274,7 +1283,7 @@ return function(env)
                     end
                     if targetDesc then
                         local dummy = Players:CreateHumanoidModelFromDescription(targetDesc, Enum.HumanoidRigType.R6)
-                        for _, item in pairs(dummy:GetChildren()) do
+                        for _, item in ipairs(dummy:GetChildren()) do
                             if item:IsA("CharacterMesh") and item.BodyPart == Enum.BodyPart.RightLeg then
                                 cachedZombieLeg = item:Clone()
                                 break
@@ -1386,12 +1395,11 @@ return function(env)
                 PTitle.Text = "SKIN FOUND"
                 PName.Text = text
                 PApplyBtn.Text = "Apply Skin"
-                local thumb, isReady = Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
-                if isReady then
-                    PImage.Image = thumb
-                    ModalOverlay.Visible = true
-                    PreviewBox.Visible = true
-                end
+                
+                -- Otimização: Uso imediato do rbxthumb para evitar bloqueio por yields e isReady falsos de executors
+                PImage.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(id) .. "&w=150&h=150"
+                ModalOverlay.Visible = true
+                PreviewBox.Visible = true
             else
                 SendNotification("User not found!", 2)
             end
@@ -1401,7 +1409,7 @@ return function(env)
     UserInputBox.FocusLost:Connect(function(enter) if enter then PerformSearch() end end)
     SearchBtnIcon.MouseButton1Click:Connect(function() PerformSearch() end)
 
-    for _, name in pairs(DummyNames) do
+    for index, name in ipairs(DummyNames) do
         local Btn = Instance.new("TextButton")
         Btn.BackgroundColor3 = Color3.new(0, 0, 0)
         Btn.BackgroundTransparency = 0.45
@@ -1440,10 +1448,21 @@ return function(env)
         Btn.MouseLeave:Connect(function() TweenService:Create(BStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
 
         task.spawn(function()
-            local s, id = pcall(function() return Players:GetUserIdFromNameAsync(name) end)
-            if s and id then
-                local thumb = Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
-                AvatarIcon.Image = thumb
+            -- Staggering (Escalonamento): Aguarda frações de segundo adicionais com base no índice 
+            -- para não disparar 46 requisições HTTP na mesma CFrame/Frame e evitar erro HTTP 429
+            task.wait(index * 0.05)
+            
+            local id = nameToIdCache[name]
+            if not id then
+                local s, resolvedId = pcall(function() return Players:GetUserIdFromNameAsync(name) end)
+                if s and resolvedId then
+                    id = resolvedId
+                    nameToIdCache[name] = id
+                end
+            end
+            if id then
+                -- Otimização: rbxthumb carrega instantaneamente do cache interno sem yield de lua
+                AvatarIcon.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(id) .. "&w=150&h=150"
             end
         end)
         
