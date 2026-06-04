@@ -908,18 +908,27 @@ return function(env)
         local fly_GoTween
         fly_GoTween = function(Part)
             if not fly_IsThereChar() then return end
-            fly_isMoving = true 
-            local Root = LocalPlayer.Character.HumanoidRootPart
             
+            local Root = LocalPlayer.Character.HumanoidRootPart
+            local distance = (Part.Position - Root.Position).Magnitude
+            
+            -- Se a distância for maior que 100 studs (ex: saindo do lobby), faz um teleporte instantâneo
+            if distance > 100 then
+                LocalPlayer.Character:PivotTo(CFrame.new(Part.Position) * Root.CFrame.Rotation)
+                task.wait(0.2)
+                return
+            end
+            
+            fly_isMoving = true 
             Root.Anchored = true
             
             while fly_IsThereChar() and TaskGood() do
                 local currentPos = Root.Position
                 local targetPos = Part.Position
                 local distanceVector = targetPos - currentPos
-                local distance = distanceVector.Magnitude
+                local currentDist = distanceVector.Magnitude
                 
-                if distance < 1.5 then
+                if currentDist < 1.5 then
                     break
                 end
                 
@@ -927,8 +936,8 @@ return function(env)
                 local speed = fly_Config.FarmTweenSpeed
                 local step = speed * dt
                 
-                if step > distance then
-                    step = distance
+                if step > currentDist then
+                    step = currentDist
                 end
                 
                 local direction = distanceVector.Unit
