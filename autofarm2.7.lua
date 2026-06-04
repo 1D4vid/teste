@@ -909,17 +909,8 @@ return function(env)
         fly_GoTween = function(Part)
             if not fly_IsThereChar() then return end
             
-            local Root = LocalPlayer.Character.HumanoidRootPart
-            local distance = (Part.Position - Root.Position).Magnitude
-            
-            -- Se a distância for maior que 100 studs (ex: saindo do lobby), faz um teleporte instantâneo
-            if distance > 100 then
-                LocalPlayer.Character:PivotTo(CFrame.new(Part.Position) * Root.CFrame.Rotation)
-                task.wait(0.2)
-                return
-            end
-            
             fly_isMoving = true 
+            local Root = LocalPlayer.Character.HumanoidRootPart
             Root.Anchored = true
             
             while fly_IsThereChar() and TaskGood() do
@@ -1225,8 +1216,11 @@ return function(env)
                 task.wait(0.2)
             end
             if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
-                fly_Notify("Match", "Starting farm on new match.", 3)
-                task.spawn(DoSurvivorFarmFly)
+                task.wait(2) -- Tempo de espera seguro para o jogo mover nativamente o jogador até a sala
+                if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
+                    fly_Notify("Match", "Starting farm on new match.", 3)
+                    task.spawn(DoSurvivorFarmFly)
+                end
             end
         end
     end)
@@ -1387,7 +1381,10 @@ return function(env)
                                     task.wait(0.2)
                                 end
                                 if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
-                                    task.spawn(DoSurvivorFarmFly)
+                                    task.wait(2) -- Tempo de espera para o carregamento do player no mapa terminar
+                                    if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
+                                        task.spawn(DoSurvivorFarmFly)
+                                    end
                                 end
                             end)
                         end
