@@ -12,6 +12,7 @@ return function(env)
     local AutoWinTeleportToggleObj
     local AutoWinFlyToggleObj
     local AutoWinBeastToggleObj
+    local AutoSaveSilentToggleObj
     local AutoSaveTeleportToggleObj
 
     Library:CreateSection(Page, "Main Farming (BETA)")
@@ -24,11 +25,12 @@ return function(env)
             if AutoWinTeleportToggleObj then AutoWinTeleportToggleObj.Set(false) end
             if AutoWinFlyToggleObj then AutoWinFlyToggleObj.Set(false) end
             if AutoWinBeastToggleObj then AutoWinBeastToggleObj.Set(false) end
+            if AutoSaveSilentToggleObj then AutoSaveSilentToggleObj.Set(false) end
             if AutoSaveTeleportToggleObj then AutoSaveTeleportToggleObj.Set(false) end
         end
     end)
 
-    AutoWinTeleportToggleObj = Library:CreateToggle(Page, "Auto Win (Teleport)", false, function(state)
+    AutoWinTeleportToggleObj = Library:CreateToggle(Page, "Auto Win Survivor (Teleport)", false, function(state)
         if state and not MasterAutoFarmState then
             task.spawn(function()
                 task.wait()
@@ -43,7 +45,7 @@ return function(env)
         end
     end)
 
-    AutoWinFlyToggleObj = Library:CreateToggle(Page, "Auto Win (Fly)", false, function(state)
+    AutoWinFlyToggleObj = Library:CreateToggle(Page, "Auto Win Survivor (Fly)", false, function(state)
         if state and not MasterAutoFarmState then
             task.spawn(function()
                 task.wait()
@@ -67,7 +69,15 @@ return function(env)
         getgenv().AutoWinBeast = state
     end)
 
-    Library:CreateToggle(Page, "Auto Save (Silent)", false, function(state)
+    AutoSaveSilentToggleObj = Library:CreateToggle(Page, "Auto Save (Silent)", false, function(state)
+        if state and not MasterAutoFarmState then
+            task.spawn(function()
+                task.wait()
+                AutoSaveSilentToggleObj.Set(false)
+                SendNotification("Enable 'Enable Auto Farm' first!", 3)
+            end)
+            return
+        end
         getgenv().AutoHelpSilent = state
         if state then
             SendNotification("Auto Save (Silent) | Players in pod will be saved magically.", 5)
@@ -579,7 +589,7 @@ return function(env)
             
             while true do
                 task.wait(0.05)
-                if not getgenv().AutoHelpSilent then continue end
+                if not getgenv().AutoHelpSilent or not MasterAutoFarmState then continue end
                 
                 local myStats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
                 if not myStats then continue end
@@ -613,7 +623,7 @@ return function(env)
                             RemoteEvent:FireServer("Input", "Trigger", true, podEvent)
                             RemoteEvent:FireServer("Input", "Action", true)
                             
-                        until not (alvoCaptured.Value and getgenv().AutoHelpSilent) 
+                        until not (alvoCaptured.Value and getgenv().AutoHelpSilent and MasterAutoFarmState) 
                            or (myRagdoll.Value or myCaptured.Value or myHealth.Value <= 0)
                            
                         break 
