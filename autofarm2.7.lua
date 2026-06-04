@@ -58,7 +58,7 @@ return function(env)
     -- ==========================================
     -- ELEMENTOS DA INTERFACE (UI)
     -- ==========================================
-    Library:CreateSection(Page, "Main Farming (BETA)")
+    Library:CreateSection(Page, "Main Farming (teste)")
 
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
         MasterAutoFarmState = state
@@ -753,6 +753,21 @@ return function(env)
         end
     end
 
+    local function fly_IsInLobby()
+        local lobby = workspace:FindFirstChild("LobbySpawnPad")
+        if not lobby then
+            return false 
+        end
+        if not fly_IsThereChar() then
+            return true
+        end
+        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then
+            return true
+        end
+        return (hrp.Position - lobby.Position).Magnitude < 150
+    end
+
     local function fly_AmIBeast()
         local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
         if stats then
@@ -781,6 +796,21 @@ return function(env)
             end
         end
         return false
+    end
+
+    local function fly_IsMatchActive()
+        local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
+        if not currentMap or not currentMap.Value then
+            return false
+        end
+        local status = ReplicatedStorage:FindFirstChild("GameStatus")
+        if status then
+            local statusText = string.lower(status.Value)
+            if string.find(statusText, "intermission") or string.find(statusText, "game over") or string.find(statusText, "lobby") then
+                return false
+            end
+        end
+        return true
     end
 
     local function fly_GetBeast()
@@ -854,7 +884,7 @@ return function(env)
         end
 
         local function TaskGood()
-            return getgenv().AutoWinFlyActive and not fly_AmIBeast() and IsGameActive.Value == true and PlayerReady() and MasterAutoFarmState
+            return getgenv().AutoWinFlyActive and not fly_AmIBeast() and fly_IsMatchActive() and PlayerReady() and MasterAutoFarmState
         end
 
         local function GetMapObjects()
@@ -1032,7 +1062,8 @@ return function(env)
             local CancelComputers = false
             local LeastTriggers = 4
             local Closest = math.huge
-            local ComputersLeft = 0
+            -- CORREÇÃO: Inicializa com o número real de computadores no mapa em vez de 0
+            local ComputersLeft = #MapObjects.Computers > 0 and #MapObjects.Computers or 5
 
             coroutine.wrap(function()
                 while TaskGood() do
@@ -1174,7 +1205,8 @@ return function(env)
                 fly_onsurvivorfarm = true
                 fly_Notify("Auto Farm", "Auto Farm started.", 3)
                 Run()
-                if not DoNotTeleport then
+                -- CORREÇÃO: Apenas teleporta de volta ao lobby se a partida de fato tiver terminado
+                if not DoNotTeleport and not fly_IsMatchActive() then
                     task.wait(1)
                     fly_TPPlayerSpawn()
                 end
@@ -1192,10 +1224,10 @@ return function(env)
                 fly_SouBeastNessaRodada = true
                 return 
             end
-            while IsGameActive.Value == false and getgenv().AutoWinFlyActive and MasterAutoFarmState do
+            while fly_IsInLobby() and fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState do
                 task.wait(0.2)
             end
-            if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and IsGameActive.Value == true and MasterAutoFarmState then
+            if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
                 if not fly_AmIBeast() then
                     fly_Notify("Match", "Starting farm on new match.", 3)
                     task.spawn(DoSurvivorFarmFly)
@@ -1231,7 +1263,7 @@ return function(env)
                 continue
             end
 
-            if not getgenv().AutoWinFlyActive or not MasterAutoFarmState or IsGameActive.Value == false then
+            if not getgenv().AutoWinFlyActive or not MasterAutoFarmState or not fly_IsMatchActive() then
                 if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Anchored then
                     LocalPlayer.Character.HumanoidRootPart.Anchored = false
                 end
@@ -1254,6 +1286,7 @@ return function(env)
                 fly_notifiedLobby = false
             end
 
+            -- Se era Beast mas por algum motivo não é mais durante a partida, reinicia
             if fly_SouBeastNessaRodada and not fly_AmIBeast() then
                 fly_SouBeastNessaRodada = false
             end
@@ -1363,10 +1396,10 @@ return function(env)
                         task.wait(3)
                         if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
                             task.spawn(function()
-                                while IsGameActive.Value == false and getgenv().AutoWinFlyActive and MasterAutoFarmState do
+                                while fly_IsInLobby() and fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState do
                                     task.wait(0.2)
                                 end
-                                if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and IsGameActive.Value == true and MasterAutoFarmState then
+                                if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
                                     if not fly_AmIBeast() then
                                         task.spawn(DoSurvivorFarmFly)
                                     end
