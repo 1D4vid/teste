@@ -17,6 +17,10 @@ return function(env)
     local AutoSaveSilentToggleObj
     local AutoSaveTeleportToggleObj
 
+    -- REFERÊNCIAS DO SISTEMA
+    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
+    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
+
     -- ==========================================
     -- VARIÁVEIS DO AUTO WIN SURVIVOR (FLY)
     -- ==========================================
@@ -211,10 +215,6 @@ return function(env)
         end
         _G.AntiAfkEnabled = state
     end)
-
-    -- REFERÊNCIAS DO SISTEMA
-    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
-    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
 
     -- [[ ANTI AFK ]] --
     task.spawn(function()
@@ -754,22 +754,18 @@ return function(env)
     end
 
     local function fly_IsInLobby()
-        if not fly_IsMatchActive() then
-            return true
-        end
         local lobby = workspace:FindFirstChild("LobbySpawnPad")
-        if lobby and fly_IsThereChar() then
-            local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                return (hrp.Position - lobby.Position).Magnitude < 150
-            end
+        if not lobby then
+            return false 
         end
-        -- Correção para StreamingEnabled: Se não achou o LobbySpawnPad mas a partida não está ativa
-        local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
-        if not currentMap or not currentMap.Value then
+        if not fly_IsThereChar() then
             return true
         end
-        return false
+        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then
+            return true
+        end
+        return (hrp.Position - lobby.Position).Magnitude < 150
     end
 
     local function fly_AmIBeast()
@@ -790,6 +786,11 @@ return function(env)
         return false
     end
 
+    -- CORREÇÃO: Unificação total da verificação usando a propriedade IsGameActive nativa
+    local function fly_IsMatchActive()
+        return IsGameActive and IsGameActive.Value == true
+    end
+
     local function fly_IsTriggerOccupied(trigger)
         local triggerPos = trigger.Position
         for _, p in ipairs(Players:GetPlayers()) do
@@ -800,21 +801,6 @@ return function(env)
             end
         end
         return false
-    end
-
-    local function fly_IsMatchActive()
-        local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
-        if not currentMap or not currentMap.Value then
-            return false
-        end
-        local status = ReplicatedStorage:FindFirstChild("GameStatus")
-        if status then
-            local statusText = string.lower(status.Value)
-            if string.find(statusText, "intermission") or string.find(statusText, "game over") or string.find(statusText, "lobby") then
-                return false
-            end
-        end
-        return true
     end
 
     local function fly_GetBeast()
@@ -1135,7 +1121,7 @@ return function(env)
                         end
                     end
                 end
-            endCode()
+            endCode)()
 
             repeat
                 task.wait(0.5)
@@ -1208,7 +1194,11 @@ return function(env)
                 fly_onsurvivorfarm = true
                 fly_Notify("Auto Farm", "Auto Farm started.", 3)
                 Run()
-                -- CORREÇÃO DEFINITIVA: Teleporte manual ao lobby removido para evitar interferências durante transitions do jogo
+                -- CORREÇÃO: Garante que só haverá teleporte ao lobby se a partida nativamente terminou
+                if not DoNotTeleport and not fly_IsMatchActive() then
+                    task.wait(1)
+                    fly_TPPlayerSpawn()
+                end
                 fly_onsurvivorfarm = false
             end
         end)
@@ -1377,7 +1367,6 @@ return function(env)
                 end
             end
 
-            -- Anti-Void protection (Só teleporta se cair fisicamente no limbo Y < -2000)
             if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Position.Y < -2000 then
                 fly_TPPlayerSpawn()
             end
