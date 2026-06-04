@@ -250,13 +250,13 @@ return function(env)
             
             if not meChar or not meRoot or not myStats or helping then continue end
 
-            local myHealth = myStats:FindFirstChild("Health")
-            local myRagdoll = myStats:FindFirstChild("Ragdoll")
-            local myCaptured = myStats:FindFirstChild("Captured")
+            local meHealth = myStats:FindFirstChild("Health")
+            local meRagdoll = myStats:FindFirstChild("Ragdoll")
+            local meCaptured = myStats:FindFirstChild("Captured")
 
-            if myHealth and myHealth.Value <= 0 then continue end
-            if myRagdoll and myRagdoll.Value then continue end
-            if myCaptured and myCaptured.Value then continue end
+            if meHealth and meHealth.Value <= 0 then continue end
+            if meRagdoll and meRagdoll.Value then continue end
+            if meCaptured and meCaptured.Value then continue end
 
             for _, alvo in pairs(Players:GetPlayers()) do
                 if alvo == LocalPlayer or helping then continue end
@@ -282,7 +282,7 @@ return function(env)
                             RemoteEvent:FireServer("Input", "Action", true)
                             
                         until not (alvoCaptured.Value and getgenv().AutoHelpTeleport and MasterAutoFarmState) 
-                           or (myRagdoll.Value or myCaptured.Value or myHealth.Value <= 0)
+                           or (meRagdoll.Value or meCaptured.Value or meHealth.Value <= 0)
 
                         if oldCFrame and LocalPlayer.Character then
                             LocalPlayer.Character:PivotTo(oldCFrame)
@@ -753,21 +753,6 @@ return function(env)
         end
     end
 
-    local function fly_IsInLobby()
-        local lobby = workspace:FindFirstChild("LobbySpawnPad")
-        if not lobby then
-            return true -- Fallback: Se o lobby sumir ou carregar após o mapa, assumimos que estamos no lobby por segurança
-        end
-        if not fly_IsThereChar() then
-            return true
-        end
-        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then
-            return true
-        end
-        return (hrp.Position - lobby.Position).Magnitude < 150
-    end
-
     local function fly_AmIBeast()
         local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
         if stats then
@@ -1222,11 +1207,11 @@ return function(env)
                 fly_SouBeastNessaRodada = true
                 return 
             end
-            while fly_IsInLobby() and fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState do
-                task.wait(0.5)
+            while IsGameActive.Value == false and getgenv().AutoWinFlyActive and MasterAutoFarmState do
+                task.wait(0.2)
             end
-            task.wait(2) -- Delay extra para garantir que o teleporte do jogo para o mapa foi concluído
-            if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
+            task.wait(1.5) -- Safe transition delay
+            if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and IsGameActive.Value == true and MasterAutoFarmState then
                 if not fly_AmIBeast() then
                     fly_Notify("Match", "Starting farm on new match.", 3)
                     task.spawn(DoSurvivorFarmFly)
@@ -1262,7 +1247,7 @@ return function(env)
                 continue
             end
 
-            if not getgenv().AutoWinFlyActive or not MasterAutoFarmState or not fly_IsMatchActive() then
+            if not getgenv().AutoWinFlyActive or not MasterAutoFarmState or IsGameActive.Value == false then
                 if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Anchored then
                     LocalPlayer.Character.HumanoidRootPart.Anchored = false
                 end
@@ -1391,26 +1376,28 @@ return function(env)
                     end
                 end
                 if GotComputers ~= fly_Comp then
-                    if GotComputers > 0 then
-                        task.wait(3)
-                        if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
-                            task.spawn(function()
-                                while fly_IsInLobby() and fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState do
-                                    task.wait(0.5)
-                                end
-                                task.wait(2) -- Delay de carregamento
-                                if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
-                                    if not fly_AmIBeast() then
-                                        task.spawn(DoSurvivorFarmFly)
+                    if GotGotComputers = GotComputers then
+                        if GotComputers > 0 then
+                            task.wait(3)
+                            if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
+                                task.spawn(function()
+                                    while IsGameActive.Value == false and getgenv().AutoWinFlyActive and MasterAutoFarmState do
+                                        task.wait(0.2)
                                     end
-                                end
-                            end)
+                                    task.wait(1.5) -- Safe transition delay
+                                    if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and IsGameActive.Value == true and MasterAutoFarmState then
+                                        if not fly_AmIBeast() then
+                                            task.spawn(DoSurvivorFarmFly)
+                                        end
+                                    end
+                                end)
+                            end
+                        else
+                            fly_onsurvivorfarm = false
+                            fly_Beast = nil
                         end
-                    else
-                        fly_onsurvivorfarm = false
-                        fly_Beast = nil
+                        fly_Comp = GotComputers
                     end
-                    fly_Comp = GotComputers
                 end
             end
         end
