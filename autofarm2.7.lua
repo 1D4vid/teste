@@ -9,8 +9,10 @@ return function(env)
 
     local MasterAutoFarmState = false
     local AntiAfkToggleObj
-    local AutoWinSurvivorToggleObj
+    local AutoWinTeleportToggleObj
+    local AutoWinFlyToggleObj
     local AutoWinBeastToggleObj
+    local AutoSaveTeleportToggleObj
 
     Library:CreateSection(Page, "Main Farming (BETA)")
 
@@ -19,16 +21,18 @@ return function(env)
         if state then
             if AntiAfkToggleObj then AntiAfkToggleObj.Set(true) end
         else
-            if AutoWinSurvivorToggleObj then AutoWinSurvivorToggleObj.Set(false) end
+            if AutoWinTeleportToggleObj then AutoWinTeleportToggleObj.Set(false) end
+            if AutoWinFlyToggleObj then AutoWinFlyToggleObj.Set(false) end
             if AutoWinBeastToggleObj then AutoWinBeastToggleObj.Set(false) end
+            if AutoSaveTeleportToggleObj then AutoSaveTeleportToggleObj.Set(false) end
         end
     end)
 
-    AutoWinSurvivorToggleObj = Library:CreateToggle(Page, "Auto Win Survivor", false, function(state)
+    AutoWinTeleportToggleObj = Library:CreateToggle(Page, "Auto Win (Teleport)", false, function(state)
         if state and not MasterAutoFarmState then
             task.spawn(function()
                 task.wait()
-                AutoWinSurvivorToggleObj.Set(false)
+                AutoWinTeleportToggleObj.Set(false)
                 SendNotification("Enable 'Enable Auto Farm' first!", 3)
             end)
             return
@@ -37,6 +41,18 @@ return function(env)
         if not state then
             getgenv().FarmRodando = false
         end
+    end)
+
+    AutoWinFlyToggleObj = Library:CreateToggle(Page, "Auto Win (Fly)", false, function(state)
+        if state and not MasterAutoFarmState then
+            task.spawn(function()
+                task.wait()
+                AutoWinFlyToggleObj.Set(false)
+                SendNotification("Enable 'Enable Auto Farm' first!", 3)
+            end)
+            return
+        end
+        -- Vazio por enquanto
     end)
 
     AutoWinBeastToggleObj = Library:CreateToggle(Page, "Auto Win Beast", false, function(state)
@@ -51,14 +67,26 @@ return function(env)
         getgenv().AutoWinBeast = state
     end)
 
-    Library:CreateSection(Page, "Farm Settings")
-
     Library:CreateToggle(Page, "Auto Save (Silent)", false, function(state)
         getgenv().AutoHelpSilent = state
         if state then
             SendNotification("Auto Save (Silent) | Players in pod will be saved magically.", 5)
         end
     end)
+
+    AutoSaveTeleportToggleObj = Library:CreateToggle(Page, "Auto Save (Teleport)", false, function(state)
+        if state and not MasterAutoFarmState then
+            task.spawn(function()
+                task.wait()
+                AutoSaveTeleportToggleObj.Set(false)
+                SendNotification("Enable 'Enable Auto Farm' first!", 3)
+            end)
+            return
+        end
+        -- Vazio por enquanto
+    end)
+
+    Library:CreateSection(Page, "Farm Settings")
 
     AntiAfkToggleObj = Library:CreateToggle(Page, "Anti AFK", false, function(state)
         if MasterAutoFarmState and not state then
@@ -239,7 +267,7 @@ return function(env)
         end)
     end
 
-    -- [[ AUTO WIN SURVIVOR ]] --
+    -- [[ AUTO WIN SURVIVOR (TELEPORT) ]] --
     do
         local VELOCIDADE_ANTI_CHUTE = 25 
         getgenv().FarmRodando = false
