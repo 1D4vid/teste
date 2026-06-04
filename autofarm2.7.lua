@@ -250,13 +250,13 @@ return function(env)
             
             if not meChar or not meRoot or not myStats or helping then continue end
 
-            local meHealth = myStats:FindFirstChild("Health")
-            local meRagdoll = myStats:FindFirstChild("Ragdoll")
-            local meCaptured = myStats:FindFirstChild("Captured")
+            local myHealth = myStats:FindFirstChild("Health")
+            local myRagdoll = myStats:FindFirstChild("Ragdoll")
+            local myCaptured = myStats:FindFirstChild("Captured")
 
-            if meHealth and meHealth.Value <= 0 then continue end
-            if meRagdoll and meRagdoll.Value then continue end
-            if meCaptured and meCaptured.Value then continue end
+            if myHealth and myHealth.Value <= 0 then continue end
+            if myRagdoll and myRagdoll.Value then continue end
+            if myCaptured and myCaptured.Value then continue end
 
             for _, alvo in pairs(Players:GetPlayers()) do
                 if alvo == LocalPlayer or helping then continue end
@@ -282,7 +282,7 @@ return function(env)
                             RemoteEvent:FireServer("Input", "Action", true)
                             
                         until not (alvoCaptured.Value and getgenv().AutoHelpTeleport and MasterAutoFarmState) 
-                           or (meRagdoll.Value or meCaptured.Value or meHealth.Value <= 0)
+                           or (myRagdoll.Value or myCaptured.Value or myHealth.Value <= 0)
 
                         if oldCFrame and LocalPlayer.Character then
                             LocalPlayer.Character:PivotTo(oldCFrame)
@@ -783,21 +783,6 @@ return function(env)
         return false
     end
 
-    local function fly_IsMatchActive()
-        local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
-        if not currentMap or not currentMap.Value then
-            return false
-        end
-        local status = ReplicatedStorage:FindFirstChild("GameStatus")
-        if status then
-            local statusText = string.lower(status.Value)
-            if string.find(statusText, "intermission") or string.find(statusText, "game over") or string.find(statusText, "lobby") then
-                return false
-            end
-        end
-        return true
-    end
-
     local function fly_GetBeast()
         if fly_cachedBeast and fly_cachedBeast.Parent == Players and fly_IsThereChar(fly_cachedBeast) then
             local stats = fly_cachedBeast:FindFirstChild("TempPlayerStatsModule")
@@ -869,7 +854,7 @@ return function(env)
         end
 
         local function TaskGood()
-            return getgenv().AutoWinFlyActive and not fly_AmIBeast() and fly_IsMatchActive() and PlayerReady() and MasterAutoFarmState
+            return getgenv().AutoWinFlyActive and not fly_AmIBeast() and IsGameActive.Value == true and PlayerReady() and MasterAutoFarmState
         end
 
         local function GetMapObjects()
@@ -1210,7 +1195,6 @@ return function(env)
             while IsGameActive.Value == false and getgenv().AutoWinFlyActive and MasterAutoFarmState do
                 task.wait(0.2)
             end
-            task.wait(1.5) -- Safe transition delay
             if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and IsGameActive.Value == true and MasterAutoFarmState then
                 if not fly_AmIBeast() then
                     fly_Notify("Match", "Starting farm on new match.", 3)
@@ -1270,7 +1254,6 @@ return function(env)
                 fly_notifiedLobby = false
             end
 
-            -- Se era Beast mas por algum motivo não é mais durante a partida, reinicia
             if fly_SouBeastNessaRodada and not fly_AmIBeast() then
                 fly_SouBeastNessaRodada = false
             end
@@ -1376,28 +1359,25 @@ return function(env)
                     end
                 end
                 if GotComputers ~= fly_Comp then
-                    if GotGotComputers = GotComputers then
-                        if GotComputers > 0 then
-                            task.wait(3)
-                            if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
-                                task.spawn(function()
-                                    while IsGameActive.Value == false and getgenv().AutoWinFlyActive and MasterAutoFarmState do
-                                        task.wait(0.2)
+                    if GotComputers > 0 then
+                        task.wait(3)
+                        if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
+                            task.spawn(function()
+                                while IsGameActive.Value == false and getgenv().AutoWinFlyActive and MasterAutoFarmState do
+                                    task.wait(0.2)
+                                end
+                                if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and IsGameActive.Value == true and MasterAutoFarmState then
+                                    if not fly_AmIBeast() then
+                                        task.spawn(DoSurvivorFarmFly)
                                     end
-                                    task.wait(1.5) -- Safe transition delay
-                                    if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and IsGameActive.Value == true and MasterAutoFarmState then
-                                        if not fly_AmIBeast() then
-                                            task.spawn(DoSurvivorFarmFly)
-                                        end
-                                    end
-                                end)
-                            end
-                        else
-                            fly_onsurvivorfarm = false
-                            fly_Beast = nil
+                                end
+                            end)
                         end
-                        fly_Comp = GotComputers
+                    else
+                        fly_onsurvivorfarm = false
+                        fly_Beast = nil
                     end
+                    fly_Comp = GotComputers
                 end
             end
         end
