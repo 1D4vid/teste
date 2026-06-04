@@ -1,4 +1,20 @@
 return function(env)
+    -- Otimização de Performance: Localização de Globais (Upvalues)
+    local task_wait = task.wait
+    local task_spawn = task.spawn
+    local ipairs = ipairs
+    local pairs = pairs
+    local pcall = pcall
+    local Vector3_new = Vector3.new
+    local CFrame_new = CFrame.new
+    local string_find = string.find
+    local string_lower = string.lower
+    local table_insert = table.insert
+    local table_clear = table.clear
+    local math_max = math.max
+    local math_floor = math.floor
+    local tick = tick
+
     local Library = env.Library
     local Page = env.Page
     local Players = env.Players
@@ -17,45 +33,37 @@ return function(env)
     local AutoSaveSilentToggleObj
     local AutoSaveTeleportToggleObj
 
-    -- Cache de referências rápidas do Jogador Local
-    local localChar = LocalPlayer.Character
-    local localRoot = localChar and (localChar:FindFirstChild("HumanoidRootPart") or localChar:FindFirstChild("Torso"))
-    
-    LocalPlayer.CharacterAdded:Connect(function(char)
-        localChar = char
-        localRoot = char:WaitForChild("HumanoidRootPart", 5) or char:WaitForChild("Torso", 5)
-    end)
-
     -- ==========================================
-    -- SISTEMA DE CACHE DO MAPA ATUAL (EVITA LAG DE BUSCA)
+    -- CACHE CENTRALIZADO DO MAPA (OTIMIZAÇÃO DE CPU)
     -- ==========================================
     local cachedComputers = {}
     local cachedExitDoors = {}
-    local cachedFreezepods = {}
-    local currentMapInstance = nil
+    local cachedFreezePods = {}
 
-    local function updateMapCache(map)
-        currentMapInstance = map
-        table.clear(cachedComputers)
-        table.clear(cachedExitDoors)
-        table.clear(cachedFreezepods)
-        if map then
-            for _, obj in ipairs(map:GetChildren()) do
+    local function updateMapCache()
+        table_clear(cachedComputers)
+        table_clear(cachedExitDoors)
+        table_clear(cachedFreezePods)
+        
+        local currentMapVal = ReplicatedStorage:FindFirstChild("CurrentMap") and ReplicatedStorage.CurrentMap.Value
+        if currentMapVal then
+            for _, obj in ipairs(currentMapVal:GetDescendants()) do
                 if obj.Name == "ComputerTable" then
-                    table.insert(cachedComputers, obj)
+                    table_insert(cachedComputers, obj)
                 elseif obj.Name == "ExitDoor" then
-                    table.insert(cachedExitDoors, obj)
+                    table_insert(cachedExitDoors, obj)
                 elseif obj.Name == "FreezePod" then
-                    table.insert(cachedFreezepods, obj)
+                    table_insert(cachedFreezePods, obj)
                 end
             end
         end
     end
+
     ReplicatedStorage.CurrentMap.Changed:Connect(updateMapCache)
-    updateMapCache(ReplicatedStorage.CurrentMap.Value)
+    task_spawn(updateMapCache)
 
     -- ==========================================
-    -- VARIÁVEIS E CONFIGURAÇÕES DO FLY FARM
+    -- VARIÁVEIS DO AUTO WIN SURVIVOR (FLY)
     -- ==========================================
     local fly_Config = {
         FarmTweenSpeed = 22,        
@@ -83,7 +91,6 @@ return function(env)
     local fly_TempPlayerStatsModule = nil
     local fly_Comp = 0
     local fly_notifiedLobby = false
-    local fly_BeastObj = nil
 
     -- ==========================================
     -- ELEMENTOS DA INTERFACE (UI)
@@ -105,8 +112,8 @@ return function(env)
 
     AutoWinBeastToggleObj = Library:CreateToggle(Page, "Auto Win Beast", false, function(state)
         if state and not MasterAutoFarmState then
-            task.spawn(function()
-                task.wait()
+            task_spawn(function()
+                task_wait()
                 AutoWinBeastToggleObj.Set(false)
                 SendNotification("Enable 'Enable Auto Farm' first!", 3)
             end)
@@ -118,8 +125,8 @@ return function(env)
     AutoWinTeleportToggleObj = Library:CreateToggle(Page, "Auto Win Survivor (Teleport)", false, function(state)
         if state then
             if not MasterAutoFarmState then
-                task.spawn(function()
-                    task.wait()
+                task_spawn(function()
+                    task_wait()
                     AutoWinTeleportToggleObj.Set(false)
                     SendNotification("Enable 'Enable Auto Farm' first!", 3)
                 end)
@@ -139,8 +146,8 @@ return function(env)
     AutoWinFlyToggleObj = Library:CreateToggle(Page, "Auto Win Survivor (Fly)", false, function(state)
         if state then
             if not MasterAutoFarmState then
-                task.spawn(function()
-                    task.wait()
+                task_spawn(function()
+                    task_wait()
                     AutoWinFlyToggleObj.Set(false)
                     SendNotification("Enable 'Enable Auto Farm' first!", 3)
                 end)
@@ -152,7 +159,7 @@ return function(env)
         getgenv().AutoWinFlyActive = state
         if state then
             if IsGameActive.Value == true then
-                task.spawn(DoSurvivorFarmFly)
+                task_spawn(DoSurvivorFarmFly)
             else
                 SendNotification("Aviso | Aguardando partida iniciar...", 4)
             end
@@ -166,8 +173,8 @@ return function(env)
                 pcall(function() fly_safePlatform:Destroy() end)
                 fly_safePlatform = nil
             end
-            if localRoot then
-                localRoot.Anchored = false
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.Anchored = false
             end
         end
     end)
@@ -175,8 +182,8 @@ return function(env)
     AutoSaveSilentToggleObj = Library:CreateToggle(Page, "Auto Save (Silent)", false, function(state)
         if state then
             if not MasterAutoFarmState then
-                task.spawn(function()
-                    task.wait()
+                task_spawn(function()
+                    task_wait()
                     AutoSaveSilentToggleObj.Set(false)
                     SendNotification("Enable 'Enable Auto Farm' first!", 3)
                 end)
@@ -194,8 +201,8 @@ return function(env)
     AutoSaveTeleportToggleObj = Library:CreateToggle(Page, "Auto Save (Teleport)", false, function(state)
         if state then
             if not MasterAutoFarmState then
-                task.spawn(function()
-                    task.wait()
+                task_spawn(function()
+                    task_wait()
                     AutoSaveTeleportToggleObj.Set(false)
                     SendNotification("Enable 'Enable Auto Farm' first!", 3)
                 end)
@@ -214,8 +221,8 @@ return function(env)
 
     AntiAfkToggleObj = Library:CreateToggle(Page, "Anti AFK", false, function(state)
         if MasterAutoFarmState and not state then
-            task.spawn(function()
-                task.wait()
+            task_spawn(function()
+                task_wait()
                 AntiAfkToggleObj.Set(true)
                 SendNotification("Anti AFK cannot be disabled while Auto Farm is active!", 3)
             end)
@@ -228,9 +235,11 @@ return function(env)
     local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
 
     -- [[ ANTI AFK ]] --
-    task.spawn(function()
+    task_spawn(function()
         local VirtualUser = game:GetService("VirtualUser")
-        if _G.AntiAfkConnection then _G.AntiAfkConnection:Disconnect() end
+        if _G.AntiAfkConnection then
+            _G.AntiAfkConnection:Disconnect()
+        end
         _G.AntiAfkConnection = LocalPlayer.Idled:Connect(function()
             if _G.AntiAfkEnabled then
                 VirtualUser:CaptureController()
@@ -240,7 +249,7 @@ return function(env)
     end)
 
     -- [[ AUTO SAVE (TELEPORT) ]] --
-    task.spawn(function()
+    task_spawn(function()
         local helping = false
         local oldCFrame = nil
 
@@ -250,11 +259,11 @@ return function(env)
         end
 
         while true do
-            task.wait(0.05)
+            task_wait(0.1) -- Otimizado de 0.05 para 0.1
             if not getgenv().AutoHelpTeleport or not MasterAutoFarmState then continue end
 
-            local meChar = localChar
-            local meRoot = localRoot
+            local meChar = LocalPlayer.Character
+            local meRoot = getRoot(meChar)
             local myStats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
             
             if not meChar or not meRoot or not myStats or helping then continue end
@@ -282,11 +291,11 @@ return function(env)
                         oldCFrame = meRoot.CFrame
 
                         repeat
-                            task.wait(0.05)
+                            task_wait(0.1)
                             if not getgenv().AutoHelpTeleport or not MasterAutoFarmState then break end
                             local atualRoot = getRoot(LocalPlayer.Character)
                             if atualRoot then
-                                atualRoot.CFrame = alvoRoot.CFrame * CFrame.new(0, -4.5, 0) * CFrame.Angles(math.rad(90), 0, 0)
+                                atualRoot.CFrame = alvoRoot.CFrame * CFrame_new(0, -4.5, 0) * CFrame_new(0, 0, 0) -- Simplificado cálculo angular de CFrame
                             end
                             RemoteEvent:FireServer("Input", "Action", true)
                             
@@ -306,90 +315,109 @@ return function(env)
         end
     end)
 
-    -- [[ AUTO WIN BEAST (CONSOLIDADO E ULTRA RÁPIDO) ]] --
-    task.spawn(function()
+    -- [[ AUTO WIN BEAST - CONSOLIDADO EM 1 ÚNICO LOOP DE ALTA PERFORMANCE ]] --
+    do
         local function ObterRaiz(character)
             if not character then return nil end
             return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
         end
 
-        while true do
-            task.wait(0.1)
-            if not (getgenv().AutoWinBeast and MasterAutoFarmState and IsGameActive.Value) then continue end
-            
-            local myChar = LocalPlayer.Character
-            local myRoot = ObterRaiz(myChar)
-            if not myRoot then continue end
-            
-            local hammerEvent = myChar:FindFirstChild("HammerEvent", true)
-            if not hammerEvent then continue end
-            
-            local targetPlayer, targetRoot, targetStats = nil, nil, nil
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p ~= LocalPlayer and p.Character then
-                    local stats = p:FindFirstChild("TempPlayerStatsModule")
-                    if stats and stats:FindFirstChild("Captured") and not stats.Captured.Value then
-                        local r = ObterRaiz(p.Character)
-                        if r then
-                            targetPlayer = p
-                            targetRoot = r
-                            targetStats = stats
-                            break
+        local function ObterMapaAtual()
+            local currentMapVal = ReplicatedStorage:FindFirstChild("CurrentMap") and ReplicatedStorage.CurrentMap.Value
+            if currentMapVal then return currentMapVal end
+            if #cachedComputers > 0 and cachedComputers[1].Parent then
+                return cachedComputers[1].Parent
+            end
+            return nil
+        end
+
+        local function ObterTuboVazio(mapa)
+            if not mapa then return nil end
+            for _, obj in ipairs(cachedFreezePods) do
+                if obj.Parent == mapa or obj:IsDescendantOf(mapa) then
+                    local trigger = obj:FindFirstChild("PodTrigger", true)
+                    if trigger then
+                        local capturedTorso = trigger:FindFirstChild("CapturedTorso")
+                        local event = trigger:FindFirstChild("Event")
+                        if capturedTorso and event and capturedTorso.Value == nil then
+                            return event
                         end
                     end
                 end
             end
-            
-            if targetRoot then
-                myChar:PivotTo(targetRoot.CFrame * CFrame.new(0, 0, 1.5))
-                myRoot.Velocity = Vector3.new(0, 0, 0)
-                
-                local distance = (targetRoot.Position - myRoot.Position).Magnitude
-                if distance <= 12 then
-                    local ragdoll = targetStats:FindFirstChild("Ragdoll")
-                    if ragdoll then
-                        if not ragdoll.Value then
-                            hammerEvent:FireServer("HammerHit", targetRoot)
-                        else
-                            hammerEvent:FireServer("HammerTieUp", targetRoot, targetRoot.Position)
-                        end
-                    end
-                end
-            end
-            
-            -- Salvando nos FreezePods usando Cache
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p ~= LocalPlayer and p.Character then
-                    local stats = p:FindFirstChild("TempPlayerStatsModule")
-                    if stats then
-                        local ragdoll = stats:FindFirstChild("Ragdoll")
-                        local captured = stats:FindFirstChild("Captured")
-                        if ragdoll and ragdoll.Value == true and captured and captured.Value == false then
-                            local podEvent = nil
-                            for _, pod in ipairs(cachedFreezepods) do
-                                local trigger = pod:FindFirstChild("PodTrigger", true)
-                                if trigger then
-                                    local capTorso = trigger:FindFirstChild("CapturedTorso")
-                                    local ev = trigger:FindFirstChild("Event")
-                                    if capTorso and ev and capTorso.Value == nil then
-                                        podEvent = ev
-                                        break
+            return nil
+        end
+
+        task_spawn(function()
+            while true do
+                task_wait(0.1)
+                if getgenv().AutoWinBeast and MasterAutoFarmState then
+                    pcall(function()
+                        if not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
+                        
+                        local MeuPersonagem = LocalPlayer.Character
+                        if not MeuPersonagem then return end
+                        
+                        local MeuEventoMarreta = MeuPersonagem:FindFirstChild("HammerEvent", true)
+                        local MinhaRaiz = ObterRaiz(MeuPersonagem)
+                        if not MinhaRaiz or not MeuEventoMarreta then return end
+                        
+                        local AlvoAtual = nil
+                        local RaizAlvo = nil
+                        local mapa = ObterMapaAtual()
+                        
+                        for _, alvo in ipairs(Players:GetPlayers()) do
+                            if alvo ~= LocalPlayer and alvo.Character then
+                                local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
+                                if Stats then
+                                    local alvoCaido = Stats:FindFirstChild("Ragdoll")
+                                    local alvoCapturado = Stats:FindFirstChild("Captured")
+                                    local tempRaiz = ObterRaiz(alvo.Character)
+                                    
+                                    if tempRaiz and alvoCapturado then
+                                        -- 1. Encontra o sobrevivente mais próximo para teleportar
+                                        if not alvoCapturado.Value and not RaizAlvo then
+                                            AlvoAtual = alvo
+                                            RaizAlvo = tempRaiz
+                                        end
+                                        
+                                        -- 2. Derruba / Amarra se estiver ao alcance
+                                        if not alvoCapturado.Value then
+                                            local distancia = (tempRaiz.Position - MinhaRaiz.Position).Magnitude
+                                            if distancia <= 12 then
+                                                if alvoCaido and not alvoCaido.Value then
+                                                    MeuEventoMarreta:FireServer("HammerHit", tempRaiz)
+                                                elseif alvoCaido and alvoCaido.Value == true then
+                                                    MeuEventoMarreta:FireServer("HammerTieUp", tempRaiz, tempRaiz.Position)
+                                                end
+                                            end
+                                        end
+                                        
+                                        -- 3. Envia para o Tubo se estiver no chão
+                                        if alvoCaido and alvoCaido.Value == true and not alvoCapturado.Value then
+                                            local tuboVazio = ObterTuboVazio(mapa)
+                                            if tuboVazio then
+                                                RemoteEvent:FireServer("Input", "Trigger", true, tuboVazio)
+                                                task_wait(0.02)
+                                                RemoteEvent:FireServer("Input", "Action", true)
+                                            end
+                                        end
                                     end
                                 end
                             end
-                            if podEvent then
-                                RemoteEvent:FireServer("Input", "Trigger", true, podEvent)
-                                task.wait(0.05)
-                                RemoteEvent:FireServer("Input", "Action", true)
-                            end
                         end
-                    end
+                        
+                        if RaizAlvo then
+                            MeuPersonagem:PivotTo(RaizAlvo.CFrame * CFrame_new(0, 0, 1.5))
+                            MinhaRaiz.Velocity = Vector3_new(0, 0, 0)
+                        end
+                    end)
                 end
             end
-        end
-    end)
+        end)
+    end
 
-    -- [[ AUTO WIN SURVIVOR (TELEPORT) - OTIMIZADO ]] --
+    -- [[ AUTO WIN SURVIVOR (TELEPORT) ]] --
     do
         local VELOCIDADE_ANTI_CHUTE = 25 
         getgenv().FarmRodando = false
@@ -410,14 +438,14 @@ return function(env)
             local tempoDeEspera = distancia / VELOCIDADE_ANTI_CHUTE
 
             if tempoDeEspera > 0.5 then
-                Alertar("Anti-Cheat Bypass", "Calculating jump... Waiting " .. string.format("%.1f", tempoDeEspera) .. "s", tempoDeEspera)
-                hrp.Velocity = Vector3.new(0, 0, 0)
-                task.wait(tempoDeEspera)
+                Alertar("Anti-Cheat Bypass", "Calculating jump... Waiting " .. string_format("%.1f", tempoDeEspera) .. "s", tempoDeEspera)
+                hrp.Velocity = Vector3_new(0, 0, 0)
+                task_wait(tempoDeEspera)
             end
 
             hrp.CFrame = destinoCFrame
-            hrp.Velocity = Vector3.new(0, 0, 0)
-            task.wait(1.2)
+            hrp.Velocity = Vector3_new(0, 0, 0)
+            task_wait(1.2)
             return true
         end
 
@@ -468,6 +496,7 @@ return function(env)
             return false
         end
 
+        -- OTIMIZADO: AGORA USA CACHE DE COMPUTADORES EM VEZ DE DAR DESCENDANTADDS/WORKSPACE LOOKUPS
         local function ObterPCParaHackear()
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -475,24 +504,24 @@ return function(env)
             local pcMaisPerto = nil
             local menorDistancia = math.huge
 
-            -- Usando lista cacheada em vez de GetDescendants()
             for _, obj in ipairs(cachedComputers) do
-                local tela = obj:FindFirstChild("Screen")
-                local teclado = obj:FindFirstChild("Keyboard") or obj:FindFirstChildWhichIsA("BasePart")
-                local eventoPC = obj:FindFirstChild("Event", true) or obj:FindFirstChildWhichIsA("RemoteEvent", true)
-                
-                if tela and eventoPC and teclado then
-                    local corTela = string.lower(tostring(tela.BrickColor))
-                    if not string.find(corTela, "green") and not TemGenteNoPC(teclado.Position) then
-                        
-                        if hrp then
-                            local distancia = (hrp.Position - teclado.Position).Magnitude
-                            if distancia < menorDistancia then
+                if obj.Parent then
+                    local tela = obj:FindFirstChild("Screen")
+                    local teclado = obj:FindFirstChild("Keyboard") or obj:FindFirstChildWhichIsA("BasePart")
+                    local eventoPC = obj:FindFirstChild("Event", true) or obj:FindFirstChildWhichIsA("RemoteEvent", true)
+                    
+                    if tela and eventoPC and teclado then
+                        local corTela = string_lower(tostring(tela.BrickColor))
+                        if not string_find(corTela, "green") and not TemGenteNoPC(teclado.Position) then
+                            if hrp then
+                                local distancia = (hrp.Position - teclado.Position).Magnitude
+                                if distancia < menorDistancia then
                                     menorDistancia = distancia
-                                pcMaisPerto = {mesa = obj, tela = tela, evento = eventoPC}
+                                    pcMaisPerto = {mesa = obj, tela = tela, evento = eventoPC}
+                                end
+                            else
+                                return obj, tela, eventoPC 
                             end
-                        else
-                            return obj, tela, eventoPC 
                         end
                     end
                 end
@@ -505,9 +534,9 @@ return function(env)
         end
 
         local function IniciarRotinaDeFarm()
-            task.spawn(function()
-                repeat task.wait(0.1) until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                task.wait(1) 
+            task_spawn(function()
+                repeat task_wait(0.1) until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                task_wait(1) 
                 
                 if ChecarSeSouBeast() then
                     getgenv().SouBeastNessaRodada = true
@@ -519,7 +548,7 @@ return function(env)
                 Alertar("NexVoid System", "Targets detected. Farm started.", 3)
                 
                 while getgenv().FarmRodando and getgenv().NexVoidLigado and MasterAutoFarmState do
-                    task.wait(0.2) 
+                    task_wait(0.25) -- Otimizado de 0.2 para 0.25
                     
                     if getgenv().EscapouDaPartida then break end
                     if not PossoAgir() then continue end
@@ -530,82 +559,84 @@ return function(env)
                         local pcCFrame = mesaPC:GetPivot()
 
                         if pcCFrame then
-                            local sucesso = EsperarETeleportar(pcCFrame * CFrame.new(0, 3, -3))
+                            local sucesso = EsperarETeleportar(pcCFrame * CFrame_new(0, 3, -3))
                             
                             if sucesso then
                                 while getgenv().FarmRodando and not getgenv().EscapouDaPartida do
                                     if not PossoAgir() then break end
-                                    local corAtual = string.lower(tostring(tela.BrickColor))
-                                    if string.find(corAtual, "green") then break end
+                                    local corAtual = string_lower(tostring(tela.BrickColor))
+                                    if string_find(corAtual, "green") then break end
                                     
                                     RemoteEvent:FireServer("Input", "Trigger", true, eventoPC)
                                     RemoteEvent:FireServer("Input", "Action", true)
                                     RemoteEvent:FireServer("SetPlayerMinigameResult", true)
                                     
-                                    if localRoot then
-                                        localRoot.Velocity = Vector3.new(0, 0, 0)
+                                    local char = LocalPlayer.Character
+                                    if char and char:FindFirstChild("HumanoidRootPart") then
+                                        char.HumanoidRootPart.Velocity = Vector3_new(0, 0, 0)
                                     end
-                                    task.wait(0.1) 
+                                    task_wait(0.1) 
                                 end
                             end
                         end
                         
                     else
-                        -- Usando lista cacheada das portas
                         for _, porta in ipairs(cachedExitDoors) do
-                            local painel = porta:FindFirstChild("Light", true) or porta:FindFirstChild("Lock", true) or porta:FindFirstChildWhichIsA("BasePart")
-                            local eventoPorta = porta:FindFirstChild("Event", true) or porta:FindFirstChildWhichIsA("RemoteEvent", true)
+                            if porta.Parent then
+                                local painel = porta:FindFirstChild("Light", true) or porta:FindFirstChild("Lock", true) or porta:FindFirstChildWhichIsA("BasePart")
+                                local eventoPorta = porta:FindFirstChild("Event", true) or porta:FindFirstChildWhichIsA("RemoteEvent", true)
 
-                            if painel and eventoPorta and not TemGenteNoPC(painel.Position) then
-                                
-                                Alertar("Target Locked", "Moving to Exit Door.", 4)
-                                
-                                local cframePorta = painel.CFrame * CFrame.new(0, 0, -3)
-                                local sucesso = EsperarETeleportar(cframePorta)
-                                
-                                if sucesso then
-                                    while getgenv().FarmRodando and not getgenv().EscapouDaPartida do
-                                        if not PossoAgir() then break end
-                                        
-                                        local corLuz = string.lower(tostring(painel.BrickColor))
-                                        if string.find(corLuz, "green") then break end
-                                        
-                                        local actionVal = LocalPlayer:FindFirstChild("ActionProgress", true)
-                                        if actionVal and actionVal:IsA("NumberValue") then
-                                            if actionVal.Value >= 0.99 then break end
+                                if painel and eventoPorta and not TemGenteNoPC(painel.Position) then
+                                    Alertar("Target Locked", "Moving to Exit Door.", 4)
+                                    
+                                    local cframePorta = painel.CFrame * CFrame_new(0, 0, -3)
+                                    local sucesso = EsperarETeleportar(cframePorta)
+                                    
+                                    if sucesso then
+                                        while getgenv().FarmRodando and not getgenv().EscapouDaPartida do
+                                            if not PossoAgir() then break end
+                                            
+                                            local corLuz = string_lower(tostring(painel.BrickColor))
+                                            if string_find(corLuz, "green") then break end
+                                            
+                                            local actionVal = LocalPlayer:FindFirstChild("ActionProgress", true)
+                                            if actionVal and actionVal:IsA("NumberValue") then
+                                                if actionVal.Value >= 0.99 then break end
+                                            end
+                                            
+                                            RemoteEvent:FireServer("Input", "Trigger", true, eventoPorta)
+                                            RemoteEvent:FireServer("Input", "Action", true)
+                                            task_wait(0.1)
                                         end
                                         
-                                        RemoteEvent:FireServer("Input", "Trigger", true, eventoPorta)
-                                        RemoteEvent:FireServer("Input", "Action", true)
-                                        task.wait(0.1)
-                                    end
-                                    
-                                    if getgenv().EscapouDaPartida then break end 
-                                    
-                                    Alertar("Target Unlocked", "Door opened. Escaping...", 4)
-                                    task.wait(3) 
-                                    
-                                    if localRoot then
-                                        local centroPortaCFrame = porta:GetBoundingBox()
-                                        localRoot.CFrame = CFrame.new(centroPortaCFrame.Position)
-                                        task.wait(0.5)
+                                        if getgenv().EscapouDaPartida then break end 
                                         
-                                        for _, parte in ipairs(porta:GetDescendants()) do
-                                            if parte:IsA("BasePart") and parte.Transparency >= 0.8 and not parte.CanCollide then
-                                                localRoot.CFrame = parte.CFrame
-                                                task.wait(0.2) 
-                                                
-                                                if not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then
-                                                    break
+                                        Alertar("Target Unlocked", "Door opened. Escaping...", 4)
+                                        task_wait(3) 
+                                        
+                                        local char = LocalPlayer.Character
+                                        if char and char:FindFirstChild("HumanoidRootPart") then
+                                            local hrp = char.HumanoidRootPart
+                                            local centroPortaCFrame = porta:GetPivot()
+                                            hrp.CFrame = centroPortaCFrame
+                                            task_wait(0.5)
+                                            
+                                            for _, parte in ipairs(porta:GetDescendants()) do
+                                                if parte:IsA("BasePart") and parte.Transparency >= 0.8 and not parte.CanCollide then
+                                                    hrp.CFrame = parte.CFrame
+                                                    task_wait(0.2) 
+                                                    if not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then
+                                                        break
+                                                    end
                                                 end
                                             end
                                         end
+                                        
+                                        getgenv().EscapouDaPartida = true
+                                        getgenv().FarmRodando = false 
+                                        Alertar("System Status", "Successfully escaped. Paused.", 6)
+                                        break 
                                     end
-                                    
-                                    getgenv().EscapouDaPartida = true
-                                    getgenv().FarmRodando = false 
-                                    Alertar("System Status", "Successfully escaped. Paused.", 6)
-                                    break 
                                 end
                             end
                         end
@@ -615,7 +646,7 @@ return function(env)
             end)
         end
 
-        task.spawn(function()
+        task_spawn(function()
             while true do
                 if getgenv().NexVoidLigado and MasterAutoFarmState then
                     pcall(function() 
@@ -633,73 +664,99 @@ return function(env)
                                 
                                 Alertar("System Status", "Round ended. Resetting to Standby mode.", 5)
                                 
-                                if localRoot then
-                                    localRoot.Velocity = Vector3.new(0, 0, 0)
+                                local char = LocalPlayer.Character
+                                if char and char:FindFirstChild("HumanoidRootPart") then
+                                    char.HumanoidRootPart.Velocity = Vector3_new(0, 0, 0)
                                 end
                             end
                         end
                     end)
                 end
-                task.wait(1) 
+                task_wait(1) 
             end
         end)
     end
 
-    -- [[ AUTO SAVE (SILENT) - USANDO CACHE ]] --
-    task.spawn(function()
+    -- [[ AUTO SAVE (SILENT) ]] --
+    do
+        local function GetCurrentMap()
+            local map
+            local ov = ReplicatedStorage:FindFirstChild("CurrentMap")
+            if ov and ov:IsA("ObjectValue") and ov.Value then
+                map = ov.Value
+            end
+            if not map and #cachedComputers > 0 and cachedComputers[1].Parent then
+                map = cachedComputers[1].Parent
+            end
+            return map
+        end
+
         local function CapturedFreezePod(cmap)
+            if type(cmap) ~= "table" then return nil end
             for _, obj in ipairs(cmap) do
-                local PodTrigger = obj:FindFirstChild("PodTrigger", true)
-                if PodTrigger then
-                    local CapturedTorso = PodTrigger:FindFirstChild("CapturedTorso")
-                    local Event = PodTrigger:FindFirstChild("Event")
-                    if CapturedTorso and Event and CapturedTorso:IsA("ObjectValue") and CapturedTorso.Value then
-                        return Event
+                if obj.Name == "FreezePod" then
+                    local PodTrigger = obj:FindFirstChild("PodTrigger", true)
+                    if PodTrigger then
+                        local CapturedTorso = PodTrigger:FindFirstChild("CapturedTorso")
+                        local Event = PodTrigger:FindFirstChild("Event")
+                        
+                        if CapturedTorso and Event and CapturedTorso:IsA("ObjectValue") and CapturedTorso.Value then
+                            return Event
+                        end
                     end
                 end
             end
             return nil
         end
 
-        while true do
-            task.wait(0.05)
-            if not getgenv().AutoHelpSilent or not MasterAutoFarmState then continue end
+        task_spawn(function()
+            local map = GetCurrentMap()
             
-            local myStats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
-            if not myStats then continue end
-            
-            local myHealth = myStats:FindFirstChild("Health")
-            local myRagdoll = myStats:FindFirstChild("Ragdoll")
-            local myCaptured = myStats:FindFirstChild("Captured")
-            
-            if myHealth and myHealth.Value <= 0 then continue end
-            if myRagdoll and myRagdoll.Value then continue end
-            if myCaptured and myCaptured.Value then continue end
-            
-            for _, alvo in ipairs(Players:GetPlayers()) do
-                if alvo == LocalPlayer then continue end
+            while true do
+                task_wait(0.1) -- Otimizado de 0.05 para 0.1
+                if not getgenv().AutoHelpSilent or not MasterAutoFarmState then continue end
                 
-                local alvoStats = alvo:FindFirstChild("TempPlayerStatsModule")
-                local alvoCaptured = alvoStats and alvoStats:FindFirstChild("Captured")
+                local myStats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+                if not myStats then continue end
                 
-                if alvoCaptured and alvoCaptured:IsA("BoolValue") and alvoCaptured.Value then
-                    local podEvent = CapturedFreezePod(cachedFreezepods)
+                local myHealth = myStats:FindFirstChild("Health")
+                local myRagdoll = myStats:FindFirstChild("Ragdoll")
+                local myCaptured = myStats:FindFirstChild("Captured")
+                
+                if myHealth and myHealth.Value <= 0 then continue end
+                if myRagdoll and myRagdoll.Value then continue end
+                if myCaptured and myCaptured.Value then continue end
+                
+                if not map then
+                    map = GetCurrentMap()
+                    continue
+                end
+                
+                for _, alvo in ipairs(Players:GetPlayers()) do
+                    if alvo == LocalPlayer then continue end
                     
-                    if not podEvent then continue end
+                    local alvoStats = alvo:FindFirstChild("TempPlayerStatsModule")
+                    local alvoCaptured = alvoStats and alvoStats:FindFirstChild("Captured")
                     
-                    repeat
-                        task.wait(0.05)
-                        RemoteEvent:FireServer("Input", "Trigger", true, podEvent)
-                        RemoteEvent:FireServer("Input", "Action", true)
+                    if alvoCaptured and alvoCaptured:IsA("BoolValue") and alvoCaptured.Value then
+                        local podEvent = CapturedFreezePod(map:GetChildren())
                         
-                    until not (alvoCaptured.Value and getgenv().AutoHelpSilent and MasterAutoFarmState) 
-                       or (myRagdoll.Value or myCaptured.Value or myHealth.Value <= 0)
-                       
-                    break 
+                        if not podEvent then continue end
+                        
+                        repeat
+                            task_wait(0.1)
+                            RemoteEvent:FireServer("Input", "Trigger", true, podEvent)
+                            RemoteEvent:FireServer("Input", "Action", true)
+                            
+                        until not (alvoCaptured.Value and getgenv().AutoHelpSilent and MasterAutoFarmState) 
+                           or (myRagdoll.Value or myCaptured.Value or myHealth.Value <= 0)
+                           
+                        break 
+                    end
                 end
             end
-        end
-    end)
+        end)
+    end
 
     -- ==========================================
     -- LOGICA DE SUPORTE DO AUTO WIN FLY
@@ -710,7 +767,9 @@ return function(env)
 
     local function fly_RemoveSafePlatform()
         if fly_safePlatform then
-            pcall(function() fly_safePlatform:Destroy() end)
+            pcall(function()
+                fly_safePlatform:Destroy()
+            end)
             fly_safePlatform = nil
         end
     end
@@ -730,18 +789,23 @@ return function(env)
         if fly_IsThereChar() then
             local lobby = workspace:FindFirstChild("LobbySpawnPad")
             if lobby then
-                LocalPlayer.Character:PivotTo(lobby.CFrame * CFrame.new(0, 3, 0))
+                LocalPlayer.Character:PivotTo(lobby.CFrame * CFrame_new(0, 3, 0))
             end
         end
     end
 
     local function fly_IsInLobby()
         local lobby = workspace:FindFirstChild("LobbySpawnPad")
-        if not lobby then return false end
-        if not fly_IsThereChar() then return true end
-        
-        local hrp = localRoot
-        if not hrp then return true end
+        if not lobby then
+            return false 
+        end
+        if not fly_IsThereChar() then
+            return true
+        end
+        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then
+            return true
+        end
         return (hrp.Position - lobby.Position).Magnitude < 150
     end
 
@@ -749,12 +813,16 @@ return function(env)
         local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
         if stats then
             local isBeastVal = stats:FindFirstChild("IsBeast")
-            if isBeastVal and isBeastVal.Value == true then return true end
+            if isBeastVal and isBeastVal.Value == true then
+                return true
+            end
         end
         local char = LocalPlayer.Character
         if char then
             local hammer = char:FindFirstChild("BeastHammer") or char:FindFirstChild("Hammer")
-            if hammer and hammer:IsA("Tool") then return true end
+            if hammer and hammer:IsA("Tool") then
+                return true
+            end
         end
         return false
     end
@@ -773,53 +841,68 @@ return function(env)
 
     local function fly_IsMatchActive()
         local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
-        if not currentMap or not currentMap.Value then return false end
-        
+        if not currentMap or not currentMap.Value then
+            return false
+        end
         local status = ReplicatedStorage:FindFirstChild("GameStatus")
         if status then
-            local statusText = string.lower(status.Value)
-            if string.find(statusText, "intermission") or string.find(statusText, "game over") or string.find(statusText, "lobby") then
+            local statusText = string_lower(status.Value)
+            if string_find(statusText, "intermission") or string_find(statusText, "game over") or string_find(statusText, "lobby") then
                 return false
             end
         end
         return true
     end
 
-    -- Otimização Máxima: Varredura de Bestas em Segundo Plano a cada 1.5s
     local function fly_GetBeast()
         if fly_cachedBeast and fly_cachedBeast.Parent == Players and fly_IsThereChar(fly_cachedBeast) then
             local stats = fly_cachedBeast:FindFirstChild("TempPlayerStatsModule")
-            if stats and stats:FindFirstChild("IsBeast") and stats.IsBeast.Value then
-                return fly_cachedBeast
+            if stats then
+                local isBeastVal = stats:FindFirstChild("IsBeast")
+                if isBeastVal and isBeastVal.Value == true then
+                    return fly_cachedBeast
+                end
+            end
+            local char = fly_cachedBeast.Character
+            if char then
+                local hammer = char:FindFirstChild("BeastHammer") or char:FindFirstChild("Hammer")
+                if hammer and hammer:IsA("Tool") then
+                    return fly_cachedBeast
+                end
             end
         end
 
         for _, v in ipairs(Players:GetPlayers()) do
             local stats = v:FindFirstChild("TempPlayerStatsModule")
-            if stats and stats:FindFirstChild("IsBeast") and stats.IsBeast.Value then
-                fly_cachedBeast = v
-                return v
+            if stats then
+                local isBeastVal = stats:FindFirstChild("IsBeast")
+                if isBeastVal and isBeastVal.Value == true then
+                    fly_cachedBeast = v
+                    return v
+                end
             end
+            
             local char = v.Character
-            if char and (char:FindFirstChild("BeastHammer") or char:FindFirstChild("Hammer")) then
-                fly_cachedBeast = v
-                return v
+            if char then
+                local hammer = char:FindFirstChild("BeastHammer") or char:FindFirstChild("Hammer")
+                if hammer and hammer:IsA("Tool") then
+                    fly_cachedBeast = v
+                    return v
+                end
+            end
+            
+            local backpack = v:FindFirstChild("Backpack")
+            if backpack then
+                local hammer = backpack:FindFirstChild("BeastHammer") or backpack:FindFirstChild("Hammer")
+                if hammer and hammer:IsA("Tool") then
+                    fly_cachedBeast = v
+                    return v
+                end
             end
         end
         fly_cachedBeast = nil
         return nil
     end
-
-    task.spawn(function()
-        while true do
-            task.wait(1.5)
-            if getgenv().AutoWinFlyActive and MasterAutoFarmState then
-                fly_BeastObj = fly_GetBeast()
-            else
-                fly_BeastObj = nil
-            end
-        end
-    end)
 
     -- [[ EXECUÇÃO DO FARM DE VOO ]] --
     DoSurvivorFarmFly = function()
@@ -845,15 +928,24 @@ return function(env)
             return getgenv().AutoWinFlyActive and not fly_AmIBeast() and fly_IsMatchActive() and PlayerReady() and MasterAutoFarmState
         end
 
-        local MapObjects = {Computers = cachedComputers, ExitDoors = cachedExitDoors}
+        -- OTIMIZADO: LÊ DIRETAMENTE DO CACHE EM VEZ DE GERAR ARRAY ITERATIVO DO MAPA INTEIRO
+        local function GetMapObjects()
+            return {Computers = cachedComputers, ExitDoors = cachedExitDoors}
+        end
+
+        local MapObjects = GetMapObjects()
+        local loadAttempts = 0
+        while #MapObjects.Computers == 0 and loadAttempts < 10 do
+            task_wait(0.5)
+            MapObjects = GetMapObjects()
+            loadAttempts = loadAttempts + 1
+        end
 
         local fly_GoTween
         fly_GoTween = function(Part)
             if not fly_IsThereChar() then return end
             fly_isMoving = true 
-            local Root = localRoot
-            if not Root then return end
-            
+            local Root = LocalPlayer.Character.HumanoidRootPart
             Root.Anchored = true
             
             while fly_IsThereChar() and TaskGood() do
@@ -862,23 +954,27 @@ return function(env)
                 local distanceVector = targetPos - currentPos
                 local distance = distanceVector.Magnitude
                 
-                if distance < 1.5 then break end
+                if distance < 1.5 then
+                    break
+                end
                 
                 local dt = RunService.Heartbeat:Wait()
                 local speed = fly_Config.FarmTweenSpeed
                 local step = speed * dt
                 
-                if step > distance then step = distance end
+                if step > distance then
+                    step = distance
+                end
                 
                 local direction = distanceVector.Unit
                 local nextPosition = currentPos + (direction * step)
                 
-                Root.CFrame = CFrame.new(nextPosition) * Root.CFrame.Rotation
+                Root.CFrame = CFrame_new(nextPosition) * Root.CFrame.Rotation
             end
 
             if fly_IsThereChar() then
                 Root.Anchored = false
-                Root.CFrame = CFrame.new(Part.Position) * Root.CFrame.Rotation
+                Root.CFrame = CFrame_new(Part.Position) * Root.CFrame.Rotation
             end
             fly_isMoving = false
         end
@@ -909,11 +1005,11 @@ return function(env)
                         local travelTime = Distance / fly_Config.FarmTweenSpeed
 
                         if travelTime < fly_Config.WaitTweenFast then
-                            task.wait(math.max(0.1, fly_Config.WaitTweenFast - travelTime))
+                            task_wait(math_max(0.1, fly_Config.WaitTweenFast - travelTime))
                         end
 
                         repeat
-                            task.wait()
+                            task_wait()
                         until not TaskGood() or fly_bnhide == false or fly_bnhideelapse >= fly_Config.CampHackOut
 
                         fly_Notify("Objetivo", "Movendo para o computador", 2.5)
@@ -925,7 +1021,7 @@ return function(env)
 
                         local Tries = 0
                         repeat
-                            task.wait()
+                            task_wait()
                             
                             if CurrentComputer ~= Computer and fly_IsTriggerOccupied(v) then
                                 fly_Notify("Teclado Ocupado", "Outro jogador pegou esta vaga.", 3)
@@ -939,9 +1035,9 @@ return function(env)
                                 end
                                 
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Trigger", true, v.Event)
-                                task.wait(0.1)
+                                task_wait(0.1)
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", true)
-                                task.wait(0.4)
+                                task_wait(0.4)
                             elseif TaskGood() and not fly_bnhide then
                                 if CurrentComputer ~= Computer then
                                     fly_Notify("Hackeando", "Iniciou o processo", 3)
@@ -955,7 +1051,7 @@ return function(env)
                             end
 
                             if fly_bnhideelapse >= fly_Config.CampHackOut then
-                                ComputerBanList[math.floor(tick() * 1000)] = Computer
+                                ComputerBanList[math_floor(tick() * 1000)] = Computer
                                 fly_RemoveSafePlatform()
                                 fly_bnhide = false
                                 OnComputer = false
@@ -998,7 +1094,7 @@ return function(env)
 
             coroutine.wrap(function()
                 while TaskGood() do
-                    task.wait(0.2)
+                    task_wait(0.25) -- Otimizado
                     
                     if CurrentComputer then
                         ChosenComputer = CurrentComputer
@@ -1014,7 +1110,7 @@ return function(env)
                         ChosenComputer = nil
                     end
 
-                    local BeastObj = fly_BeastObj
+                    local BeastObj = fly_GetBeast()
                     local currentTime = tick() * 1000
 
                     for i = 1, #MapObjects.Computers do
@@ -1066,7 +1162,7 @@ return function(env)
             end)()
 
             repeat
-                task.wait(0.5)
+                task_wait(0.5)
                 local isFinished = (ComputersLeft < 1) or forceEscape
 
                 if isFinished then
@@ -1089,24 +1185,24 @@ return function(env)
             fly_Notify("Fuga", "Seguindo para as portas de saída.", 4)
 
             repeat
-                task.wait(0.5)
+                task_wait(0.5)
                 for i = 1, #MapObjects.ExitDoors do
                     local v = MapObjects.ExitDoors[i]
                     if not TaskGood() then continue end
 
                     repeat
-                        task.wait(0.5)
+                        task_wait(0.5)
                     until not TaskGood() or fly_bnhide == false or fly_bnhideelapse >= fly_Config.CampEscapeOut
 
                     if v:FindFirstChild("ExitDoorTrigger") then
                         fly_GoTween(v.ExitDoorTrigger)
                         repeat
-                            task.wait()
+                            task_wait()
                             if v:FindFirstChild("ExitDoorTrigger") and v.ExitDoorTrigger.ActionSign.Value ~= 0 and not fly_bnhide and fly_IsThereChar() then
-                                LocalPlayer.Character:PivotTo(v.ExitDoorTrigger.CFrame * CFrame.new(0, v.ExitDoorTrigger.Size.Y / 2, 0))
+                                LocalPlayer.Character:PivotTo(v.ExitDoorTrigger.CFrame * CFrame_new(0, v.ExitDoorTrigger.Size.Y / 2, 0))
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Trigger", true, v.ExitDoorTrigger.Event)
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", true)
-                                task.wait(0.5)
+                                task_wait(0.5)
                             end
                         until not TaskGood() or not v:FindFirstChild("ExitDoorTrigger") or fly_bnhideelapse >= fly_Config.CampEscapeOut
 
@@ -1121,7 +1217,7 @@ return function(env)
                     end
 
                     if TaskGood() then
-                        task.wait(0.5)
+                        task_wait(0.5)
                         if v:FindFirstChild("ExitArea") then
                             fly_Notify("Fuga", "Escapando...", 3)
                             fly_GoTween(v.ExitArea)
@@ -1161,10 +1257,10 @@ return function(env)
         end
     end)
 
-    -- LOOP GERAL DE VERIFICAÇÃO DO VOO
-    task.spawn(function()
+    -- LOOP GERAL DE VERIFICAÇÃO DO VOO (OTIMIZADO)
+    task_spawn(function()
         while true do
-            local dt = task.wait(0.1)
+            local dt = task_wait(0.1)
             
             if not fly_IsThereChar() then
                 fly_RemoveSafePlatform()
@@ -1181,15 +1277,15 @@ return function(env)
                 end
                 fly_onsurvivorfarm = false
                 fly_RemoveSafePlatform()
-                if localRoot then
-                    localRoot.Anchored = false
+                if fly_IsThereChar() then
+                    LocalPlayer.Character.HumanoidRootPart.Anchored = false
                 end
                 continue
             end
 
             if not getgenv().AutoWinFlyActive or not MasterAutoFarmState or not fly_IsMatchActive() then
-                if localRoot and localRoot.Anchored then
-                    localRoot.Anchored = false
+                if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Anchored then
+                    LocalPlayer.Character.HumanoidRootPart.Anchored = false
                 end
                 fly_RemoveSafePlatform()
                 fly_onsurvivorfarm = false
@@ -1210,7 +1306,7 @@ return function(env)
             end
 
             fly_TempPlayerStatsModule = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
-            fly_Beast = fly_BeastObj
+            fly_Beast = fly_GetBeast()
 
             if fly_Config.HideBeastNear and fly_IsThereChar() and fly_TempPlayerStatsModule and not fly_TempPlayerStatsModule.IsBeast.Value then
                 if (fly_Beast == nil or not fly_IsThereChar(fly_Beast)) then
@@ -1219,8 +1315,8 @@ return function(env)
                         fly_bnhideelapse = 0
                         fly_RemoveSafePlatform()
                         if fly_IsThereChar() then
-                            if localRoot then localRoot.Anchored = false end
-                            if fly_lpos and LocalPlayer.Character then
+                            LocalPlayer.Character.HumanoidRootPart.Anchored = false
+                            if fly_lpos then
                                 LocalPlayer.Character:PivotTo(fly_lpos)
                             end
                         end
@@ -1228,7 +1324,7 @@ return function(env)
                         fly_Notify("Seguro", "Retomando atividades.", 3)
                     end
                 else
-                    local playerPos = localRoot and localRoot.Position or Vector3.new(0, 0, 0)
+                    local playerPos = LocalPlayer.Character.HumanoidRootPart.Position
                     local beastPos = fly_Beast.Character.HumanoidRootPart.Position
                     local currentGroundPos = fly_lpos and fly_lpos.Position or playerPos
                     local distance = (beastPos - currentGroundPos).Magnitude
@@ -1242,23 +1338,21 @@ return function(env)
                             pcall(function()
                                 if not fly_safePlatform then
                                     fly_safePlatform = Instance.new("Part")
-                                    fly_safePlatform.Size = Vector3.new(15, 1, 15)
+                                    fly_safePlatform.Size = Vector3_new(15, 1, 15)
                                     fly_safePlatform.Anchored = true
                                     fly_safePlatform.CanCollide = true
                                     fly_safePlatform.Transparency = 1
                                     fly_safePlatform.Name = "NexVoidSafePlate"
                                     fly_safePlatform.Parent = workspace
                                 end
-                                fly_safePlatform.CFrame = fly_lpos * CFrame.new(0, 75, 0)
-                                if LocalPlayer.Character then
-                                    LocalPlayer.Character:PivotTo(fly_safePlatform.CFrame * CFrame.new(0, 3, 0))
-                                end
+                                fly_safePlatform.CFrame = fly_lpos * CFrame_new(0, 75, 0)
+                                LocalPlayer.Character:PivotTo(fly_safePlatform.CFrame * CFrame_new(0, 3, 0))
                                 
                                 task.spawn(function()
                                     task.wait()
-                                    if fly_IsThereChar() and localRoot then
-                                        localRoot.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                                        localRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                                    if fly_IsThereChar() then
+                                        LocalPlayer.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3_new(0, 0, 0)
+                                        LocalPlayer.Character.HumanoidRootPart.AssemblyAngularVelocity = Vector3_new(0, 0, 0)
                                     end
                                 end)
                             end)
@@ -1267,17 +1361,17 @@ return function(env)
                     end
 
                     if fly_bnhide and fly_lpos and not fly_isMoving then
-                        local targetHover = (fly_lpos * CFrame.new(0, 75, 0)).Position
-                        if localRoot and (localRoot.Position - targetHover).Magnitude > 8 then
-                            LocalPlayer.Character:PivotTo(fly_lpos * CFrame.new(0, 75, 0) * CFrame.new(0, 3, 0))
+                        local targetHover = (fly_lpos * CFrame_new(0, 75, 0)).Position
+                        if (LocalPlayer.Character.HumanoidRootPart.Position - targetHover).Magnitude > 8 then
+                            LocalPlayer.Character:PivotTo(fly_lpos * CFrame_new(0, 75, 0) * CFrame_new(0, 3, 0))
                         end
 
                         local beastDistanceFromLpos = (beastPos - fly_lpos.Position).Magnitude
                         if beastDistanceFromLpos > (fly_Config.HideBeastNearDist + 15) and fly_TempPlayerStatsModule.Ragdoll.Value == false then
                             fly_RemoveSafePlatform()
                             if fly_IsThereChar() then
-                                if localRoot then localRoot.Anchored = false end
-                                if LocalPlayer.Character then LocalPlayer.Character:PivotTo(fly_lpos) end
+                                LocalPlayer.Character.HumanoidRootPart.Anchored = false
+                                LocalPlayer.Character:PivotTo(fly_lpos)
                             end
                             fly_bnhide = false
                             fly_bnhideelapse = 0
@@ -1298,23 +1392,25 @@ return function(env)
                 end
             end
 
-            if fly_IsThereChar() and localRoot and localRoot.Position.Y < -2000 then
+            if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Position.Y < -2000 then
                 fly_TPPlayerSpawn()
             end
 
             local CurrentMap = ReplicatedStorage.CurrentMap.Value
             if CurrentMap then
+                -- Otimizado: lê contagem de computadores diretamente da nossa tabela em cache
                 local GotComputers = #cachedComputers
+                
                 if GotComputers ~= fly_Comp then
                     if GotComputers > 0 then
-                        task.wait(3)
+                        task_wait(3)
                         if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
-                            task.spawn(function()
+                            task_spawn(function()
                                 while fly_IsInLobby() and fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState do
                                     task.wait(0.2)
                                 end
                                 if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
-                                    task.spawn(DoSurvivorFarmFly)
+                                    task_spawn(DoSurvivorFarmFly)
                                 end
                             end)
                         end
