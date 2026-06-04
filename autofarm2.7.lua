@@ -18,7 +18,7 @@ return function(env)
     local AutoSaveTeleportToggleObj
 
     -- ==========================================
-    -- AUTO WIN SURVIVOR (FLY) VARIABLES
+    -- VARIÁVEIS DO AUTO WIN SURVIVOR (FLY)
     -- ==========================================
     local fly_Config = {
         FarmTweenSpeed = 22,        
@@ -48,14 +48,14 @@ return function(env)
     local fly_notifiedLobby = false
 
     -- ==========================================
-    -- AUTO WIN SURVIVOR (TELEPORT) VARIABLES
+    -- VARIÁVEIS DO AUTO WIN SURVIVOR (TELEPORT)
     -- ==========================================
     local tp_bnhide = false
     local tp_lpos = nil
     local tp_safePlatform = nil
 
     -- ==========================================
-    -- UI ELEMENTS
+    -- ELEMENTOS DA INTERFACE (UI)
     -- ==========================================
     Library:CreateSection(Page, "Main Farming (BETA)")
 
@@ -119,7 +119,13 @@ return function(env)
         end
 
         getgenv().AutoWinFlyActive = state
-        if not state then
+        if state then
+            if IsGameActive.Value == true then
+                task.spawn(DoSurvivorFarmFly)
+            else
+                SendNotification("Notification | Waiting for match to start...", 4)
+            end
+        else
             for i, v in pairs(fly_farmtasks) do
                 pcall(function() coroutine.close(v) end)
                 fly_farmtasks[i] = nil
@@ -199,7 +205,7 @@ return function(env)
         _G.AntiAfkEnabled = state
     end)
 
-    -- GAME REF
+    -- REFERÊNCIAS DO SISTEMA
     local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
     local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
 
@@ -558,7 +564,7 @@ return function(env)
                 if ChecarSeSouBeast() then
                     getgenv().SouBeastNessaRodada = true
                     getgenv().FarmRodando = false
-                    Alertar("System Status", "Beast Mode Detected. Teleport Farm Paused.", 6)
+                    Alertar("System Status", "Beast Mode Detected. Farm Disabled.", 6)
                     return 
                 end
                 
@@ -678,18 +684,10 @@ return function(env)
                 if getgenv().NexVoidLigado and MasterAutoFarmState then
                     pcall(function() 
                         if IsGameActive.Value == true then
-                            if ChecarSeSouBeast() then
-                                getgenv().SouBeastNessaRodada = true
-                                if getgenv().FarmRodando then
-                                    getgenv().FarmRodando = false
-                                end
-                            else
-                                getgenv().SouBeastNessaRodada = false
-                                if not getgenv().FarmRodando and not getgenv().EscapouDaPartida then
-                                    getgenv().FarmRodando = true
-                                    Alertar("NexVoid System", "Auto Farm initialized. Waiting for round.", 5)
-                                    IniciarRotinaDeFarm()
-                                end
+                            if not getgenv().FarmRodando and not getgenv().EscapouDaPartida and not getgenv().SouBeastNessaRodada then
+                                getgenv().FarmRodando = true
+                                Alertar("NexVoid System", "Auto Farm initialized. Waiting for round.", 5)
+                                IniciarRotinaDeFarm()
                             end
                         else
                             if getgenv().FarmRodando or getgenv().EscapouDaPartida or getgenv().SouBeastNessaRodada then
@@ -713,7 +711,7 @@ return function(env)
     end
 
     -- ==========================================
-    -- AUTO WIN FLY SUPPORT LOGIC
+    -- LOGICA DE SUPORTE DO AUTO WIN FLY
     -- ==========================================
     local function fly_Notify(title, text, duration)
         SendNotification(title .. " | " .. text, duration or 3)
@@ -858,7 +856,7 @@ return function(env)
         return nil
     end
 
-    -- [[ FLY SURVIVOR PROCESS ]] --
+    -- [[ EXECUÇÃO DO FARM DE VOO ]] --
     DoSurvivorFarmFly = function()
         local DoNotTeleport = false
         local forceEscape = false 
@@ -1210,7 +1208,7 @@ return function(env)
         table.insert(fly_farmtasks, NewFarmTask)
     end
 
-    -- MONITOR MAPS (Fly)
+    -- MONITORAMENTO DOS MAPAS (Voo)
     ReplicatedStorage.CurrentMap.Changed:Connect(function(newMap)
         if newMap and getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
             if fly_AmIBeast() then return end
@@ -1218,55 +1216,35 @@ return function(env)
                 task.wait(0.2)
             end
             if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
-                if not fly_AmIBeast() then
-                    fly_Notify("Match", "Starting farm on new match.", 3)
-                    task.spawn(DoSurvivorFarmFly)
-                end
+                fly_Notify("Match", "Starting farm on new match.", 3)
+                task.spawn(DoSurvivorFarmFly)
             end
         end
     end)
 
-    -- [[ FLY GENERAL MONITOR LOOP (STAYS ACTIVE BUT PAUSES ON BEAST ROUNDS) ]] --
-    task.spawn(function()
-        while true do
-            if getgenv().AutoWinFlyActive and MasterAutoFarmState then
-                pcall(function()
-                    if fly_IsMatchActive() then
-                        if fly_AmIBeast() then
-                            if fly_onsurvivorfarm then
-                                fly_onsurvivorfarm = false
-                                for i, v in pairs(fly_farmtasks) do
-                                    pcall(function() coroutine.close(v) end)
-                                    fly_farmtasks[i] = nil
-                                end
-                                fly_RemoveSafePlatform()
-                                if fly_IsThereChar() then
-                                    LocalPlayer.Character.HumanoidRootPart.Anchored = false
-                                end
-                            end
-                        else
-                            if not fly_onsurvivorfarm then
-                                fly_Notify("NexVoid System", "Auto Farm (Fly) active. Starting...", 5)
-                                task.spawn(DoSurvivorFarmFly)
-                            end
-                        end
-                    else
-                        fly_onsurvivorfarm = false
-                        fly_RemoveSafePlatform()
-                    end
-                end)
-            end
-            task.wait(1)
-        end
-    end)
-
-    -- LOOP GERAL DE VERIFICAÇÃO DO VOO (Evasão & Escapados)
+    -- LOOP GERAL DE VERIFICAÇÃO DO VOO
     task.spawn(function()
         while true do
             local dt = task.wait(0.1)
             
             if not fly_IsThereChar() then
                 fly_RemoveSafePlatform()
+            end
+
+            -- SISTEMA DE STANDBY: Se for a besta, o voo apenas limpa e espera silenciosamente sem desativar a toggle
+            if getgenv().AutoWinFlyActive and MasterAutoFarmState and fly_AmIBeast() then
+                if fly_onsurvivorfarm then
+                    for i, v in pairs(fly_farmtasks) do
+                        pcall(function() coroutine.close(v) end)
+                        fly_farmtasks[i] = nil
+                    end
+                    fly_onsurvivorfarm = false
+                end
+                fly_RemoveSafePlatform()
+                if fly_IsThereChar() then
+                    LocalPlayer.Character.HumanoidRootPart.Anchored = false
+                end
+                continue
             end
 
             if not getgenv().AutoWinFlyActive or not MasterAutoFarmState or not fly_IsMatchActive() then
@@ -1415,7 +1393,7 @@ return function(env)
     end)
 
     -- ==========================================
-    -- TELEPORT EVASION SERVICE (HideBeastNear)
+    -- LOGICA DE EVASÃO DO TELEPORTE (HideBeastNear)
     -- ==========================================
     task.spawn(function()
         local function IsThereCharLocal()
