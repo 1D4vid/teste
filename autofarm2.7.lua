@@ -46,6 +46,7 @@ return function(env)
     local fly_TempPlayerStatsModule = nil
     local fly_Comp = 0
     local fly_notifiedLobby = false
+    local fly_SouBeastNessaRodada = false
 
     -- ==========================================
     -- VARIÁVEIS DO AUTO WIN SURVIVOR (TELEPORT)
@@ -121,7 +122,12 @@ return function(env)
         getgenv().AutoWinFlyActive = state
         if state then
             if IsGameActive.Value == true then
-                task.spawn(DoSurvivorFarmFly)
+                if not fly_AmIBeast() then
+                    task.spawn(DoSurvivorFarmFly)
+                else
+                    fly_SouBeastNessaRodada = true
+                    SendNotification("Notification | Beast Mode detected. Fly farm paused.", 5)
+                end
             else
                 SendNotification("Notification | Waiting for match to start...", 4)
             end
@@ -131,6 +137,7 @@ return function(env)
                 fly_farmtasks[i] = nil
             end
             fly_onsurvivorfarm = false
+            fly_SouBeastNessaRodada = false
             if fly_safePlatform then
                 pcall(function() fly_safePlatform:Destroy() end)
                 fly_safePlatform = nil
@@ -908,18 +915,18 @@ return function(env)
         local fly_GoTween
         fly_GoTween = function(Part)
             if not fly_IsThereChar() then return end
-            
             fly_isMoving = true 
             local Root = LocalPlayer.Character.HumanoidRootPart
+            
             Root.Anchored = true
             
             while fly_IsThereChar() and TaskGood() do
                 local currentPos = Root.Position
                 local targetPos = Part.Position
                 local distanceVector = targetPos - currentPos
-                local currentDist = distanceVector.Magnitude
+                local distance = distanceVector.Magnitude
                 
-                if currentDist < 1.5 then
+                if distance < 1.5 then
                     break
                 end
                 
@@ -927,8 +934,8 @@ return function(env)
                 local speed = fly_Config.FarmTweenSpeed
                 local step = speed * dt
                 
-                if step > currentDist then
-                    step = currentDist
+                if step > distance then
+                    step = distance
                 end
                 
                 local direction = distanceVector.Unit
@@ -1211,13 +1218,15 @@ return function(env)
     -- MONITORAMENTO DOS MAPAS (Voo)
     ReplicatedStorage.CurrentMap.Changed:Connect(function(newMap)
         if newMap and getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
-            if fly_AmIBeast() then return end
+            if fly_AmIBeast() then 
+                fly_SouBeastNessaRodada = true
+                return 
+            end
             while fly_IsInLobby() and fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState do
                 task.wait(0.2)
             end
             if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
-                task.wait(2) -- Tempo de espera seguro para o jogo mover nativamente o jogador até a sala
-                if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
+                if not fly_AmIBeast() then
                     fly_Notify("Match", "Starting farm on new match.", 3)
                     task.spawn(DoSurvivorFarmFly)
                 end
@@ -1234,18 +1243,20 @@ return function(env)
                 fly_RemoveSafePlatform()
             end
 
-            -- SISTEMA DE STANDBY: Se for a besta, o voo apenas limpa e espera silenciosamente sem desativar a toggle
             if getgenv().AutoWinFlyActive and MasterAutoFarmState and fly_AmIBeast() then
-                if fly_onsurvivorfarm then
+                if not fly_SouBeastNessaRodada then
+                    fly_SouBeastNessaRodada = true
+                    fly_Notify("Paused", "You are the BEAST. Fly Auto Farm paused.", 5)
+                    
                     for i, v in pairs(fly_farmtasks) do
                         pcall(function() coroutine.close(v) end)
                         fly_farmtasks[i] = nil
                     end
                     fly_onsurvivorfarm = false
-                end
-                fly_RemoveSafePlatform()
-                if fly_IsThereChar() then
-                    LocalPlayer.Character.HumanoidRootPart.Anchored = false
+                    fly_RemoveSafePlatform()
+                    if fly_IsThereChar() then
+                        LocalPlayer.Character.HumanoidRootPart.Anchored = false
+                    end
                 end
                 continue
             end
@@ -1258,6 +1269,7 @@ return function(env)
                 fly_onsurvivorfarm = false
                 fly_bnhide = false
                 fly_Comp = 0 
+                fly_SouBeastNessaRodada = false
                 
                 if getgenv().AutoWinFlyActive and MasterAutoFarmState then
                     if not fly_notifiedLobby then
@@ -1270,6 +1282,11 @@ return function(env)
 
             if fly_notifiedLobby then
                 fly_notifiedLobby = false
+            end
+
+            -- Se era Beast mas por algum motivo não é mais durante a partida, reinicia
+            if fly_SouBeastNessaRodada and not fly_AmIBeast() then
+                fly_SouBeastNessaRodada = false
             end
 
             fly_TempPlayerStatsModule = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
@@ -1381,8 +1398,7 @@ return function(env)
                                     task.wait(0.2)
                                 end
                                 if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
-                                    task.wait(2) -- Tempo de espera para o carregamento do player no mapa terminar
-                                    if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
+                                    if not fly_AmIBeast() then
                                         task.spawn(DoSurvivorFarmFly)
                                     end
                                 end
