@@ -58,7 +58,7 @@ return function(env)
     -- ==========================================
     -- ELEMENTOS DA INTERFACE (UI)
     -- ==========================================
-    Library:CreateSection(Page, "Main Farming (teste)")
+    Library:CreateSection(Page, "Main Farming (BETA)")
 
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
         MasterAutoFarmState = state
@@ -754,18 +754,22 @@ return function(env)
     end
 
     local function fly_IsInLobby()
+        if not fly_IsMatchActive() then
+            return true
+        end
         local lobby = workspace:FindFirstChild("LobbySpawnPad")
-        if not lobby then
-            return false 
+        if lobby and fly_IsThereChar() then
+            local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                return (hrp.Position - lobby.Position).Magnitude < 150
+            end
         end
-        if not fly_IsThereChar() then
+        -- Correção para StreamingEnabled: Se não achou o LobbySpawnPad mas a partida não está ativa
+        local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
+        if not currentMap or not currentMap.Value then
             return true
         end
-        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then
-            return true
-        end
-        return (hrp.Position - lobby.Position).Magnitude < 150
+        return false
     end
 
     local function fly_AmIBeast()
@@ -1062,7 +1066,6 @@ return function(env)
             local CancelComputers = false
             local LeastTriggers = 4
             local Closest = math.huge
-            -- CORREÇÃO: Inicializa com o número real de computadores no mapa em vez de 0
             local ComputersLeft = #MapObjects.Computers > 0 and #MapObjects.Computers or 5
 
             coroutine.wrap(function()
@@ -1132,7 +1135,7 @@ return function(env)
                         end
                     end
                 end
-            end)()
+            endCode()
 
             repeat
                 task.wait(0.5)
@@ -1205,11 +1208,7 @@ return function(env)
                 fly_onsurvivorfarm = true
                 fly_Notify("Auto Farm", "Auto Farm started.", 3)
                 Run()
-                -- CORREÇÃO: Apenas teleporta de volta ao lobby se a partida de fato tiver terminado
-                if not DoNotTeleport and not fly_IsMatchActive() then
-                    task.wait(1)
-                    fly_TPPlayerSpawn()
-                end
+                -- CORREÇÃO DEFINITIVA: Teleporte manual ao lobby removido para evitar interferências durante transitions do jogo
                 fly_onsurvivorfarm = false
             end
         end)
@@ -1378,6 +1377,7 @@ return function(env)
                 end
             end
 
+            -- Anti-Void protection (Só teleporta se cair fisicamente no limbo Y < -2000)
             if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Position.Y < -2000 then
                 fly_TPPlayerSpawn()
             end
