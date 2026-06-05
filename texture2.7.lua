@@ -30,7 +30,7 @@ return function(env)
     -- Processador assíncrono em lotes super leve para evitar travamento de frames
     local function batchProcess(items, processFunc, onComplete)
         local total = #items
-        local chunk = 250 -- Processa 250 itens por frame
+        local chunk = 300 -- Processa 300 itens por frame (extremamente leve sem recursividade)
         local index = 1
         
         local function run()
@@ -102,15 +102,41 @@ return function(env)
 
     local IgnoreNames = { ComputerTable = true, ExitDoor = true }
     local mcFaces = {"Front", "Back", "Bottom", "Top", "Right", "Left"}
+    
+    -- Mapeamento otimizado usando Enums diretamente (Evita alocação lenta de Strings)
     local mcMaterials = {
-        Wood = "3258599312", WoodPlanks = "8676581022", Brick = "8558400252", Cobblestone = "5003953441",
-        Concrete = "7341687607", DiamondPlate = "6849247561", Fabric = "118776397", Granite = "4722586771",
-        Grass = "4722588177", Ice = "3823766459", Marble = "62967586", Metal = "62967586", Sand = "152572215"
+        [Enum.Material.Wood] = "3258599312", 
+        [Enum.Material.WoodPlanks] = "8676581022", 
+        [Enum.Material.Brick] = "8558400252", 
+        [Enum.Material.Cobblestone] = "5003953441",
+        [Enum.Material.Concrete] = "7341687607", 
+        [Enum.Material.DiamondPlate] = "6849247561", 
+        [Enum.Material.Fabric] = "118776397", 
+        [Enum.Material.Granite] = "4722586771",
+        [Enum.Material.Grass] = "4722588177", 
+        [Enum.Material.Ice] = "3823766459", 
+        [Enum.Material.Marble] = "62967586", 
+        [Enum.Material.Metal] = "62967586", 
+        [Enum.Material.Sand] = "152572215"
     }
+
+    -- Identificador ultrarrápido de peças pertencentes a personagens (Evita travessias recursivas na árvore)
+    local function isPlayerPart(part)
+        local parent = part.Parent
+        if not parent then return false end
+        if parent:IsA("Model") and Players:GetPlayerFromCharacter(parent) then
+            return true
+        end
+        local grand = parent.Parent
+        if grand and grand:IsA("Model") and Players:GetPlayerFromCharacter(grand) then
+            return true
+        end
+        return false
+    end
 
     -- Função mestre para atualizar o visual de uma parte baseado nos estados ativos
     local function refreshPartVisual(part)
-        if not part or not part.Parent or not part:IsA("BasePart") or part:IsA("Terrain") then return end
+        if not part or not part.Parent then return end
 
         -- 1. Cria o backup de fábrica caso não exista
         local bkp = originalMapStates[part]
@@ -135,20 +161,17 @@ return function(env)
 
         local mcApplied = false
 
-        -- Prioridade de texturas do mapa
+        -- Prioridade de texturas do mapa (Zero buscas hierárquicas em runtime)
         if snowEnabled then
             if part.Anchored and not IgnoreNames[part.Name] then
                 targetMaterial = Enum.Material.Snow
                 targetColor = Color3.fromRGB(255, 255, 255)
             end
         elseif wbEnabled then
-            local parentModel = part:FindFirstAncestorOfClass("Model")
-            if not (parentModel and parentModel:FindFirstChildOfClass("Humanoid")) then
-                targetMaterial = Enum.Material.Brick
-                targetColor = Color3.fromRGB(255, 255, 255)
-            end
+            targetMaterial = Enum.Material.Brick
+            targetColor = Color3.fromRGB(255, 255, 255)
         elseif mcEnabled then
-            local textureId = mcMaterials[bkp.Material.Name]
+            local textureId = mcMaterials[bkp.Material]
             if textureId then
                 targetMaterial = Enum.Material.SmoothPlastic
                 mcApplied = true
@@ -189,7 +212,7 @@ return function(env)
 
     -- Atualiza as propriedades de iluminação das lâmpadas do mapa
     local function refreshLightVisual(light)
-        if not light or not light.Parent or not light:IsA("Light") then return end
+        if not light or not light.Parent then return end
         local bkp = originalLightStates[light]
         if not bkp then
             bkp = { Shadows = light.Shadows }
@@ -211,21 +234,29 @@ return function(env)
         local desc = Workspace:GetDescendants()
         for i = 1, #desc do
             local v = desc[i]
-            if v:IsA("BasePart") then
-                table.insert(cachedParts, v)
-            elseif v:IsA("Light") then
+            local class = v.ClassName
+            
+            -- Filtro de alta velocidade por classe
+            if class == "Part" or class == "MeshPart" or class == "WedgePart" or class == "CornerWedgePart" then
+                if not isPlayerPart(v) then -- Ignora partes de personagens previamente
+                    table.insert(cachedParts, v)
+                end
+            elseif class == "PointLight" or class == "SpotLight" or class == "SurfaceLight" then
                 table.insert(cachedLights, v)
             end
-            if i % 300 == 0 then task.wait() end -- Escaneia devagar para não flutuar o ping/fps
+            if i % 350 == 0 then task.wait() end -- Escaneia devagar para não flutuar o ping/fps
         end
 
-        -- Captura novos elementos adicionados dinamicamente no mapa
+        -- Captura novos elementos de forma extremamente barata (Comparações de Strings)
         Workspace.DescendantAdded:Connect(function(child)
             task.defer(function()
-                if child:IsA("BasePart") then
-                    table.insert(cachedParts, child)
-                    refreshPartVisual(child)
-                elseif child:IsA("Light") then
+                local class = child.ClassName
+                if class == "Part" or class == "MeshPart" or class == "WedgePart" or class == "CornerWedgePart" then
+                    if not isPlayerPart(child) then
+                        table.insert(cachedParts, child)
+                        refreshPartVisual(child)
+                    end
+                elseif class == "PointLight" or class == "SpotLight" or class == "SurfaceLight" then
                     table.insert(cachedLights, child)
                     refreshLightVisual(child)
                 end
@@ -781,7 +812,7 @@ return function(env)
         mDStr.Color = Color3.fromRGB(40,40,40)
         
         mDefaultBtn.MouseEnter:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Theme.Accent}):Play() TweenService:Create(mDefaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.Accent}):Play() end)
-        mDefaultBtn.MouseLeave:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() TweenService:Create(mDefaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.TextDark}):Play() end)
+        mDefaultBtn.MouseLeave:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() TweenService:Create(defaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.TextDark}):Play() end)
         mDefaultBtn.MouseButton1Click:Connect(function() UserConfigs["TexturesPage_MobileJump"] = "Default" EnableMobileButtonJump("Default") end)
 
         local mJumpIDs = {
