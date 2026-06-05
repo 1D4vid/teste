@@ -27,24 +27,24 @@ return function(env)
         return nil
     end
 
-    -- Processador assíncrono em lotes super leve para evitar travamento de frames
+    -- Processador de altíssima performance baseado em Orçamento de Tempo (Frame Budget de 1.5ms)
     local function batchProcess(items, processFunc, onComplete)
         local total = #items
-        local chunk = 300 -- Processa 300 itens por frame (extremamente leve sem recursividade)
         local index = 1
         
         local function run()
-            local count = 0
+            local startTime = os.clock()
             while index <= total do
                 local item = items[index]
                 if item then
                     processFunc(item)
                 end
                 index = index + 1
-                count = count + 1
-                if count >= chunk then
-                    task.wait() -- Cede o frame para o jogo respirar
-                    count = 0
+                
+                -- Se a execução deste frame passar de 1.5ms, pausa para o próximo frame
+                if os.clock() - startTime >= 0.0015 then
+                    task.wait()
+                    startTime = os.clock() -- Reseta o cronômetro para o novo frame
                 end
             end
             if onComplete then onComplete() end
@@ -94,6 +94,7 @@ return function(env)
     
     local originalMapStates = setmetatable({}, {__mode = "k"})
     local originalLightStates = setmetatable({}, {__mode = "k"})
+    local mcTexturesCache = setmetatable({}, {__mode = "k"}) -- Cache local das texturas 3D do Minecraft
 
     local wbEnabled = false
     local snowEnabled = false
@@ -175,30 +176,49 @@ return function(env)
             if textureId then
                 targetMaterial = Enum.Material.SmoothPlastic
                 mcApplied = true
-                for _, face in ipairs(mcFaces) do
-                    local texName = "McTexture_" .. face
-                    local tex = part:FindFirstChild(texName)
-                    if not tex then
-                        tex = Instance.new("Texture")
-                        tex.Name = texName
+                
+                -- Busca as texturas diretamente pelo cache (Evita usar FindFirstChild)
+                local texGroup = mcTexturesCache[part]
+                if not texGroup then
+                    texGroup = {}
+                    for i = 1, 6 do
+                        local face = mcFaces[i]
+                        local tex = Instance.new("Texture")
+                        tex.Name = "McTexture_" .. face
                         tex.ZIndex = 2147483647
                         tex.Face = Enum.NormalId[face]
                         tex.StudsPerTileU = 4
                         tex.StudsPerTileV = 4
                         tex.Parent = part
+                        texGroup[i] = tex
                     end
-                    tex.Texture = "rbxassetid://" .. textureId
-                    tex.Color3 = bkp.Color
-                    tex.Transparency = part.Transparency
+                    mcTexturesCache[part] = texGroup
+                end
+                
+                -- Atualiza propriedades sem recriar objetos
+                local fullTexId = "rbxassetid://" .. textureId
+                local partColor = bkp.Color
+                local partTrans = part.Transparency
+                for i = 1, 6 do
+                    local tex = texGroup[i]
+                    if tex and tex.Parent then
+                        if tex.Texture ~= fullTexId then tex.Texture = fullTexId end
+                        if tex.Color3 ~= partColor then tex.Color3 = partColor end
+                        if tex.Transparency ~= partTrans then tex.Transparency = partTrans end
+                    end
                 end
             end
         end
 
-        -- Remove texturas do Minecraft se o toggle for desligado
+        -- Destrói as texturas do Minecraft e limpa o cache se o toggle for desligado
         if not mcApplied then
-            for _, face in ipairs(mcFaces) do
-                local tex = part:FindFirstChild("McTexture_" .. face)
-                if tex then pcall(function() tex:Destroy() end) end
+            local texGroup = mcTexturesCache[part]
+            if texGroup then
+                for i = 1, 6 do
+                    local tex = texGroup[i]
+                    if tex then pcall(function() tex:Destroy() end) end
+                end
+                mcTexturesCache[part] = nil
             end
         end
 
@@ -232,6 +252,7 @@ return function(env)
     -- Escaneamento progressivo em segundo plano ao iniciar o script (Zero-Lag de inicialização)
     task.spawn(function()
         local desc = Workspace:GetDescendants()
+        local startTime = os.clock()
         for i = 1, #desc do
             local v = desc[i]
             local class = v.ClassName
@@ -244,7 +265,12 @@ return function(env)
             elseif class == "PointLight" or class == "SpotLight" or class == "SurfaceLight" then
                 table.insert(cachedLights, v)
             end
-            if i % 350 == 0 then task.wait() end -- Escaneia devagar para não flutuar o ping/fps
+            
+            -- Cede o frame se o escaneamento inicial passar de 1.5ms
+            if os.clock() - startTime >= 0.0015 then
+                task.wait()
+                startTime = os.clock()
+            end
         end
 
         -- Captura novos elementos de forma extremamente barata (Comparações de Strings)
@@ -270,7 +296,7 @@ return function(env)
     -- ==========================================
     Library:CreateSection(Page, "Map Textures", "Left")
 
-    Library:CreateToggle(Page, "White Bricks111", false, function(state)
+    Library:CreateToggle(Page, "White Bricks", false, function(state)
         wbEnabled = state
         batchProcess(cachedParts, refreshPartVisual)
     end)
