@@ -60,6 +60,9 @@ return function(env)
         return wrapper
     end
 
+    -- ==========================================
+    -- MAP TEXTURES (Coluna Esquerda)
+    -- ==========================================
     Library:CreateSection(Page, "Map Textures", "Left")
 
     -- [ WHITE BRICKS ]
@@ -171,20 +174,6 @@ return function(env)
                 end
             end)
         end
-    end)
-
-    Library:CreateToggle(Page, "Remove Textures", false, function(state) 
-        if not getgenv().NexOptimization then
-            getgenv().NexOptimization = loadstring(game:HttpGet("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/fps%20booster%20e%20remove%20textures.lua"))()
-        end
-        getgenv().NexOptimization.ToggleTextures(state)
-    end)
-    
-    Library:CreateToggle(Page, "FpsBooster", false, function(state) 
-        if not getgenv().NexOptimization then
-            getgenv().NexOptimization = loadstring(game:HttpGet("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/fps%20booster%20e%20remove%20textures.lua"))()
-        end
-        getgenv().NexOptimization.ToggleFPSBooster(state)
     end)
 
     -- [ ULTRA HD GRAPHICS ]
@@ -357,7 +346,30 @@ return function(env)
         end
     end)
 
-    -- [ DOUBLE JUMP EFFECTS ]
+
+    -- ==========================================
+    -- FPS SETTINGS (Coluna Direita - Topo)
+    -- ==========================================
+    Library:CreateSection(Page, "FPS Settings", "Right")
+
+    Library:CreateToggle(Page, "Remove Textures", false, function(state) 
+        if not getgenv().NexOptimization then
+            getgenv().NexOptimization = loadstring(game:HttpGet("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/fps%20booster%20e%20remove%20textures.lua"))()
+        end
+        getgenv().NexOptimization.ToggleTextures(state)
+    end)
+    
+    Library:CreateToggle(Page, "FpsBooster", false, function(state) 
+        if not getgenv().NexOptimization then
+            getgenv().NexOptimization = loadstring(game:HttpGet("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/fps%20booster%20e%20remove%20textures.lua"))()
+        end
+        getgenv().NexOptimization.ToggleFPSBooster(state)
+    end)
+
+
+    -- ==========================================
+    -- DOUBLE JUMP EFFECTS (Coluna Direita)
+    -- ==========================================
     local currentDoubleJumpConns = {}
     local originalTextures = setmetatable({}, {__mode = "k"})
     local OriginalSparkleColors = setmetatable({}, {__mode = "k"})
@@ -445,7 +457,6 @@ return function(env)
         end)
     end
 
-    -- DIVISÃO DO DOUBLE JUMP EM PARTE 1 E 2
     Library:CreateSection(Page, "Double Jump Effects (P1)", "Right")
     local targetParentDJ1 = GetParentTarget(Page)
     
@@ -703,7 +714,9 @@ return function(env)
         end
     end
 
-    -- DIVISÃO DO CROSSHAIR EM PARTE 1 E 2
+    -- ==========================================
+    -- CROSSHAIRS
+    -- ==========================================
     Library:CreateSection(Page, "Crosshairs (P1)", "Left")
     Library:CreateSlider(Page, "Cursor Size", 10, 100, 24, UpdateCursorSizes)
     local targetParentCur1 = GetParentTarget(Page)
