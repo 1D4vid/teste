@@ -309,7 +309,7 @@ return function(env)
         batchProcess(cachedParts, refreshPartVisual)
     end)
 
-    -- [ MOVIDO DO FPS BOOSTER ]
+    -- [ MOVIDO DO FPS BOOSTER PARA O MAP TEXTURES ]
     Library:CreateToggle(Page, "Remove Textures", false, function(state) 
         if not getgenv().NexOptimization then
             getgenv().NexOptimization = loadstring(game:HttpGet("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/fps%20booster%20e%20remove%20textures.lua"))()
@@ -335,111 +335,140 @@ return function(env)
         getgenv().NexOptimization.ToggleFPSBooster(state)
     end)
 
-    -- [ NOVO TOGGLE: GRAY CHARACTERS COM BACKUP SEGURO ]
-    local grayAtmosphereEnabled = false
-    local grayLightingConn = nil
-    local originalLightingSettings = {}
-    local destroyedSkiesBackup = {}
+    -- [ TOGGLE ADAPTADO DE ALTA PERFORMANCE: GRAY CHARACTERS ]
+    local grayOutfitsEnabled = false
+    local grayCharacterConns = {}
+    local characterBackups = setmetatable({}, {__mode = "k"})
+
+    local function applyGreyCharacter(char)
+        if not char or not char.Parent then return end
+        if characterBackups[char] then return end -- Já está cinza
+        
+        local backup = {
+            Parts = {},
+            Accessories = {},
+            Clothes = {}
+        }
+        
+        for _, i in ipairs(char:GetChildren()) do
+            if (i:IsA("BasePart") or i:IsA("MeshPart")) and i.Name ~= "HumanoidRootPart" then
+                backup.Parts[i] = {
+                    Color = i.Color,
+                    Material = i.Material
+                }
+                i.Color = Color3.fromRGB(150, 150, 150)
+                i.Material = Enum.Material.SmoothPlastic
+            elseif i:IsA("Accessory") then
+                local handle = i:FindFirstChild("Handle")
+                if handle and handle:IsA("BasePart") then
+                    local handleBackup = {
+                        Color = handle.Color,
+                        Material = handle.Material,
+                        TextureID = nil,
+                        MeshInstance = nil
+                    }
+                    handle.Color = Color3.fromRGB(150, 150, 150)
+                    handle.Material = Enum.Material.SmoothPlastic
+                    
+                    if handle:IsA("MeshPart") then
+                        handleBackup.TextureID = handle.TextureID
+                        handle.TextureID = ""
+                    else
+                        local mesh = handle:FindFirstChildWhichIsA("SpecialMesh") or handle:FindFirstChildWhichIsA("Mesh")
+                        if mesh then
+                            handleBackup.TextureID = mesh.TextureId
+                            handleBackup.MeshInstance = mesh
+                            mesh.TextureId = ""
+                        end
+                    end
+                    backup.Accessories[handle] = handleBackup
+                end
+            elseif i:IsA("Pants") or i:IsA("Shirt") or i:IsA("ShirtGraphic") or i.Name == "Shirt Graphic" then
+                backup.Clothes[i] = i.Parent
+                i.Parent = nil -- Oculta a roupa sem destruí-la de forma irreversível
+            end
+        end
+        
+        characterBackups[char] = backup
+    end
+
+    local function restoreCharacter(char)
+        local backup = characterBackups[char]
+        if not backup then return end
+        
+        -- Restaura partes do corpo
+        for part, data in pairs(backup.Parts) do
+            if part and part.Parent then
+                part.Color = data.Color
+                part.Material = data.Material
+            end
+        end
+        
+        -- Restaura acessórios
+        for handle, data in pairs(backup.Accessories) do
+            if handle and handle.Parent then
+                handle.Color = data.Color
+                handle.Material = data.Material
+                if handle:IsA("MeshPart") then
+                    handle.TextureID = data.TextureID
+                elseif data.MeshInstance then
+                    data.MeshInstance.TextureId = data.TextureID
+                end
+            end
+        end
+        
+        -- Restaura roupas
+        for clothing, originalParent in pairs(backup.Clothes) do
+            if clothing then
+                clothing.Parent = char
+            end
+        end
+        
+        characterBackups[char] = nil
+    end
 
     Library:CreateToggle(Page, "Gray Characters", false, function(state)
-        grayAtmosphereEnabled = state
+        grayOutfitsEnabled = state
         if state then
-            -- Backup das configurações originais antes de aplicar
-            originalLightingSettings.FogColor = Lighting.FogColor
-            originalLightingSettings.FogStart = Lighting.FogStart
-            originalLightingSettings.FogEnd = Lighting.FogEnd
-            originalLightingSettings.Ambient = Lighting.Ambient
-            originalLightingSettings.OutdoorAmbient = Lighting.OutdoorAmbient
-            originalLightingSettings.Brightness = Lighting.Brightness
-            originalLightingSettings.TimeOfDay = Lighting.TimeOfDay
-            
-            local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
-            if atmosphere then
-                originalLightingSettings.AtmColor = atmosphere.Color
-                originalLightingSettings.AtmDensity = atmosphere.Density
-                originalLightingSettings.AtmOffset = atmosphere.Offset
-            else
-                originalLightingSettings.AtmColor = nil
-            end
-
-            -- Destrói Skies salvando clones para reversão limpa
-            table.clear(destroyedSkiesBackup)
-            for _, v in ipairs(Lighting:GetDescendants()) do
-                if v:IsA("Sky") then
-                    table.insert(destroyedSkiesBackup, v:Clone())
-                    v:Destroy()
+            -- Aplica o efeito nos players que já estão no jogo
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player.Character then
+                    task.spawn(applyGreyCharacter, player.Character)
                 end
-            end
-
-            -- Aplicando as definições cinzas solicitadas
-            local GRAY = Color3.fromRGB(128,128,128)
-            local FOG_END = 1000
-
-            local atmosphereInstance = Lighting:FindFirstChildOfClass("Atmosphere")
-            if not atmosphereInstance then
-                atmosphereInstance = Instance.new("Atmosphere")
-                atmosphereInstance.Name = "GrayAtmosphere"
-                atmosphereInstance.Parent = Lighting
+                local conn = player.CharacterAdded:Connect(function(char)
+                    char:WaitForChild("Humanoid", 5)
+                    task.wait(0.2) -- Aguarda as roupas carregarem
+                    if grayOutfitsEnabled then
+                        applyGreyCharacter(char)
+                    end
+                end)
+                table.insert(grayCharacterConns, conn)
             end
             
-            atmosphereInstance.Color = GRAY
-            atmosphereInstance.Density = 1
-            atmosphereInstance.Offset = 0
-
-            Lighting.FogColor = GRAY
-            Lighting.FogStart = 0
-            Lighting.FogEnd = FOG_END
-            Lighting.Ambient = GRAY
-            Lighting.OutdoorAmbient = GRAY
-            Lighting.Brightness = 2
-            Lighting.TimeOfDay = "12:00:00"
-
-            -- Monitora e destrói imediatamente novos Skies criados pelo jogo
-            if grayLightingConn then grayLightingConn:Disconnect() end
-            grayLightingConn = Lighting.DescendantAdded:Connect(function(desc)
-                if desc:IsA("Sky") then
-                    task.defer(function()
-                        if grayAtmosphereEnabled then
-                            desc:Destroy()
-                        end
-                    end)
-                end
+            -- Trata players futuros que entrarem no servidor
+            local conn2 = Players.PlayerAdded:Connect(function(player)
+                local conn = player.CharacterAdded:Connect(function(char)
+                    char:WaitForChild("Humanoid", 5)
+                    task.wait(0.2)
+                    if grayOutfitsEnabled then
+                        applyGreyCharacter(char)
+                    end
+                end)
+                table.insert(grayCharacterConns, conn)
             end)
+            table.insert(grayCharacterConns, conn2)
         else
-            -- Desconecta o monitoramento de novos Skies
-            if grayLightingConn then
-                grayLightingConn:Disconnect()
-                grayLightingConn = nil
+            -- Desconecta todos os ouvintes de spawns
+            for _, conn in ipairs(grayCharacterConns) do
+                conn:Disconnect()
             end
-
-            -- Reverte atmosfera para o estado original
-            local atmosphereInstance = Lighting:FindFirstChildOfClass("Atmosphere")
-            if atmosphereInstance then
-                if originalLightingSettings.AtmColor then
-                    atmosphereInstance.Color = originalLightingSettings.AtmColor
-                    atmosphereInstance.Density = originalLightingSettings.AtmDensity
-                    atmosphereInstance.Offset = originalLightingSettings.AtmOffset
-                else
-                    atmosphereInstance:Destroy()
-                end
+            table.clear(grayCharacterConns)
+            
+            -- Restaura as texturas originais e roupas de todos os personagens salvos
+            for char, _ in pairs(characterBackups) do
+                restoreCharacter(char)
             end
-
-            -- Reverte iluminação básica para o estado original
-            if originalLightingSettings.FogColor then
-                Lighting.FogColor = originalLightingSettings.FogColor
-                Lighting.FogStart = originalLightingSettings.FogStart
-                Lighting.FogEnd = originalLightingSettings.FogEnd
-                Lighting.Ambient = originalLightingSettings.Ambient
-                Lighting.OutdoorAmbient = originalLightingSettings.OutdoorAmbient
-                Lighting.Brightness = originalLightingSettings.Brightness
-                Lighting.TimeOfDay = originalLightingSettings.TimeOfDay
-            end
-
-            -- Restaura os Skies que foram guardados no backup
-            for _, sky in ipairs(destroyedSkiesBackup) do
-                sky.Parent = Lighting
-            end
-            table.clear(destroyedSkiesBackup)
+            table.clear(characterBackups)
         end
     end)
 
