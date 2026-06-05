@@ -8,6 +8,8 @@ return function(env)
     local SendNotification = env.SendNotification
     local TweenService = game:GetService("TweenService")
     local RunService = game:GetService("RunService")
+    local TeleportService = game:GetService("TeleportService")
+    local GuiService = game:GetService("GuiService")
 
     local MasterAutoFarmState = false
     local AntiAfkToggleObj
@@ -18,11 +20,19 @@ return function(env)
     local AutoSaveTeleportToggleObj
 
     -- ==========================================
+    -- VARIÁVEIS DE SISTEMAS ADICIONADOS
+    -- ==========================================
+    local rejoin_Conn = nil
+    local mod_PlayerAddedConn = nil
+    local mod_rejoinConn = nil
+    local mod_Active = false
+
+    -- ==========================================
     -- VARIÁVEIS DO AUTO WIN SURVIVOR (FLY)
     -- ==========================================
     local fly_Config = {
         FarmTweenSpeed = 22,        
-        WaitTweenFast = 0.1,        -- Otimizado para iniciar o movimento sem esperas artificiais longas
+        WaitTweenFast = 8,          
         TriggerPrioritization = 1,  
         CampHackOut = 15,           
         CampEscapeOut = 20,         
@@ -55,14 +65,10 @@ return function(env)
     local tp_lpos = nil
     local tp_safePlatform = nil
 
-    -- REFERÊNCIAS DO SISTEMA
-    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
-    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
-
     -- ==========================================
     -- ELEMENTOS DA INTERFACE (UI)
     -- ==========================================
-    Library:CreateSection(Page, "Main Farming (BETA)")
+    Library:CreateSection(Page, "Main Farming (BETA V1)")
 
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
         MasterAutoFarmState = state
@@ -196,12 +202,90 @@ return function(env)
         fly_Config.FarmTweenSpeed = val
     end)
 
+    -- [[ IMPLEMENTAÇÃO MODERATOR ALERT / KICK ]] --
+    local function mod_CheckPlayer(player)
+        if not mod_Active then return end
+        if player == LocalPlayer then return end
+
+        local GAME_GROUP_ID = 3195655 
+        local MINIMUM_MOD_RANK = 200  
+        local MOD_ACTION = "KICK"     
+
+        local isMod = false
+        if GAME_GROUP_ID > 0 then
+            pcall(function()
+                local rank = player:GetRankInGroup(GAME_GROUP_ID)
+                if rank >= MINIMUM_MOD_RANK then
+                    isMod = true
+                end
+            end)
+        end
+
+        if isMod then
+            if MOD_ACTION == "KICK" then
+                LocalPlayer:Kick("[Security] A moderator (" .. player.Name .. ") joined the server. You have been disconnected to avoid actions.")
+            elseif MOD_ACTION == "ALERT" then
+                warn("[SECURITY WARNING] Moderator detected in server: " .. player.Name)
+            end
+        end
+    end
+
     Library:CreateToggle(Page, "Moderator Alert / Kick", false, function(state)
-        -- Placeholder
+        mod_Active = state
+        if state then
+            for _, player in ipairs(Players:GetPlayers()) do
+                task.spawn(mod_CheckPlayer, player)
+            end
+            
+            if not mod_PlayerAddedConn then
+                mod_PlayerAddedConn = Players.PlayerAdded:Connect(function(player)
+                    mod_CheckPlayer(player)
+                end)
+            end
+
+            if not mod_rejoinConn then
+                mod_rejoinConn = GuiService.ErrorMessageChanged:Connect(function(errorMessage)
+                    if errorMessage and errorMessage ~= "" then
+                        print("[ModeratorRejoin] Disconnection detected: " .. errorMessage .. ". Reconnecting...")
+                        task.wait(3)
+                        pcall(function()
+                            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+                        end)
+                    end
+                end)
+            end
+        else
+            if mod_PlayerAddedConn then
+                mod_PlayerAddedConn:Disconnect()
+                mod_PlayerAddedConn = nil
+            end
+            if mod_rejoinConn then
+                mod_rejoinConn:Disconnect()
+                mod_rejoinConn = nil
+            end
+        end
     end)
 
+    -- [[ IMPLEMENTAÇÃO AUTO REJOIN ]] --
     Library:CreateToggle(Page, "Auto Rejoin (Disconnection)", false, function(state)
-        -- Placeholder
+        if state then
+            if not rejoin_Conn then
+                rejoin_Conn = GuiService.ErrorMessageChanged:Connect(function(errorMessage)
+                    if errorMessage and errorMessage ~= "" then
+                        print("[AutoRejoin] Error detected: " .. errorMessage .. ". Attempting to reconnect...")
+                        task.wait(3)
+                        pcall(function()
+                            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+                        end)
+                    end
+                end)
+            end
+        else
+            if rejoin_Conn then
+                rejoin_Conn:Disconnect()
+                rejoin_Conn = nil
+            end
+        end
     end)
 
     AntiAfkToggleObj = Library:CreateToggle(Page, "Anti AFK", false, function(state)
@@ -215,6 +299,10 @@ return function(env)
         end
         _G.AntiAfkEnabled = state
     end)
+
+    -- REFERÊNCIAS DO SISTEMA
+    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
+    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
 
     -- [[ ANTI AFK ]] --
     task.spawn(function()
@@ -347,8 +435,8 @@ return function(env)
                         
                         for _, alvo in pairs(Players:GetPlayers()) do
                             if alvo ~= LocalPlayer and alvo.Character then
-                               _G.Stats = alvo:FindFirstChild("TempPlayerStatsModule")
-                                if _G.Stats and _G.Stats:FindFirstChild("Captured") and not _G.Stats.Captured.Value then
+                                local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
+                                if Stats and Stats:FindFirstChild("Captured") and not Stats.Captured.Value then
                                     local tempRaiz = ObterRaiz(alvo.Character)
                                     if tempRaiz then
                                         AlvoAtual = alvo
@@ -565,8 +653,8 @@ return function(env)
 
         local function IniciarRotinaDeFarm()
             task.spawn(function()
-                repeat task.wait(0.05) until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                task.wait(0.2) 
+                repeat task.wait(0.1) until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                task.wait(1) 
                 
                 if ChecarSeSouBeast() then
                     getgenv().SouBeastNessaRodada = true
@@ -799,7 +887,18 @@ return function(env)
     end
 
     local function fly_IsMatchActive()
-        return IsGameActive.Value
+        local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
+        if not currentMap or not currentMap.Value then
+            return false
+        end
+        local status = ReplicatedStorage:FindFirstChild("GameStatus")
+        if status then
+            local statusText = string.lower(status.Value)
+            if string.find(statusText, "intermission") or string.find(statusText, "game over") or string.find(statusText, "lobby") then
+                return false
+            end
+        end
+        return true
     end
 
     local function fly_GetBeast()
@@ -858,30 +957,18 @@ return function(env)
         local forceEscape = false 
 
         local function PlayerReady()
-            local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
-            if stats then
-                local ragdoll = stats:FindFirstChild("Ragdoll")
+            if fly_TempPlayerStatsModule then
+                local ragdoll = fly_TempPlayerStatsModule:FindFirstChild("Ragdoll")
                 if ragdoll and ragdoll.Value then
                     DoNotTeleport = true
                     return false
                 end
-                local health = stats:FindFirstChild("Health")
-                if (health and health.Value <= 0) then
-                    return false
-                end
-                local isBeast = stats:FindFirstChild("IsBeast")
-                if isBeast and isBeast.Value == true then
+                local health = fly_TempPlayerStatsModule:FindFirstChild("Health")
+                if (health and health.Value <= 0) or fly_TempPlayerStatsModule.IsBeast.Value then
                     return false
                 end
             end
             return fly_IsThereChar()
-        end
-
-        -- Polling extremamente otimizado (esperas de 50ms para spawn instantâneo)
-        local readyAttempts = 0
-        while not PlayerReady() and readyAttempts < 40 do
-            task.wait(0.05)
-            readyAttempts = readyAttempts + 1
         end
 
         local function TaskGood()
@@ -907,8 +994,8 @@ return function(env)
 
         local MapObjects = GetMapObjects()
         local loadAttempts = 0
-        while #MapObjects.Computers == 0 and loadAttempts < 20 do
-            task.wait(0.1) -- Resposta rápida de carregamento de objetos
+        while #MapObjects.Computers == 0 and loadAttempts < 10 do
+            task.wait(0.5)
             MapObjects = GetMapObjects()
             loadAttempts = loadAttempts + 1
         end
@@ -978,7 +1065,7 @@ return function(env)
                         local travelTime = Distance / fly_Config.FarmTweenSpeed
 
                         if travelTime < fly_Config.WaitTweenFast then
-                            task.wait(math.max(0.05, fly_Config.WaitTweenFast - travelTime))
+                            task.wait(math.max(0.1, fly_Config.WaitTweenFast - travelTime))
                         end
 
                         repeat
@@ -1008,9 +1095,9 @@ return function(env)
                                 end
                                 
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Trigger", true, v.Event)
-                                task.wait(0.05)
+                                task.wait(0.1)
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", true)
-                                task.wait(0.15)
+                                task.wait(0.4)
                             elseif TaskGood() and not fly_bnhide then
                                 if CurrentComputer ~= Computer then
                                     fly_Notify("Hacking", "Process started", 3)
@@ -1063,11 +1150,11 @@ return function(env)
             local CancelComputers = false
             local LeastTriggers = 4
             local Closest = math.huge
-            local ComputersLeft = #MapObjects.Computers > 0 and #MapObjects.Computers or 5
+            local ComputersLeft = 0
 
             coroutine.wrap(function()
                 while TaskGood() do
-                    task.wait(0.1)
+                    task.wait(0.2)
                     
                     if CurrentComputer then
                         ChosenComputer = CurrentComputer
@@ -1135,7 +1222,7 @@ return function(env)
             end)()
 
             repeat
-                task.wait(0.2)
+                task.wait(0.5)
                 local isFinished = (ComputersLeft < 1) or forceEscape
 
                 if isFinished then
@@ -1164,7 +1251,7 @@ return function(env)
                     if not TaskGood() then continue end
 
                     repeat
-                        task.wait(0.2)
+                        task.wait(0.5)
                     until not TaskGood() or fly_bnhide == false or fly_bnhideelapse >= fly_Config.CampEscapeOut
 
                     if v:FindFirstChild("ExitDoorTrigger") then
@@ -1175,7 +1262,7 @@ return function(env)
                                 LocalPlayer.Character:PivotTo(v.ExitDoorTrigger.CFrame * CFrame.new(0, v.ExitDoorTrigger.Size.Y / 2, 0))
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Trigger", true, v.ExitDoorTrigger.Event)
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", true)
-                                task.wait(0.2)
+                                task.wait(0.5)
                             end
                         until not TaskGood() or not v:FindFirstChild("ExitDoorTrigger") or fly_bnhideelapse >= fly_Config.CampEscapeOut
 
@@ -1190,7 +1277,7 @@ return function(env)
                     end
 
                     if TaskGood() then
-                        task.wait(0.2)
+                        task.wait(0.5)
                         if v:FindFirstChild("ExitArea") then
                             fly_Notify("Escape", "Escaping...", 3)
                             fly_GoTween(v.ExitArea)
@@ -1205,12 +1292,9 @@ return function(env)
                 fly_onsurvivorfarm = true
                 fly_Notify("Auto Farm", "Auto Farm started.", 3)
                 Run()
-                
                 if not DoNotTeleport then
-                    task.wait(0.5)
-                    if not fly_IsMatchActive() then
-                        fly_TPPlayerSpawn()
-                    end
+                    task.wait(1)
+                    fly_TPPlayerSpawn()
                 end
                 fly_onsurvivorfarm = false
             end
@@ -1221,20 +1305,13 @@ return function(env)
 
     -- MONITORAMENTO DOS MAPAS (Voo)
     ReplicatedStorage.CurrentMap.Changed:Connect(function(newMap)
-        if newMap and getgenv().AutoWinFlyActive and MasterAutoFarmState then
-            -- Espera até que o TempPlayerStatsModule apareça para verificar se você é a Beast de forma limpa
-            repeat task.wait(0.05) until LocalPlayer:FindFirstChild("TempPlayerStatsModule") or not IsGameActive.Value
-            if not IsGameActive.Value then return end
-            
+        if newMap and getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
             if fly_AmIBeast() then 
                 fly_SouBeastNessaRodada = true
                 return 
             end
-            
-            fly_SouBeastNessaRodada = false
-            
             while fly_IsInLobby() and fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState do
-                task.wait(0.1)
+                task.wait(0.2)
             end
             if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
                 if not fly_AmIBeast() then
@@ -1282,11 +1359,6 @@ return function(env)
                 fly_Comp = 0 
                 fly_SouBeastNessaRodada = false
                 
-                for i, v in pairs(fly_farmtasks) do
-                    pcall(function() coroutine.close(v) end)
-                    fly_farmtasks[i] = nil
-                end
-
                 if getgenv().AutoWinFlyActive and MasterAutoFarmState then
                     if not fly_notifiedLobby then
                         fly_Notify("Lobby", "Waiting for game start...", 5)
@@ -1339,7 +1411,7 @@ return function(env)
                                     fly_safePlatform = Instance.new("Part")
                                     fly_safePlatform.Size = Vector3.new(15, 1, 15)
                                     fly_safePlatform.Anchored = true
-                                    fly_safePlatform.CanCollide = true
+                                    safePlatform.CanCollide = true
                                     fly_safePlatform.Transparency = 1
                                     fly_safePlatform.Name = "NexVoidSafePlate"
                                     fly_safePlatform.Parent = workspace
@@ -1406,11 +1478,11 @@ return function(env)
                 end
                 if GotComputers ~= fly_Comp then
                     if GotComputers > 0 then
-                        -- Removido o delay estático de 3 segundos
+                        task.wait(3)
                         if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
                             task.spawn(function()
                                 while fly_IsInLobby() and fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState do
-                                    task.wait(0.1)
+                                    task.wait(0.2)
                                 end
                                 if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
                                     if not fly_AmIBeast() then
