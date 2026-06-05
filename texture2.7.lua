@@ -270,7 +270,7 @@ return function(env)
     -- ==========================================
     Library:CreateSection(Page, "Map Textures", "Left")
 
-    Library:CreateToggle(Page, "White Bricks", false, function(state)
+    Library:CreateToggle(Page, "White Bricks111", false, function(state)
         wbEnabled = state
         batchProcess(cachedParts, refreshPartVisual)
     end)
