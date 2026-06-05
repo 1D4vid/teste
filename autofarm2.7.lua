@@ -78,7 +78,6 @@ return function(env)
     end
 
     local function fly_ResetAllStates(keepBeastState)
-        -- 1. Encerra com segurança todas as threads de farm pendentes
         for i, v in pairs(fly_farmtasks) do
             pcall(function()
                 if coroutine.status(v) ~= "dead" then
@@ -88,7 +87,6 @@ return function(env)
             fly_farmtasks[i] = nil
         end
 
-        -- 2. Limpa variáveis físicas de movimentação
         fly_onsurvivorfarm = false
         fly_isMoving = false
         fly_bnhide = false
@@ -100,15 +98,12 @@ return function(env)
         fly_Comp = 0
         fly_notifiedLobby = false
         
-        -- Correção do bug de spam: Só redefine se não for solicitado manter o estado
         if not keepBeastState then
             fly_SouBeastNessaRodada = false
         end
 
-        -- 3. Limpa estruturas físicas inseridas
         fly_RemoveSafePlatform()
 
-        -- 4. Garante que o jogador está livre de ancoragem e forças físicas residuais
         pcall(function()
             local char = LocalPlayer.Character
             if char then
@@ -129,7 +124,7 @@ return function(env)
     -- ==========================================
     -- ELEMENTOS DA INTERFACE (UI)
     -- ==========================================
-    Library:CreateSection(Page, "Main Farming (BETAaaaaaaa)")
+    Library:CreateSection(Page, "Main Farming (BETA)")
 
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
         MasterAutoFarmState = state
@@ -1000,6 +995,120 @@ return function(env)
         return nil
     end
 
+    -- [[ MOVEMENT SYSTEM WITH DYNAMIC COLLISION BYPASS ]] --
+    local function fly_LerpToPart(Part, Threshold)
+        local LerpCompleted = false
+        local Connection
+        local EnabledPlrCollisions = {}
+        local ObjectsOnCollided = {}
+
+        if not fly_IsThereChar() then return end
+
+        local char = LocalPlayer.Character
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        -- Desativa colisões do próprio corpo do jogador
+        for _, v in ipairs(char:GetChildren()) do
+            if v:IsA("BasePart") and v.CanCollide then
+                table.insert(EnabledPlrCollisions, v)
+                v.CanCollide = false
+            end
+        end
+
+        -- Plataformas temporárias de segurança e bypass
+        local NoFallPlatform = Instance.new("Part")
+        NoFallPlatform.Name = "SurvivorFlyPlatformNoFall"
+        NoFallPlatform.Size = Vector3.new(20, 0.5, 20)
+        NoFallPlatform.Anchored = true
+        NoFallPlatform.Transparency = 1
+        NoFallPlatform.Parent = workspace
+
+        local CollisionOffPlatform = Instance.new("Part")
+        CollisionOffPlatform.Name = "SurvivorFlyPlatformNoCollision"
+        CollisionOffPlatform.Size = Vector3.new(20, 30, 20)
+        CollisionOffPlatform.Anchored = true
+        CollisionOffPlatform.Transparency = 1
+        CollisionOffPlatform.CanCollide = false
+        CollisionOffPlatform.Parent = workspace
+
+        Connection = RunService.Heartbeat:Connect(function(dt)
+            if not fly_IsThereChar() or not getgenv().AutoWinFlyActive or not MasterAutoFarmState then
+                LerpCompleted = true
+                Connection:Disconnect()
+                return
+            end
+
+            -- Garante que o corpo do jogador permaneça sem colisão
+            for _, v in ipairs(char:GetChildren()) do
+                if v:IsA("BasePart") then
+                    v.CanCollide = false
+                end
+            end
+
+            if not Part or not Part:IsDescendantOf(workspace) then
+                LerpCompleted = true
+                Connection:Disconnect()
+                return
+            end
+
+            local currentPos = hrp.Position
+            local targetPos = Part.Position
+            local Distance = (currentPos - targetPos).Magnitude
+
+            if Distance <= Threshold then
+                LerpCompleted = true
+                Connection:Disconnect()
+                return
+            end
+
+            if not LerpCompleted then
+                local Direction = targetPos - currentPos
+                local Alpha = Direction.Unit * math.min(fly_Config.FarmTweenSpeed * dt, Distance)
+
+                hrp.CFrame = hrp.CFrame + Alpha
+
+                NoFallPlatform.Position = hrp.Position - Vector3.new(0, 3, 0)
+                CollisionOffPlatform.Position = hrp.Position - Vector3.new(0, 10, 0)
+
+                -- Desativa colisão física temporária do mapa ao redor do trajeto
+                local PartsInRange = workspace:GetPartBoundsInBox(CollisionOffPlatform.CFrame, CollisionOffPlatform.Size)
+                for _, v in ipairs(PartsInRange) do
+                    if v.CanCollide and not v:IsDescendantOf(char) and v ~= NoFallPlatform then
+                        v.CanCollide = false
+                        if not table.find(ObjectsOnCollided, v) then
+                            table.insert(ObjectsOnCollided, v)
+                        end
+                    end
+                end
+
+                -- Restaura a colisão das partes fora do raio de ação
+                for i = #ObjectsOnCollided, 1, -1 do
+                    local v = ObjectsOnCollided[i]
+                    if not table.find(PartsInRange, v) then
+                        pcall(function() v.CanCollide = true end)
+                        table.remove(ObjectsOnCollided, i)
+                    end
+                end
+            end
+        end)
+
+        -- Aguarda o término da interpolação física
+        repeat
+            task.wait()
+        until LerpCompleted
+
+        -- Limpa e restaura colisões nativas
+        for _, v in ipairs(EnabledPlrCollisions) do
+            pcall(function() v.CanCollide = true end)
+        end
+        pcall(function() NoFallPlatform:Destroy() end)
+        pcall(function() CollisionOffPlatform:Destroy() end)
+        for _, v in ipairs(ObjectsOnCollided) do
+            pcall(function() v.CanCollide = true end)
+        end
+    end
+
     -- [[ EXECUÇÃO DO FARM DE VOO ]] --
     DoSurvivorFarmFly = function()
         local DoNotTeleport = false
@@ -1049,43 +1158,8 @@ return function(env)
             loadAttempts = loadAttempts + 1
         end
 
-        local fly_GoTween
-        fly_GoTween = function(Part)
-            if not fly_IsThereChar() then return end
-            fly_isMoving = true 
-            local Root = LocalPlayer.Character.HumanoidRootPart
-            
-            Root.Anchored = true
-            
-            while fly_IsThereChar() and TaskGood() do
-                local currentPos = Root.Position
-                local targetPos = Part.Position
-                local distanceVector = targetPos - currentPos
-                local distance = distanceVector.Magnitude
-                
-                if distance < 1.5 then
-                    break
-                end
-                
-                local dt = RunService.Heartbeat:Wait()
-                local speed = fly_Config.FarmTweenSpeed
-                local step = speed * dt
-                
-                if step > distance then
-                    step = distance
-                end
-                
-                local direction = distanceVector.Unit
-                local nextPosition = currentPos + (direction * step)
-                
-                Root.CFrame = CFrame.new(nextPosition) * Root.CFrame.Rotation
-            end
-
-            if fly_IsThereChar() then
-                Root.Anchored = false
-                Root.CFrame = CFrame.new(Part.Position) * Root.CFrame.Rotation
-            end
-            fly_isMoving = false
+        local fly_GoTween = function(Part)
+            fly_LerpToPart(Part, 1.5)
         end
 
         local OnComputer = false
@@ -1129,6 +1203,8 @@ return function(env)
                         if v.ActionSign.Value ~= 20 or (ChosenComputer ~= Computer and ChosenComputer ~= nil) then continue end
 
                         local Tries = 0
+                        local Aligned = false
+
                         repeat
                             task.wait()
                             
@@ -1139,10 +1215,16 @@ return function(env)
 
                             if TaskGood() and not fly_bnhide and fly_TempPlayerStatsModule.CurrentAnimation.Value ~= "Typing" then
                                 Tries = Tries + 1
-                                if fly_IsThereChar() then
+                                -- ALINHAMENTO ÚNICO: Evita loop repetitivo de PivotTo que quebra a colisão física
+                                if fly_IsThereChar() and not Aligned then
                                     LocalPlayer.Character:PivotTo(v.CFrame)
+                                    Aligned = true
                                 end
                                 
+                                pcall(function()
+                                    LocalPlayer.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                                end)
+
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Trigger", true, v.Event)
                                 task.wait(0.1)
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", true)
@@ -1153,6 +1235,7 @@ return function(env)
                                 end
                                 CurrentComputer = Computer
                                 Tries = 0
+                                Aligned = false 
                                 
                                 if fly_Config.AntiPCError then
                                     ReplicatedStorage.RemoteEvent:FireServer("SetPlayerMinigameResult", true)
@@ -1399,7 +1482,6 @@ return function(env)
                 if not fly_SouBeastNessaRodada then
                     fly_SouBeastNessaRodada = true
                     fly_Notify("Paused", "You are the BEAST. Fly Auto Farm paused.", 5)
-                    -- Força reset mantendo o estado do aviso ativo para evitar spam de loop recursivo
                     fly_ResetAllStates(true)
                 end
                 continue
