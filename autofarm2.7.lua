@@ -77,7 +77,7 @@ return function(env)
         end
     end
 
-    local function fly_ResetAllStates(keepBeastFlag)
+    local function fly_ResetAllStates(keepBeastState)
         -- 1. Encerra com segurança todas as threads de farm pendentes
         for i, v in pairs(fly_farmtasks) do
             pcall(function()
@@ -99,14 +99,16 @@ return function(env)
         fly_TempPlayerStatsModule = nil
         fly_Comp = 0
         fly_notifiedLobby = false
-        if not keepBeastFlag then
+        
+        -- Correção do bug de spam: Só redefine se não for solicitado manter o estado
+        if not keepBeastState then
             fly_SouBeastNessaRodada = false
         end
 
         -- 3. Limpa estruturas físicas inseridas
         fly_RemoveSafePlatform()
 
-        -- 4. Garante que o jogador está completamente livre de ancoragem e forças residuais
+        -- 4. Garante que o jogador está livre de ancoragem e forças físicas residuais
         pcall(function()
             local char = LocalPlayer.Character
             if char then
@@ -1157,7 +1159,6 @@ return function(env)
                                 end
                             end
 
-                            -- CONTROLE DE CAMPING NO COMPUTADOR (SKIP EM CASO DE EXTRA PC)
                             if fly_bnhideelapse >= fly_Config.CampHackOut then
                                 ComputerBanList[math.floor(tick() * 1000)] = Computer
                                 fly_RemoveSafePlatform()
@@ -1171,16 +1172,11 @@ return function(env)
                                 end
 
                                 local reqLeftVal = ReplicatedStorage:FindFirstChild("ComputersLeft")
-                                local isRequiredDone = false
-                                if not reqLeftVal or (reqLeftVal:IsA("ValueObject") and reqLeftVal.Value <= 0) then
-                                    isRequiredDone = true
-                                end
-
-                                if isRequiredDone then
+                                if reqLeftVal and reqLeftVal.Value <= 0 then
                                     forceEscape = true
-                                    fly_Notify("Forced Escape", "Beast is camping the extra computer. Head to the exits!", 4)
+                                    fly_Notify("Forced Escape", "Beast is camping. Head to the exits!", 4)
                                 else
-                                    fly_Notify("Target Changed", "Beast is camping this PC. Changing targets.", 3.5)
+                                    fly_Notify("Target Changed", "Beast is camping this PC.", 3.5)
                                 end
                                 return
                             end
@@ -1399,12 +1395,12 @@ return function(env)
                 continue
             end
 
-            -- PROTEÇÃO DE EVENTO BEAST COM KEEPACTIONFLAG PARA EVITAR SPAM INFINITO
             if getgenv().AutoWinFlyActive and MasterAutoFarmState and isBeast then
                 if not fly_SouBeastNessaRodada then
-                    fly_ResetAllStates(true) -- Limpa sem apagar a flag de controle fly_SouBeastNessaRodada
                     fly_SouBeastNessaRodada = true
                     fly_Notify("Paused", "You are the BEAST. Fly Auto Farm paused.", 5)
+                    -- Força reset mantendo o estado do aviso ativo para evitar spam de loop recursivo
+                    fly_ResetAllStates(true)
                 end
                 continue
             end
