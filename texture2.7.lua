@@ -95,7 +95,7 @@ return function(env)
     -- ==========================================
     -- MAP TEXTURES (Coluna Esquerda)
     -- ==========================================
-    Library:CreateSection(Page, "Map Textures", "Left")
+    Library:CreateSection(Page, "Map Textures1111", "Left")
 
     -- [ WHITE BRICKS ]
     local wbEnabled = false
