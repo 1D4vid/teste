@@ -27,6 +27,31 @@ return function(env)
         return nil
     end
 
+    -- Processador assíncrono em lotes para eliminar travamentos de tela (lag spikes)
+    local function batchProcess(items, processFunc, onComplete)
+        local total = #items
+        local chunk = 200 -- Processa 200 itens por frame
+        local index = 1
+        
+        local function run()
+            local count = 0
+            while index <= total do
+                local item = items[index]
+                if item then
+                    processFunc(item)
+                end
+                index = index + 1
+                count = count + 1
+                if count >= chunk then
+                    task.wait() -- Cede o frame para o jogo respirar
+                    count = 0
+                end
+            end
+            if onComplete then onComplete() end
+        end
+        task.spawn(run)
+    end
+
     local function createGridContainer(parentTarget)
         local bg = Instance.new("Frame")
         bg.Size = UDim2.new(1, -2, 0, 0)
@@ -91,15 +116,9 @@ return function(env)
     Library:CreateToggle(Page, "White Bricks", false, function(state)
         wbEnabled = state
         if state then
-            task.spawn(function()
-                local desc = Workspace:GetDescendants()
-                local t = os.clock()
-                for i = 1, #desc do
-                    if not wbEnabled then break end
-                    applyWhiteBrick(desc[i])
-                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
-                end
-            end)
+            local desc = Workspace:GetDescendants()
+            batchProcess(desc, applyWhiteBrick)
+            
             wbDescConn = Workspace.DescendantAdded:Connect(function(child)
                 if wbEnabled then task.defer(function() applyWhiteBrick(child) end) end
             end)
@@ -109,15 +128,11 @@ return function(env)
             wbBkp = setmetatable({}, {__mode = "k"})
             local toRevert = {}
             for p, d in pairs(currentBkp) do table.insert(toRevert, {part = p, mat = d.M, col = d.C}) end
-            task.spawn(function()
-                local t = os.clock()
-                for i = 1, #toRevert do
-                    local item = toRevert[i]
-                    local p = item.part
-                    if p and p.Parent then
-                        pcall(function() p.Material = item.mat; p.Color = item.col end)
-                    end
-                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+            
+            batchProcess(toRevert, function(item)
+                local p = item.part
+                if p and p.Parent then
+                    pcall(function() p.Material = item.mat; p.Color = item.col end)
                 end
             end)
         end
@@ -145,15 +160,9 @@ return function(env)
     Library:CreateToggle(Page, "Snow Textures", false, function(state)
         snowEnabled = state
         if state then
-            task.spawn(function()
-                local desc = Workspace:GetDescendants()
-                local t = os.clock()
-                for i = 1, #desc do
-                    if not snowEnabled then break end
-                    applySnowTexture(desc[i])
-                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
-                end
-            end)
+            local desc = Workspace:GetDescendants()
+            batchProcess(desc, applySnowTexture)
+            
             snowDescConn = Workspace.DescendantAdded:Connect(function(child)
                 if snowEnabled then task.defer(function() applySnowTexture(child) end) end
             end)
@@ -163,15 +172,11 @@ return function(env)
             snowBkp = setmetatable({}, {__mode = "k"})
             local toRevert = {}
             for p, d in pairs(currentBkp) do table.insert(toRevert, {part = p, mat = d.M, col = d.C}) end
-            task.spawn(function()
-                local t = os.clock()
-                for i = 1, #toRevert do
-                    local item = toRevert[i]
-                    local p = item.part
-                    if p and p.Parent then
-                        pcall(function() p.Material = item.mat; p.Color = item.col end)
-                    end
-                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+            
+            batchProcess(toRevert, function(item)
+                local p = item.part
+                if p and p.Parent then
+                    pcall(function() p.Material = item.mat; p.Color = item.col end)
                 end
             end)
         end
@@ -297,15 +302,9 @@ return function(env)
     Library:CreateToggle(Page, "Minecraft Texture", false, function(state)
         mcEnabled = state
         if state then
-            task.spawn(function()
-                local desc = Workspace:GetDescendants()
-                local t = os.clock()
-                for i = 1, #desc do
-                    if not mcEnabled then break end
-                    processMCPart(desc[i])
-                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
-                end
-            end)
+            local desc = Workspace:GetDescendants()
+            batchProcess(desc, processMCPart)
+            
             mcDescendantConn = Workspace.DescendantAdded:Connect(function(newObj)
                 if mcEnabled then table.insert(mcFila, newObj) end
             end)
@@ -328,20 +327,16 @@ return function(env)
             local toRevert = {}
             for part, origMat in pairs(currentBkp) do table.insert(toRevert, {part = part, mat = origMat}) end
             
-            task.spawn(function()
-                local t = os.clock()
-                for i = 1, #toRevert do
-                    local p = toRevert[i].part
-                    if p and p.Parent then
-                        pcall(function()
-                            for _, face in ipairs(mcFaces) do
-                                local tex = p:FindFirstChild("McTexture_" .. face)
-                                if tex then tex:Destroy() end
-                            end
-                            p.Material = toRevert[i].mat
-                        end)
-                    end
-                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+            batchProcess(toRevert, function(item)
+                local p = item.part
+                if p and p.Parent then
+                    pcall(function()
+                        for _, face in ipairs(mcFaces) do
+                            local tex = p:FindFirstChild("McTexture_" .. face)
+                            if tex then tex:Destroy() end
+                        end
+                        p.Material = item.mat
+                    end)
                 end
             end)
         end
@@ -398,15 +393,8 @@ return function(env)
                 end
             end)
 
-            task.spawn(function()
-                local desc = Workspace:GetDescendants()
-                local t = os.clock()
-                for i = 1, #desc do
-                    if not removeShadowsEnabled then break end
-                    applyShadowRemoval(desc[i])
-                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
-                end
-            end)
+            local desc = Workspace:GetDescendants()
+            batchProcess(desc, applyShadowRemoval)
 
             shadowDescConn = Workspace.DescendantAdded:Connect(function(child)
                 if removeShadowsEnabled then task.defer(applyShadowRemoval, child) end
@@ -419,16 +407,19 @@ return function(env)
 
             local currentBkp = shadowBkp
             shadowBkp = setmetatable({}, {__mode = "k"})
-            task.spawn(function()
-                local t = os.clock()
-                for obj, data in pairs(currentBkp) do
-                    if obj and obj.Parent then
-                        pcall(function()
-                            if data.CastShadow ~= nil then obj.CastShadow = data.CastShadow end
-                            if data.Shadows ~= nil then obj.Shadows = data.Shadows end
-                        end)
-                    end
-                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+            local toRevert = {}
+            for obj, data in pairs(currentBkp) do
+                table.insert(toRevert, {obj = obj, data = data})
+            end
+
+            batchProcess(toRevert, function(item)
+                local obj = item.obj
+                local data = item.data
+                if obj and obj.Parent then
+                    pcall(function()
+                        if data.CastShadow ~= nil then obj.CastShadow = data.CastShadow end
+                        if data.Shadows ~= nil then obj.Shadows = data.Shadows end
+                    end)
                 end
             end)
         end
@@ -438,13 +429,11 @@ return function(env)
     local removeParticlesEnabled = false
     local particlesDescConnW = nil
     local particlesDescConnL = nil
-    local screenEffectsBkp = setmetatable({}, {__mode = "k"})
+    local particleBkp = setmetatable({}, {__mode = "k"})
 
-    local efeitosFisicos = {
+    local particleClasses = {
         ParticleEmitter = true, Sparkles = true, Fire = true, 
-        Smoke = true, Trail = true, Beam = true, Explosion = true
-    }
-    local efeitosTela = {
+        Smoke = true, Trail = true, Beam = true,
         BloomEffect = true, BlurEffect = true, 
         SunRaysEffect = true, DepthOfFieldEffect = true
     }
@@ -452,35 +441,25 @@ return function(env)
     local function applyParticleRemoval(objeto)
         if not removeParticlesEnabled then return end
         local className = objeto.ClassName
-        if efeitosFisicos[className] then
-            pcall(function() objeto:Destroy() end)
-        elseif efeitosTela[className] then
-            if not screenEffectsBkp[objeto] then
-                screenEffectsBkp[objeto] = {Enabled = objeto.Enabled}
+        if particleClasses[className] then
+            if not particleBkp[objeto] then
+                particleBkp[objeto] = {Enabled = objeto.Enabled}
             end
             pcall(function() objeto.Enabled = false end)
+        elseif className == "Explosion" then
+            pcall(function() objeto:Destroy() end)
         end
     end
 
     Library:CreateToggle(Page, "Remove Particles", false, function(state)
         removeParticlesEnabled = state
         if state then
-            task.spawn(function()
-                local descW = Workspace:GetDescendants()
-                local t = os.clock()
-                for i = 1, #descW do
-                    if not removeParticlesEnabled then break end
-                    applyParticleRemoval(descW[i])
-                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
-                end
-                
+            local descW = Workspace:GetDescendants()
+            local descL = Lighting:GetDescendants()
+            
+            batchProcess(descW, applyParticleRemoval, function()
                 if removeParticlesEnabled then
-                    local descL = Lighting:GetDescendants()
-                    for i = 1, #descL do
-                        if not removeParticlesEnabled then break end
-                        applyParticleRemoval(descL[i])
-                        if os.clock() - t > 0.01 then task.wait() t = os.clock() end
-                    end
+                    batchProcess(descL, applyParticleRemoval)
                 end
             end)
 
@@ -494,17 +473,20 @@ return function(env)
             if particlesDescConnW then particlesDescConnW:Disconnect() particlesDescConnW = nil end
             if particlesDescConnL then particlesDescConnL:Disconnect() particlesDescConnL = nil end
 
-            local currentBkp = screenEffectsBkp
-            screenEffectsBkp = setmetatable({}, {__mode = "k"})
-            task.spawn(function()
-                local t = os.clock()
-                for obj, data in pairs(currentBkp) do
-                    if obj and obj.Parent then
-                        pcall(function()
-                            if data.Enabled ~= nil then obj.Enabled = data.Enabled end
-                        end)
-                    end
-                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+            local currentBkp = particleBkp
+            particleBkp = setmetatable({}, {__mode = "k"})
+            local toRevert = {}
+            for obj, data in pairs(currentBkp) do
+                table.insert(toRevert, {obj = obj, data = data})
+            end
+
+            batchProcess(toRevert, function(item)
+                local obj = item.obj
+                local data = item.data
+                if obj and obj.Parent then
+                    pcall(function()
+                        if data.Enabled ~= nil then obj.Enabled = data.Enabled end
+                    end)
                 end
             end)
         end
