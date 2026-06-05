@@ -53,12 +53,11 @@ return function(env)
         task.spawn(run)
     end
 
-    -- Resolvido o colapso de AutomaticSize definindo o tamanho Y padrão como 1 em vez de 0
+    -- Criação de contêiner com correção para o bug de renderização
     local function createGridContainer(parentTarget)
         local bg = Instance.new("Frame")
-        bg.Size = UDim2.new(1, -2, 0, 1)
+        bg.Size = UDim2.new(1, -2, 0, 0)
         bg.Position = UDim2.new(0, 1, 0, 0)
-        bg.AutomaticSize = Enum.AutomaticSize.Y
         bg.BackgroundColor3 = Color3.new(0, 0, 0)
         bg.BackgroundTransparency = 0.45
         bg.Parent = parentTarget
@@ -68,8 +67,7 @@ return function(env)
         str.Thickness = 1
 
         local wrapper = Instance.new("Frame")
-        wrapper.Size = UDim2.new(1, 0, 0, 1)
-        wrapper.AutomaticSize = Enum.AutomaticSize.Y
+        wrapper.Size = UDim2.new(1, 0, 0, 0)
         wrapper.BackgroundTransparency = 1
         wrapper.Parent = bg
         
@@ -85,42 +83,29 @@ return function(env)
         pad.PaddingBottom = UDim.new(0, 8)
         pad.Parent = wrapper
 
+        -- Atualizador manual de tamanho para corrigir falhas de carregamento e renderização da UI
+        local function updateSize()
+            local contentSize = grid.AbsoluteContentSize
+            local paddingHeight = pad.PaddingTop.Offset + pad.PaddingBottom.Offset
+            local targetHeight = contentSize.Y + paddingHeight + 4
+            wrapper.Size = UDim2.new(1, 0, 0, targetHeight)
+            bg.Size = UDim2.new(1, -2, 0, targetHeight)
+        end
+
+        grid:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateSize)
+        task.spawn(updateSize)
+
         return wrapper
     end
-
-    -- Sistema de restauração robusta e à prova de fechamento/destruição da UI
-    local function cleanUpCursor()
-        SetPCCursorActive(false)
-        PCSoftwareCursor.Visible = false
-        UserInputService.MouseIconEnabled = true
-        Mouse.Icon = ""
-    end
-
-    -- Registra escuta de destruição do objeto para prevenir sumiço do mouse
-    if PCSoftwareCursor then PCSoftwareCursor.Destroying:Connect(cleanUpCursor) end
-    if Page then Page.Destroying:Connect(cleanUpCursor) end
 
     -- Controle dinâmico de visibilidade do cursor do mouse padrão
     local cursorLoopConn = nil
     local function updateMouseVisibility()
-        local MainFrame = PCSoftwareCursor.Parent and PCSoftwareCursor.Parent:FindFirstChild("MainFrame")
         local savedPC = UserConfigs["TexturesPage_Crosshair_PC"]
-        
-        -- Se o menu estiver fechado ou invisível, reverte imediatamente para o cursor nativo
-        if MainFrame and not MainFrame.Visible then
-            cleanUpCursor()
-            return
-        end
-
-        -- Se o menu estiver aberto, aplica a lógica do cursor personalizado
         if savedPC and savedPC ~= "RESET" and not isMobile then
-            SetPCCursorActive(true)
-            PCSoftwareCursor.Visible = true
             UserInputService.MouseIconEnabled = false
             Mouse.Icon = "rbxassetid://0" -- Força textura vazia/invisível para anular o cursor padrão
         else
-            SetPCCursorActive(false)
-            PCSoftwareCursor.Visible = false
             if Mouse.Icon == "rbxassetid://0" then
                 Mouse.Icon = ""
                 UserInputService.MouseIconEnabled = true
@@ -130,6 +115,55 @@ return function(env)
 
     if cursorLoopConn then cursorLoopConn:Disconnect() end
     cursorLoopConn = RunService.RenderStepped:Connect(updateMouseVisibility)
+
+    -- Identificação de visibilidade da UI para restaurar o cursor ao fechar
+    local screenGui = nil
+    local mainFrame = nil
+    pcall(function()
+        local current = Page
+        while current and current.Parent do
+            if current:IsA("ScreenGui") then
+                screenGui = current
+                break
+            end
+            if current:IsA("Frame") and current.Parent:IsA("ScreenGui") then
+                mainFrame = current
+            end
+            current = current.Parent
+        end
+    end)
+
+    local function handleUICloseRestore()
+        local isVisible = true
+        if screenGui and not screenGui.Enabled then
+            isVisible = false
+        end
+        if mainFrame and not mainFrame.Visible then
+            isVisible = false
+        end
+
+        if not isVisible then
+            UserInputService.MouseIconEnabled = true
+            Mouse.Icon = ""
+            if PCSoftwareCursor then PCSoftwareCursor.Visible = false end
+        else
+            updateMouseVisibility()
+            local savedPC = UserConfigs["TexturesPage_Crosshair_PC"]
+            if savedPC and savedPC ~= "RESET" and not isMobile then
+                if PCSoftwareCursor then
+                    PCSoftwareCursor.Visible = true
+                    SetPCCursorActive(true)
+                end
+            end
+        end
+    end
+
+    if screenGui then
+        screenGui:GetPropertyChangedSignal("Enabled"):Connect(handleUICloseRestore)
+    end
+    if mainFrame then
+        mainFrame:GetPropertyChangedSignal("Visible"):Connect(handleUICloseRestore)
+    end
 
     -- ==========================================
     -- SISTEMA UNIFICADO DE RENDERIZAÇÃO DO MAPA
@@ -737,7 +771,6 @@ return function(env)
             end
         end
 
-        -- Varredura ultrarrápida focada em players atuais
         for _, plr in ipairs(Players:GetPlayers()) do
             local char = plr.Character
             if char then
@@ -749,7 +782,6 @@ return function(env)
             end
         end
 
-        -- Varredura fracionada em segundo plano no Workspace
         task.spawn(function()
             local desc = Workspace:GetDescendants()
             local total = #desc
@@ -769,7 +801,6 @@ return function(env)
             end
         end)
 
-        -- Escuta em tempo real para novos elementos adicionados dinamicamente
         if texturaID ~= "Default" then
             table.insert(currentDoubleJumpConns, Workspace.DescendantAdded:Connect(function(obj)
                 if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
@@ -788,10 +819,12 @@ return function(env)
             end
 
             table.insert(currentDoubleJumpConns, Players.PlayerAdded:Connect(function(plr)
-                table.insert(currentDoubleJumpConns, char.DescendantAdded:Connect(function(obj)
-                    if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
-                        task.defer(function() aplicarTextura(obj) end)
-                    end
+                table.insert(currentDoubleJumpConns, plr.CharacterAdded:Connect(function(char)
+                    table.insert(currentDoubleJumpConns, char.DescendantAdded:Connect(function(obj)
+                        if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
+                            task.defer(function() aplicarTextura(obj) end)
+                        end
+                    end))
                 end))
             end))
         end
@@ -844,12 +877,13 @@ return function(env)
         end
     end)
 
+    -- ID "84159990264787" removido
     local effectIDs = {
         "81110491136307", "117864251880006", "120181545812734", "74056211768119", 
         "116419901031627", "92247449256845", "113423466689563", "90279999098357", 
         "94123299347751", "105065705443269", "122902019815288", "138617722401997", 
         "75192344666220", "139646605021296", "133105930199997", "96482830256985", 
-        "107964624563909", "122185636007520", "130200330618832", 
+        "107964624563909", "122185636007520", "130200330618832",
         "87265760472097", "125925535971201", "99196076742919", "80555494674270", 
         "77364460442867", "84014330993791", "80081088131892", "70463296258416",
         "84683340454265", "110707827597886", "94615398600162", "136555497393349", 
@@ -896,10 +930,15 @@ return function(env)
         end)
     end
 
-    -- [ MOBILE JUMP BUTTON - PT1 (ESQUERDA - LEFT) ]
+    -- ==========================================
+    -- POPULATE MOBILE BUTTON JUMP (P1 & P2 na Esquerda)
+    -- ==========================================
     if isMobile then
         Library:CreateSection(Page, "Mobile Button Jump (P1)", "Left")
-        local targetParentMJ = GetParentTarget(Page)
+        local targetParentMJ1 = GetParentTarget(Page)
+
+        Library:CreateSection(Page, "Mobile Button Jump (P2)", "Left")
+        local targetParentMJ2 = GetParentTarget(Page)
 
         local mobileJumpConns = {}
         local function EnableMobileButtonJump(texturaID)
@@ -962,7 +1001,7 @@ return function(env)
         MJInputContainer.Size = UDim2.new(1, -2, 0, ContentConfig.ItemHeightNew)
         MJInputContainer.Position = UDim2.new(0, 1, 0, 0)
         MJInputContainer.BackgroundTransparency = 1
-        MJInputContainer.Parent = targetParentMJ
+        MJInputContainer.Parent = targetParentMJ1
 
         local MJumpTextBox = Instance.new("TextBox")
         MJumpTextBox.Size = UDim2.new(1, -65, 1, 0)
@@ -1005,7 +1044,8 @@ return function(env)
             end
         end)
 
-        local MJGridWrapper = createGridContainer(targetParentMJ)
+        local MJGridWrapper1 = createGridContainer(targetParentMJ1)
+        local MJGridWrapper2 = createGridContainer(targetParentMJ2)
 
         local mDefaultBtn = Instance.new("TextButton")
         mDefaultBtn.Text = "Default"
@@ -1014,7 +1054,7 @@ return function(env)
         mDefaultBtn.TextColor3 = Theme.TextDark
         mDefaultBtn.BackgroundColor3 = Color3.new(0,0,0)
         mDefaultBtn.BackgroundTransparency = 0.45
-        mDefaultBtn.Parent = MJGridWrapper
+        mDefaultBtn.Parent = MJGridWrapper1
         Instance.new("UICorner", mDefaultBtn).CornerRadius = UDim.new(0, 4)
         local mDStr = Instance.new("UIStroke", mDefaultBtn)
         mDStr.Color = Color3.fromRGB(40,40,40)
@@ -1023,18 +1063,23 @@ return function(env)
         mDefaultBtn.MouseLeave:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() TweenService:Create(defaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.TextDark}):Play() end)
         mDefaultBtn.MouseButton1Click:Connect(function() UserConfigs["TexturesPage_MobileJump"] = "Default" EnableMobileButtonJump("Default") end)
 
-        local mJumpIDs = {
+        local mJumpIDsP1 = {
             "126321670529682", "77430663366893", "115979689020396", "101678026501268", 
             "100604012502918", "107988778180975", "106355869384286", "119823685069603"
         }
 
-        for _, id in ipairs(mJumpIDs) do
+        local mJumpIDsP2 = {
+            "70463296258416", "80555494674270", "74056211768119", "115091366896134",
+            "117864251880006", "130200330618832", "77364460442867"
+        }
+
+        for _, id in ipairs(mJumpIDsP1) do
             local btn = Instance.new("ImageButton")
             btn.BackgroundColor3 = Color3.new(0,0,0)
             btn.BackgroundTransparency = 0.45
             btn.Image = "rbxassetid://" .. id
             btn.ScaleType = Enum.ScaleType.Crop 
-            btn.Parent = MJGridWrapper
+            btn.Parent = MJGridWrapper1
             Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
             local str = Instance.new("UIStroke", btn)
             str.Color = Color3.fromRGB(40,40,40)
@@ -1047,17 +1092,7 @@ return function(env)
             end)
         end
 
-        -- [ MOBILE JUMP BUTTON - PT2 (DIREITA - RIGHT) ]
-        Library:CreateSection(Page, "Mobile Button Jump (P2)", "Right")
-        local targetParentMJ2 = GetParentTarget(Page)
-        local MJGridWrapper2 = createGridContainer(targetParentMJ2)
-
-        local mJumpIDs2 = {
-            "70463296258416", "80555494674270", "74056211768119", "115091366896134", 
-            "117864251880006", "130200330618832", "77364460442867"
-        }
-
-        for _, id in ipairs(mJumpIDs2) do
+        for _, id in ipairs(mJumpIDsP2) do
             local btn = Instance.new("ImageButton")
             btn.BackgroundColor3 = Color3.new(0,0,0)
             btn.BackgroundTransparency = 0.45
@@ -1078,29 +1113,29 @@ return function(env)
     end
 
     -- ==========================================
-    -- POPULATE CROSSHAIRS
+    -- POPULATE CROSSHAIRS (ID "128514706094926" removido e Novos Inseridos)
     -- ==========================================
     local CursorList = {
         {Name = "Default", ID = "RESET"},
         {Name = "Use Cursor", ID = "15368174199"}, {Name = "Use Cursor", ID = "12701650945"},
-        {Name = "Use Cursor", ID = "119350232226515"},
-        {Name = "Use Cursor", ID = "5060823578"}, {Name = "Use Cursor", ID = "9896571799"},
-        {Name = "Use Cursor", ID = "139654963330788"}, {Name = "Use Cursor", ID = "13441649168"},
-        {Name = "Use Cursor", ID = "88005681147215"}, {Name = "Use Cursor", ID = "72902755839437"},
-        {Name = "Use Cursor", ID = "128926155948846"}, {Name = "Use Cursor", ID = "95348763251820"},
-        {Name = "Use Cursor", ID = "138513473967293"}, {Name = "Use Cursor", ID = "82043397777881"},
-        {Name = "Use Cursor", ID = "84583215296063"}, {Name = "Use Cursor", ID = "120058675182639"},
-        {Name = "Use Cursor", ID = "130210380679877"}, {Name = "Use Cursor", ID = "74264514489577"},
-        {Name = "Use Cursor", ID = "115877213393063"}, {Name = "Use Cursor", ID = "133579119074302"},
-        {Name = "Use Cursor", ID = "137970082797101"}, {Name = "Use Cursor", ID = "116865736993390"},
-        {Name = "Use Cursor", ID = "70613337612134"}, {Name = "Use Cursor", ID = "75670552980458"}, 
-        {Name = "Use Cursor", ID = "100822311002882"}, {Name = "Use Cursor", ID = "135331308026486"},
-        {Name = "Use Cursor", ID = "91090339346537"}, {Name = "Use Cursor", ID = "99626703938913"},
-        {Name = "Use Cursor", ID = "112195317343485"}, {Name = "Use Cursor", ID = "89746976355403"},
-        {Name = "Use Cursor", ID = "132191954497107"}, {Name = "Use Cursor", ID = "93050147531878"},
-        {Name = "Use Cursor", ID = "88343941218179"}, {Name = "Use Cursor", ID = "81277812126144"},
-        {Name = "Use Cursor", ID = "131422226977434"}, {Name = "Use Cursor", ID = "116499481211766"},
-        {Name = "Use Cursor", ID = "139192004969086"}, {Name = "Use Cursor", ID = "115820239502902"}
+        {Name = "Use Cursor", ID = "119350232226515"}, {Name = "Use Cursor", ID = "5060823578"}, 
+        {Name = "Use Cursor", ID = "9896571799"}, {Name = "Use Cursor", ID = "139654963330788"}, 
+        {Name = "Use Cursor", ID = "13441649168"}, {Name = "Use Cursor", ID = "88005681147215"}, 
+        {Name = "Use Cursor", ID = "72902755839437"}, {Name = "Use Cursor", ID = "128926155948846"}, 
+        {Name = "Use Cursor", ID = "95348763251820"}, {Name = "Use Cursor", ID = "138513473967293"}, 
+        {Name = "Use Cursor", ID = "82043397777881"}, {Name = "Use Cursor", ID = "84583215296063"}, 
+        {Name = "Use Cursor", ID = "120058675182639"}, {Name = "Use Cursor", ID = "130210380679877"}, 
+        {Name = "Use Cursor", ID = "74264514489577"}, {Name = "Use Cursor", ID = "115877213393063"}, 
+        {Name = "Use Cursor", ID = "133579119074302"}, {Name = "Use Cursor", ID = "137970082797101"}, 
+        {Name = "Use Cursor", ID = "116865736993390"}, {Name = "Use Cursor", ID = "70613337612134"}, 
+        {Name = "Use Cursor", ID = "75670552980458"}, {Name = "Use Cursor", ID = "100822311002882"}, 
+        {Name = "Use Cursor", ID = "135331308026486"}, {Name = "Use Cursor", ID = "91090339346537"}, 
+        {Name = "Use Cursor", ID = "99626703938913"}, {Name = "Use Cursor", ID = "112195317343485"}, 
+        {Name = "Use Cursor", ID = "89746976355403"}, {Name = "Use Cursor", ID = "132191954497107"}, 
+        {Name = "Use Cursor", ID = "93050147531878"}, {Name = "Use Cursor", ID = "88343941218179"}, 
+        {Name = "Use Cursor", ID = "81277812126144"}, {Name = "Use Cursor", ID = "131422226977434"}, 
+        {Name = "Use Cursor", ID = "116499481211766"}, {Name = "Use Cursor", ID = "139192004969086"}, 
+        {Name = "Use Cursor", ID = "115820239502902"}
     }
 
     local function CreateCursorSystem(isMob)
@@ -1163,7 +1198,7 @@ return function(env)
         local GridWrapperCur2 = createGridContainer(targetParentCur2)
         
         for i, item in ipairs(CursorList) do
-            local targetGrid = (i <= 19) and GridWrapperCur1 or GridWrapperCur2
+            local targetGrid = (i <= 18) and GridWrapperCur1 or GridWrapperCur2
 
             if item.ID == "RESET" then
                 local defaultBtn = Instance.new("TextButton")
@@ -1247,16 +1282,6 @@ return function(env)
                 MobileCrosshair.Image = saved
                 MobileCrosshair.Visible = true 
             end
-        end
-    end)
-
-    -- [ FORCE REDRAW ] Nudge de Scroll automático para forçar o redesenho e inicializar a cor
-    task.spawn(function()
-        task.wait(0.2)
-        if Page and Page:IsA("ScrollingFrame") then
-            Page.CanvasPosition = Vector2.new(0, 10)
-            task.wait(0.05)
-            Page.CanvasPosition = Vector2.new(0, 0)
         end
     end)
 end
