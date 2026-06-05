@@ -53,9 +53,10 @@ return function(env)
         task.spawn(run)
     end
 
+    -- Resolvido o colapso de AutomaticSize definindo o tamanho Y padrão como 1 em vez de 0
     local function createGridContainer(parentTarget)
         local bg = Instance.new("Frame")
-        bg.Size = UDim2.new(1, -2, 0, 0)
+        bg.Size = UDim2.new(1, -2, 0, 1)
         bg.Position = UDim2.new(0, 1, 0, 0)
         bg.AutomaticSize = Enum.AutomaticSize.Y
         bg.BackgroundColor3 = Color3.new(0, 0, 0)
@@ -67,7 +68,7 @@ return function(env)
         str.Thickness = 1
 
         local wrapper = Instance.new("Frame")
-        wrapper.Size = UDim2.new(1, 0, 0, 0)
+        wrapper.Size = UDim2.new(1, 0, 0, 1)
         wrapper.AutomaticSize = Enum.AutomaticSize.Y
         wrapper.BackgroundTransparency = 1
         wrapper.Parent = bg
@@ -95,6 +96,7 @@ return function(env)
         
         -- Se o menu estiver fechado ou invisível, reverte imediatamente para o cursor nativo
         if MainFrame and not MainFrame.Visible then
+            SetPCCursorActive(false) -- Desativa o loop do script principal
             PCSoftwareCursor.Visible = false
             if Mouse.Icon == "rbxassetid://0" or Mouse.Icon == "" then
                 Mouse.Icon = ""
@@ -105,10 +107,12 @@ return function(env)
 
         -- Se o menu estiver aberto, aplica a lógica do cursor personalizado
         if savedPC and savedPC ~= "RESET" and not isMobile then
+            SetPCCursorActive(true)
             PCSoftwareCursor.Visible = true
             UserInputService.MouseIconEnabled = false
             Mouse.Icon = "rbxassetid://0" -- Força textura vazia/invisível para anular o cursor padrão
         else
+            SetPCCursorActive(false)
             PCSoftwareCursor.Visible = false
             if Mouse.Icon == "rbxassetid://0" then
                 Mouse.Icon = ""
@@ -838,7 +842,7 @@ return function(env)
         "116419901031627", "92247449256845", "113423466689563", "90279999098357", 
         "94123299347751", "105065705443269", "122902019815288", "138617722401997", 
         "75192344666220", "139646605021296", "133105930199997", "96482830256985", 
-        "107964624563909", "122185636007520", "130200330618832", "84159990264787",
+        "107964624563909", "122185636007520", "130200330618832", 
         "87265760472097", "125925535971201", "99196076742919", "80555494674270", 
         "77364460442867", "84014330993791", "80081088131892", "70463296258416",
         "84683340454265", "110707827597886", "94615398600162", "136555497393349", 
@@ -1072,7 +1076,7 @@ return function(env)
     local CursorList = {
         {Name = "Default", ID = "RESET"},
         {Name = "Use Cursor", ID = "15368174199"}, {Name = "Use Cursor", ID = "12701650945"},
-        {Name = "Use Cursor", ID = "128514706094926"}, {Name = "Use Cursor", ID = "119350232226515"},
+        {Name = "Use Cursor", ID = "119350232226515"},
         {Name = "Use Cursor", ID = "5060823578"}, {Name = "Use Cursor", ID = "9896571799"},
         {Name = "Use Cursor", ID = "139654963330788"}, {Name = "Use Cursor", ID = "13441649168"},
         {Name = "Use Cursor", ID = "88005681147215"}, {Name = "Use Cursor", ID = "72902755839437"},
@@ -1089,7 +1093,6 @@ return function(env)
         {Name = "Use Cursor", ID = "132191954497107"}, {Name = "Use Cursor", ID = "93050147531878"},
         {Name = "Use Cursor", ID = "88343941218179"}, {Name = "Use Cursor", ID = "81277812126144"},
         {Name = "Use Cursor", ID = "131422226977434"}, {Name = "Use Cursor", ID = "116499481211766"},
-        -- NOVOS CURSORES ADICIONADOS
         {Name = "Use Cursor", ID = "139192004969086"}, {Name = "Use Cursor", ID = "115820239502902"}
     }
 
@@ -1240,11 +1243,11 @@ return function(env)
         end
     end)
 
-    -- [ GERA NUDGE DE SCROLL AUTOMÁTICO PARA FORÇAR REDESENHO DA UI E RESOLVER PROBLEMA DE FALTA DE COR ]
+    -- [ FORCE REDRAW ] Nudge de Scroll automático para forçar o redesenho e inicializar a cor
     task.spawn(function()
         task.wait(0.2)
         if Page and Page:IsA("ScrollingFrame") then
-            Page.CanvasPosition = Vector2.new(0, 5)
+            Page.CanvasPosition = Vector2.new(0, 10)
             task.wait(0.05)
             Page.CanvasPosition = Vector2.new(0, 0)
         end
