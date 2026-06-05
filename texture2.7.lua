@@ -17,6 +17,7 @@ return function(env)
     local SetPCCursorActive = env.SetPCCursorActive
     local MobileCrosshair = env.MobileCrosshair
     local PCSoftwareCursor = env.PCSoftwareCursor
+    local Lighting = game:GetService("Lighting")
 
     local formatID = function(id)
         if type(id) == "number" and id > 0 then return "rbxassetid://" .. id
@@ -364,6 +365,149 @@ return function(env)
             getgenv().NexOptimization = loadstring(game:HttpGet("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/fps%20booster%20e%20remove%20textures.lua"))()
         end
         getgenv().NexOptimization.ToggleFPSBooster(state)
+    end)
+
+    -- [ REMOVE SHADOWS ]
+    local removeShadowsEnabled = false
+    local shadowDescConn = nil
+    local shadowChangedConn = nil
+    local shadowBkp = setmetatable({}, {__mode = "k"})
+
+    local function applyShadowRemoval(objeto)
+        if not removeShadowsEnabled then return end
+        if objeto:IsA("BasePart") then
+            if not shadowBkp[objeto] then
+                shadowBkp[objeto] = {CastShadow = objeto.CastShadow}
+            end
+            pcall(function() objeto.CastShadow = false end)
+        elseif objeto:IsA("Light") then
+            if not shadowBkp[objeto] then
+                shadowBkp[objeto] = {Shadows = objeto.Shadows}
+            end
+            pcall(function() objeto.Shadows = false end)
+        end
+    end
+
+    Library:CreateToggle(Page, "Remove Shadows", false, function(state)
+        removeShadowsEnabled = state
+        if state then
+            pcall(function() Lighting.GlobalShadows = false end)
+            shadowChangedConn = Lighting:GetPropertyChangedSignal("GlobalShadows"):Connect(function()
+                if Lighting.GlobalShadows and removeShadowsEnabled then
+                    pcall(function() Lighting.GlobalShadows = false end)
+                end
+            end)
+
+            task.spawn(function()
+                local desc = Workspace:GetDescendants()
+                local t = os.clock()
+                for i = 1, #desc do
+                    if not removeShadowsEnabled then break end
+                    applyShadowRemoval(desc[i])
+                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+                end
+            end)
+
+            shadowDescConn = Workspace.DescendantAdded:Connect(function(child)
+                if removeShadowsEnabled then task.defer(applyShadowRemoval, child) end
+            end)
+        else
+            if shadowDescConn then shadowDescConn:Disconnect() shadowDescConn = nil end
+            if shadowChangedConn then shadowChangedConn:Disconnect() shadowChangedConn = nil end
+            
+            pcall(function() Lighting.GlobalShadows = true end)
+
+            local currentBkp = shadowBkp
+            shadowBkp = setmetatable({}, {__mode = "k"})
+            task.spawn(function()
+                local t = os.clock()
+                for obj, data in pairs(currentBkp) do
+                    if obj and obj.Parent then
+                        pcall(function()
+                            if data.CastShadow ~= nil then obj.CastShadow = data.CastShadow end
+                            if data.Shadows ~= nil then obj.Shadows = data.Shadows end
+                        end)
+                    end
+                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+                end
+            end)
+        end
+    end)
+
+    -- [ REMOVE PARTICLES ]
+    local removeParticlesEnabled = false
+    local particlesDescConnW = nil
+    local particlesDescConnL = nil
+    local screenEffectsBkp = setmetatable({}, {__mode = "k"})
+
+    local efeitosFisicos = {
+        ParticleEmitter = true, Sparkles = true, Fire = true, 
+        Smoke = true, Trail = true, Beam = true, Explosion = true
+    }
+    local efeitosTela = {
+        BloomEffect = true, BlurEffect = true, 
+        SunRaysEffect = true, DepthOfFieldEffect = true
+    }
+
+    local function applyParticleRemoval(objeto)
+        if not removeParticlesEnabled then return end
+        local className = objeto.ClassName
+        if efeitosFisicos[className] then
+            pcall(function() objeto:Destroy() end)
+        elseif efeitosTela[className] then
+            if not screenEffectsBkp[objeto] then
+                screenEffectsBkp[objeto] = {Enabled = objeto.Enabled}
+            end
+            pcall(function() objeto.Enabled = false end)
+        end
+    end
+
+    Library:CreateToggle(Page, "Remove Particles", false, function(state)
+        removeParticlesEnabled = state
+        if state then
+            task.spawn(function()
+                local descW = Workspace:GetDescendants()
+                local t = os.clock()
+                for i = 1, #descW do
+                    if not removeParticlesEnabled then break end
+                    applyParticleRemoval(descW[i])
+                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+                end
+                
+                if removeParticlesEnabled then
+                    local descL = Lighting:GetDescendants()
+                    for i = 1, #descL do
+                        if not removeParticlesEnabled then break end
+                        applyParticleRemoval(descL[i])
+                        if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+                    end
+                end
+            end)
+
+            particlesDescConnW = Workspace.DescendantAdded:Connect(function(child)
+                if removeParticlesEnabled then task.defer(applyParticleRemoval, child) end
+            end)
+            particlesDescConnL = Lighting.DescendantAdded:Connect(function(child)
+                if removeParticlesEnabled then task.defer(applyParticleRemoval, child) end
+            end)
+        else
+            if particlesDescConnW then particlesDescConnW:Disconnect() particlesDescConnW = nil end
+            if particlesDescConnL then particlesDescConnL:Disconnect() particlesDescConnL = nil end
+
+            local currentBkp = screenEffectsBkp
+            screenEffectsBkp = setmetatable({}, {__mode = "k"})
+            task.spawn(function()
+                local t = os.clock()
+                for obj, data in pairs(currentBkp) do
+                    if obj and obj.Parent then
+                        pcall(function()
+                            if data.Enabled ~= nil then obj.Enabled = data.Enabled end
+                        end)
+                    end
+                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+                end
+            end)
+        end
     end)
 
 
