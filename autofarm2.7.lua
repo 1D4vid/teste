@@ -124,7 +124,7 @@ return function(env)
     -- ==========================================
     -- ELEMENTOS DA INTERFACE (UI)
     -- ==========================================
-    Library:CreateSection(Page, "Main Farming (BETA)")
+    Library:CreateSection(Page, "Main Farming (BETA111111)")
 
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
         MasterAutoFarmState = state
@@ -770,7 +770,7 @@ return function(env)
                                     local cframePorta = painel.CFrame * CFrame.new(0, 0, -3)
                                     local sucesso = EsperarETeleportar(cframePorta)
                                     
-                                    if sucesso then
+                                    if GuideCFrame then
                                         
                                         while getgenv().FarmRodando and not getgenv().EscapouDaPartida do
                                             if not PossoAgir() then break end
@@ -1008,6 +1008,9 @@ return function(env)
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
 
+        -- Sincronização do estado de movimentação ativa
+        fly_isMoving = true
+
         -- Desativa colisões do próprio corpo do jogador
         for _, v in ipairs(char:GetChildren()) do
             if v:IsA("BasePart") and v.CanCollide then
@@ -1107,6 +1110,9 @@ return function(env)
         for _, v in ipairs(ObjectsOnCollided) do
             pcall(function() v.CanCollide = true end)
         end
+        
+        -- Sinaliza fim do trajeto de movimento
+        fly_isMoving = false
     end
 
     -- [[ EXECUÇÃO DO FARM DE VOO ]] --
@@ -1482,6 +1488,7 @@ return function(env)
                 if not fly_SouBeastNessaRodada then
                     fly_SouBeastNessaRodada = true
                     fly_Notify("Paused", "You are the BEAST. Fly Auto Farm paused.", 5)
+                    -- Força reset mantendo o estado do aviso ativo para evitar spam de loop recursivo
                     fly_ResetAllStates(true)
                 end
                 continue
