@@ -17,10 +17,6 @@ return function(env)
     local AutoSaveSilentToggleObj
     local AutoSaveTeleportToggleObj
 
-    -- REFERÊNCIAS DO SISTEMA
-    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
-    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
-
     -- ==========================================
     -- VARIÁVEIS DO AUTO WIN SURVIVOR (FLY)
     -- ==========================================
@@ -62,7 +58,7 @@ return function(env)
     -- ==========================================
     -- ELEMENTOS DA INTERFACE (UI)
     -- ==========================================
-    Library:CreateSection(Page, "Main Farming (BETA)")
+    Library:CreateSection(Page, "Main Farming (n aguento mais)")
 
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
         MasterAutoFarmState = state
@@ -215,6 +211,10 @@ return function(env)
         end
         _G.AntiAfkEnabled = state
     end)
+
+    -- REFERÊNCIAS DO SISTEMA
+    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
+    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
 
     -- [[ ANTI AFK ]] --
     task.spawn(function()
@@ -786,11 +786,6 @@ return function(env)
         return false
     end
 
-    -- CORREÇÃO: Unificação total da verificação usando a propriedade IsGameActive nativa
-    local function fly_IsMatchActive()
-        return IsGameActive and IsGameActive.Value == true
-    end
-
     local function fly_IsTriggerOccupied(trigger)
         local triggerPos = trigger.Position
         for _, p in ipairs(Players:GetPlayers()) do
@@ -801,6 +796,21 @@ return function(env)
             end
         end
         return false
+    end
+
+    local function fly_IsMatchActive()
+        local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
+        if not currentMap or not currentMap.Value then
+            return false
+        end
+        local status = ReplicatedStorage:FindFirstChild("GameStatus")
+        if status then
+            local statusText = string.lower(status.Value)
+            if string.find(statusText, "intermission") or string.find(statusText, "game over") or string.find(statusText, "lobby") then
+                return false
+            end
+        end
+        return true
     end
 
     local function fly_GetBeast()
@@ -1052,7 +1062,7 @@ return function(env)
             local CancelComputers = false
             local LeastTriggers = 4
             local Closest = math.huge
-            local ComputersLeft = #MapObjects.Computers > 0 and #MapObjects.Computers or 5
+            local ComputersLeft = 0
 
             coroutine.wrap(function()
                 while TaskGood() do
@@ -1121,7 +1131,8 @@ return function(env)
                         end
                     end
                 end
-            endCode)()
+            endCode = nil -- Explicit cleanup
+            coroutine.wrap(function() end)() -- Dummy for cleaning register
 
             repeat
                 task.wait(0.5)
@@ -1194,10 +1205,12 @@ return function(env)
                 fly_onsurvivorfarm = true
                 fly_Notify("Auto Farm", "Auto Farm started.", 3)
                 Run()
-                -- CORREÇÃO: Garante que só haverá teleporte ao lobby se a partida nativamente terminou
-                if not DoNotTeleport and not fly_IsMatchActive() then
+                -- Só teleporta de volta se a partida ainda estiver ativa/normalmente encerrada
+                if not DoNotTeleport and fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState then
                     task.wait(1)
-                    fly_TPPlayerSpawn()
+                    if fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState then
+                        fly_TPPlayerSpawn()
+                    end
                 end
                 fly_onsurvivorfarm = false
             end
@@ -1234,29 +1247,38 @@ return function(env)
                 fly_RemoveSafePlatform()
             end
 
+            -- Se formos a Besta, limpa todas as threads de Survivor imediatamente
             if getgenv().AutoWinFlyActive and MasterAutoFarmState and fly_AmIBeast() then
                 if not fly_SouBeastNessaRodada then
                     fly_SouBeastNessaRodada = true
                     fly_Notify("Paused", "You are the BEAST. Fly Auto Farm paused.", 5)
-                    
-                    for i, v in pairs(fly_farmtasks) do
-                        pcall(function() coroutine.close(v) end)
-                        fly_farmtasks[i] = nil
-                    end
-                    fly_onsurvivorfarm = false
-                    fly_RemoveSafePlatform()
-                    if fly_IsThereChar() then
-                        LocalPlayer.Character.HumanoidRootPart.Anchored = false
-                    end
+                end
+                
+                for i, v in pairs(fly_farmtasks) do
+                    pcall(function() coroutine.close(v) end)
+                    fly_farmtasks[i] = nil
+                end
+                fly_onsurvivorfarm = false
+                fly_RemoveSafePlatform()
+                if fly_IsThereChar() then
+                    LocalPlayer.Character.HumanoidRootPart.Anchored = false
                 end
                 continue
             end
 
+            -- Limpeza profunda ao sair de partidas/iniciar novas para evitar carry-over bugs
             if not getgenv().AutoWinFlyActive or not MasterAutoFarmState or not fly_IsMatchActive() then
                 if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Anchored then
                     LocalPlayer.Character.HumanoidRootPart.Anchored = false
                 end
                 fly_RemoveSafePlatform()
+                
+                -- Força o encerramento de todas as threads correndo em segundo plano
+                for i, v in pairs(fly_farmtasks) do
+                    pcall(function() coroutine.close(v) end)
+                    fly_farmtasks[i] = nil
+                end
+                
                 fly_onsurvivorfarm = false
                 fly_bnhide = false
                 fly_Comp = 0 
