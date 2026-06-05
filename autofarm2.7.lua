@@ -1131,8 +1131,7 @@ return function(env)
                         end
                     end
                 end
-            endCode = nil -- Explicit cleanup
-            coroutine.wrap(function() end)() -- Dummy for cleaning register
+            end)()
 
             repeat
                 task.wait(0.5)
@@ -1205,12 +1204,9 @@ return function(env)
                 fly_onsurvivorfarm = true
                 fly_Notify("Auto Farm", "Auto Farm started.", 3)
                 Run()
-                -- Só teleporta de volta se a partida ainda estiver ativa/normalmente encerrada
-                if not DoNotTeleport and fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState then
+                if not DoNotTeleport then
                     task.wait(1)
-                    if fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState then
-                        fly_TPPlayerSpawn()
-                    end
+                    fly_TPPlayerSpawn()
                 end
                 fly_onsurvivorfarm = false
             end
@@ -1247,38 +1243,29 @@ return function(env)
                 fly_RemoveSafePlatform()
             end
 
-            -- Se formos a Besta, limpa todas as threads de Survivor imediatamente
             if getgenv().AutoWinFlyActive and MasterAutoFarmState and fly_AmIBeast() then
                 if not fly_SouBeastNessaRodada then
                     fly_SouBeastNessaRodada = true
                     fly_Notify("Paused", "You are the BEAST. Fly Auto Farm paused.", 5)
-                end
-                
-                for i, v in pairs(fly_farmtasks) do
-                    pcall(function() coroutine.close(v) end)
-                    fly_farmtasks[i] = nil
-                end
-                fly_onsurvivorfarm = false
-                fly_RemoveSafePlatform()
-                if fly_IsThereChar() then
-                    LocalPlayer.Character.HumanoidRootPart.Anchored = false
+                    
+                    for i, v in pairs(fly_farmtasks) do
+                        pcall(function() coroutine.close(v) end)
+                        fly_farmtasks[i] = nil
+                    end
+                    fly_onsurvivorfarm = false
+                    fly_RemoveSafePlatform()
+                    if fly_IsThereChar() then
+                        LocalPlayer.Character.HumanoidRootPart.Anchored = false
+                    end
                 end
                 continue
             end
 
-            -- Limpeza profunda ao sair de partidas/iniciar novas para evitar carry-over bugs
             if not getgenv().AutoWinFlyActive or not MasterAutoFarmState or not fly_IsMatchActive() then
                 if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Anchored then
                     LocalPlayer.Character.HumanoidRootPart.Anchored = false
                 end
                 fly_RemoveSafePlatform()
-                
-                -- Força o encerramento de todas as threads correndo em segundo plano
-                for i, v in pairs(fly_farmtasks) do
-                    pcall(function() coroutine.close(v) end)
-                    fly_farmtasks[i] = nil
-                end
-                
                 fly_onsurvivorfarm = false
                 fly_bnhide = false
                 fly_Comp = 0 
