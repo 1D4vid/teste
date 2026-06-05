@@ -27,8 +27,8 @@ return function(env)
         return nil
     end
 
-    -- Processador assíncrono em lotes para eliminar travamentos de tela (lag spikes)
-    local function batchProcess(items, processFunc, onComplete)
+    -- Processador assíncrono em lotes com verificação de cancelamento ativa por sessão
+    local function batchProcess(items, processFunc, isActiveFunc, onComplete)
         local total = #items
         local chunk = 200 -- Processa 200 itens por frame
         local index = 1
@@ -36,6 +36,9 @@ return function(env)
         local function run()
             local count = 0
             while index <= total do
+                if isActiveFunc and not isActiveFunc() then
+                    break -- Aborta a varredura instantaneamente se a sessão mudar
+                end
                 local item = items[index]
                 if item then
                     processFunc(item)
@@ -47,7 +50,9 @@ return function(env)
                     count = 0
                 end
             end
-            if onComplete then onComplete() end
+            if onComplete and (not isActiveFunc or isActiveFunc()) then 
+                onComplete() 
+            end
         end
         task.spawn(run)
     end
@@ -95,6 +100,7 @@ return function(env)
     local wbEnabled = false
     local wbDescConn
     local wbBkp = setmetatable({}, {__mode = "k"})
+    local wbSession = 0
     
     local function applyWhiteBrick(part)
         if not wbEnabled then return end
@@ -115,9 +121,14 @@ return function(env)
 
     Library:CreateToggle(Page, "White Bricks", false, function(state)
         wbEnabled = state
+        wbSession = wbSession + 1
+        local currentSession = wbSession
+        
         if state then
             local desc = Workspace:GetDescendants()
-            batchProcess(desc, applyWhiteBrick)
+            batchProcess(desc, applyWhiteBrick, function() 
+                return wbEnabled and wbSession == currentSession 
+            end)
             
             wbDescConn = Workspace.DescendantAdded:Connect(function(child)
                 if wbEnabled then task.defer(function() applyWhiteBrick(child) end) end
@@ -134,6 +145,8 @@ return function(env)
                 if p and p.Parent then
                     pcall(function() p.Material = item.mat; p.Color = item.col end)
                 end
+            end, function() 
+                return not wbEnabled and wbSession == currentSession 
             end)
         end
     end)
@@ -143,6 +156,7 @@ return function(env)
     local snowDescConn
     local snowBkp = setmetatable({}, {__mode = "k"})
     local IgnoreNames = { ComputerTable = true, ExitDoor = true }
+    local snowSession = 0
     
     local function applySnowTexture(part)
         if not snowEnabled then return end
@@ -159,9 +173,14 @@ return function(env)
 
     Library:CreateToggle(Page, "Snow Textures", false, function(state)
         snowEnabled = state
+        snowSession = snowSession + 1
+        local currentSession = snowSession
+        
         if state then
             local desc = Workspace:GetDescendants()
-            batchProcess(desc, applySnowTexture)
+            batchProcess(desc, applySnowTexture, function() 
+                return snowEnabled and snowSession == currentSession 
+            end)
             
             snowDescConn = Workspace.DescendantAdded:Connect(function(child)
                 if snowEnabled then task.defer(function() applySnowTexture(child) end) end
@@ -178,6 +197,8 @@ return function(env)
                 if p and p.Parent then
                     pcall(function() p.Material = item.mat; p.Color = item.col end)
                 end
+            end, function() 
+                return not snowEnabled and snowSession == currentSession 
             end)
         end
     end)
@@ -274,6 +295,7 @@ return function(env)
         Concrete = "7341687607", DiamondPlate = "6849247561", Fabric = "118776397", Granite = "4722586771",
         Grass = "4722588177", Ice = "3823766459", Marble = "62967586", Metal = "62967586", Sand = "152572215"
     }
+    local mcSession = 0
 
     local function processMCPart(part)
         if not mcEnabled then return end
@@ -301,9 +323,14 @@ return function(env)
 
     Library:CreateToggle(Page, "Minecraft Texture", false, function(state)
         mcEnabled = state
+        mcSession = mcSession + 1
+        local currentSession = mcSession
+        
         if state then
             local desc = Workspace:GetDescendants()
-            batchProcess(desc, processMCPart)
+            batchProcess(desc, processMCPart, function() 
+                return mcEnabled and mcSession == currentSession 
+            end)
             
             mcDescendantConn = Workspace.DescendantAdded:Connect(function(newObj)
                 if mcEnabled then table.insert(mcFila, newObj) end
@@ -338,6 +365,8 @@ return function(env)
                         p.Material = item.mat
                     end)
                 end
+            end, function() 
+                return not mcEnabled and mcSession == currentSession 
             end)
         end
     end)
@@ -367,6 +396,7 @@ return function(env)
     local shadowDescConn = nil
     local shadowChangedConn = nil
     local shadowBkp = setmetatable({}, {__mode = "k"})
+    local shadowSession = 0
 
     local function applyShadowRemoval(objeto)
         if not removeShadowsEnabled then return end
@@ -385,6 +415,9 @@ return function(env)
 
     Library:CreateToggle(Page, "Remove Shadows", false, function(state)
         removeShadowsEnabled = state
+        shadowSession = shadowSession + 1
+        local currentSession = shadowSession
+        
         if state then
             pcall(function() Lighting.GlobalShadows = false end)
             shadowChangedConn = Lighting:GetPropertyChangedSignal("GlobalShadows"):Connect(function()
@@ -394,7 +427,9 @@ return function(env)
             end)
 
             local desc = Workspace:GetDescendants()
-            batchProcess(desc, applyShadowRemoval)
+            batchProcess(desc, applyShadowRemoval, function() 
+                return removeShadowsEnabled and shadowSession == currentSession 
+            end)
 
             shadowDescConn = Workspace.DescendantAdded:Connect(function(child)
                 if removeShadowsEnabled then task.defer(applyShadowRemoval, child) end
@@ -421,6 +456,8 @@ return function(env)
                         if data.Shadows ~= nil then obj.Shadows = data.Shadows end
                     end)
                 end
+            end, function() 
+                return not removeShadowsEnabled and shadowSession == currentSession 
             end)
         end
     end)
@@ -430,6 +467,7 @@ return function(env)
     local particlesDescConnW = nil
     local particlesDescConnL = nil
     local particleBkp = setmetatable({}, {__mode = "k"})
+    local particleSession = 0
 
     local function applyParticleRemoval(objeto)
         if not removeParticlesEnabled then return end
@@ -440,11 +478,10 @@ return function(env)
                            objeto:IsA("Smoke") or 
                            objeto:IsA("Trail") or 
                            objeto:IsA("Beam") or 
-                           objeto:IsA("PostEffect") -- Cobre Bloom, Blur, SunRays, DOF, ColorCorrection, etc.
+                           objeto:IsA("PostEffect")
         
         if isParticle then
             if not particleBkp[objeto] then
-                -- Cria um listener para bloquear o jogo de reativar a partícula
                 local connection
                 connection = objeto:GetPropertyChangedSignal("Enabled"):Connect(function()
                     if removeParticlesEnabled and objeto.Enabled == true then
@@ -459,20 +496,26 @@ return function(env)
             end
             pcall(function() objeto.Enabled = false end)
         elseif objeto:IsA("Explosion") then
-            -- Explosões são instantâneas, destruir é seguro
             pcall(function() objeto:Destroy() end)
         end
     end
 
     Library:CreateToggle(Page, "Remove Particles", false, function(state)
         removeParticlesEnabled = state
+        particleSession = particleSession + 1
+        local currentSession = particleSession
+        
         if state then
             local descW = Workspace:GetDescendants()
             local descL = Lighting:GetDescendants()
             
-            batchProcess(descW, applyParticleRemoval, function()
-                if removeParticlesEnabled then
-                    batchProcess(descL, applyParticleRemoval)
+            batchProcess(descW, applyParticleRemoval, function() 
+                return removeParticlesEnabled and particleSession == currentSession 
+            end, function()
+                if removeParticlesEnabled and particleSession == currentSession then
+                    batchProcess(descL, applyParticleRemoval, function() 
+                        return removeParticlesEnabled and particleSession == currentSession 
+                    end)
                 end
             end)
 
@@ -497,17 +540,17 @@ return function(env)
                 local obj = item.obj
                 local data = item.data
                 
-                -- Desconecta o escutador para evitar vazamento de memória
                 if data.Conn then
                     pcall(function() data.Conn:Disconnect() end)
                 end
                 
-                -- Restaura o estado original da partícula
                 if obj and obj.Parent then
                     pcall(function()
                         if data.Enabled ~= nil then obj.Enabled = data.Enabled end
                     end)
                 end
+            end, function() 
+                return not removeParticlesEnabled and particleSession == currentSession 
             end)
         end
     end)
@@ -704,7 +747,7 @@ return function(env)
         btn.MouseLeave:Connect(function() TweenService:Create(ebStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() end)
         btn.MouseButton1Click:Connect(function() 
             UserConfigs["TexturesPage_DoubleJump"] = "rbxassetid://" .. id
-            EnableDoubleJumpEffect("rbxassetid://" .. id)
+            EnableDoubleJumpEffect( "rbxassetid://" .. id)
         end)
     end
 
