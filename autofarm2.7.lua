@@ -1,4 +1,3 @@
-
 return function(env)
     local Library = env.Library
     local Page = env.Page
@@ -63,7 +62,7 @@ return function(env)
     -- ==========================================
     -- ELEMENTOS DA INTERFACE (UI)
     -- ==========================================
-    Library:CreateSection(Page, "Main Farming (n aguento mais)")
+    Library:CreateSection(Page, "Main Farming (BETAsssssss)")
 
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
         MasterAutoFarmState = state
@@ -348,8 +347,8 @@ return function(env)
                         
                         for _, alvo in pairs(Players:GetPlayers()) do
                             if alvo ~= LocalPlayer and alvo.Character then
-                                local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
-                                if Stats and Stats:FindFirstChild("Captured") and not Stats.Captured.Value then
+                               _G.Stats = alvo:FindFirstChild("TempPlayerStatsModule")
+                                if _G.Stats and _G.Stats:FindFirstChild("Captured") and not _G.Stats.Captured.Value then
                                     local tempRaiz = ObterRaiz(alvo.Character)
                                     if tempRaiz then
                                         AlvoAtual = alvo
@@ -799,7 +798,6 @@ return function(env)
         return false
     end
 
-    -- CORREÇÃO: Lê diretamente o valor booleano do jogo para evitar falsos negativos
     local function fly_IsMatchActive()
         return IsGameActive.Value
     end
@@ -860,21 +858,25 @@ return function(env)
         local forceEscape = false 
 
         local function PlayerReady()
-            if fly_TempPlayerStatsModule then
-                local ragdoll = fly_TempPlayerStatsModule:FindFirstChild("Ragdoll")
+            local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+            if stats then
+                local ragdoll = stats:FindFirstChild("Ragdoll")
                 if ragdoll and ragdoll.Value then
                     DoNotTeleport = true
                     return false
                 end
-                local health = fly_TempPlayerStatsModule:FindFirstChild("Health")
-                if (health and health.Value <= 0) or fly_TempPlayerStatsModule.IsBeast.Value then
+                local health = stats:FindFirstChild("Health")
+                if (health and health.Value <= 0) then
+                    return false
+                end
+                local isBeast = stats:FindFirstChild("IsBeast")
+                if isBeast and isBeast.Value == true then
                     return false
                 end
             end
             return fly_IsThereChar()
         end
 
-        -- Aguarda o personagem e dados estarem 100% carregados antes de iniciar qualquer loop
         local readyAttempts = 0
         while not PlayerReady() and readyAttempts < 20 do
             task.wait(0.2)
@@ -1205,7 +1207,6 @@ return function(env)
                 
                 if not DoNotTeleport then
                     task.wait(1)
-                    -- CORREÇÃO: Verifica se a partida não iniciou de novo durante a espera antes de teleportar para o lobby
                     if not fly_IsMatchActive() then
                         fly_TPPlayerSpawn()
                     end
@@ -1219,11 +1220,17 @@ return function(env)
 
     -- MONITORAMENTO DOS MAPAS (Voo)
     ReplicatedStorage.CurrentMap.Changed:Connect(function(newMap)
-        if newMap and getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
+        if newMap and getgenv().AutoWinFlyActive and MasterAutoFarmState then
+            -- Aguarda a replicação do módulo de atributos para evitar detectar status antigo de Beast
+            task.wait(1.5)
+            
             if fly_AmIBeast() then 
                 fly_SouBeastNessaRodada = true
                 return 
             end
+            
+            fly_SouBeastNessaRodada = false
+            
             while fly_IsInLobby() and fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState do
                 task.wait(0.2)
             end
@@ -1263,8 +1270,6 @@ return function(env)
                 continue
             end
 
-            -- CORREÇÃO: Se a partida não estiver ativa, removemos corrotinas antigas na hora 
-            -- para impedir que threads em background façam o teleporte fantasma para o lobby.
             if not getgenv().AutoWinFlyActive or not MasterAutoFarmState or not fly_IsMatchActive() then
                 if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Anchored then
                     LocalPlayer.Character.HumanoidRootPart.Anchored = false
@@ -1275,7 +1280,6 @@ return function(env)
                 fly_Comp = 0 
                 fly_SouBeastNessaRodada = false
                 
-                -- Limpa instantaneamente as threads anteriores pendentes
                 for i, v in pairs(fly_farmtasks) do
                     pcall(function() coroutine.close(v) end)
                     fly_farmtasks[i] = nil
@@ -1294,7 +1298,6 @@ return function(env)
                 fly_notifiedLobby = false
             end
 
-            -- Se era Beast mas por algum motivo não é mais durante a partida, reinicia
             if fly_SouBeastNessaRodada and not fly_AmIBeast() then
                 fly_SouBeastNessaRodada = false
             end
