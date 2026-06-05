@@ -88,7 +88,19 @@ return function(env)
         return wrapper
     end
 
-    -- Controle dinâmico de visibilidade do cursor do mouse padrão (Corrigido para restaurar ao fechar)
+    -- Sistema de restauração robusta e à prova de fechamento/destruição da UI
+    local function cleanUpCursor()
+        SetPCCursorActive(false)
+        PCSoftwareCursor.Visible = false
+        UserInputService.MouseIconEnabled = true
+        Mouse.Icon = ""
+    end
+
+    -- Registra escuta de destruição do objeto para prevenir sumiço do mouse
+    if PCSoftwareCursor then PCSoftwareCursor.Destroying:Connect(cleanUpCursor) end
+    if Page then Page.Destroying:Connect(cleanUpCursor) end
+
+    -- Controle dinâmico de visibilidade do cursor do mouse padrão
     local cursorLoopConn = nil
     local function updateMouseVisibility()
         local MainFrame = PCSoftwareCursor.Parent and PCSoftwareCursor.Parent:FindFirstChild("MainFrame")
@@ -96,12 +108,7 @@ return function(env)
         
         -- Se o menu estiver fechado ou invisível, reverte imediatamente para o cursor nativo
         if MainFrame and not MainFrame.Visible then
-            SetPCCursorActive(false) -- Desativa o loop do script principal
-            PCSoftwareCursor.Visible = false
-            if Mouse.Icon == "rbxassetid://0" or Mouse.Icon == "" then
-                Mouse.Icon = ""
-                UserInputService.MouseIconEnabled = true
-            end
+            cleanUpCursor()
             return
         end
 
