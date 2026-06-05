@@ -334,14 +334,13 @@ return function(env)
         getgenv().NexOptimization.ToggleFPSBooster(state)
     end)
 
-    -- [ TOGGLE REESCRITO DE ALTA PERFORMANCE E COMPATIBILIDADE REDUNDANTE DE SPAWNS ]
     local grayOutfitsEnabled = false
     local grayCharacterConns = {}
     local characterBackups = setmetatable({}, {__mode = "k"})
 
     local function applyGreyCharacter(char)
         if not char or not char.Parent then return end
-        if characterBackups[char] then return end -- Evita dupla aplicação
+        if characterBackups[char] then return end 
         
         local backup = {
             Parts = {},
@@ -356,7 +355,6 @@ return function(env)
             if (i:IsA("BasePart") or i:IsA("MeshPart")) and i.Name ~= "HumanoidRootPart" then
                 local isAcc = i:FindFirstAncestorOfClass("Accessory")
                 if isAcc then
-                    -- Processamento de Handle de acessório
                     if i.Name == "Handle" and not backup.Accessories[i] then
                         local handleBackup = {
                             Color = i.Color,
@@ -381,7 +379,6 @@ return function(env)
                         backup.Accessories[i] = handleBackup
                     end
                 else
-                    -- Processamento de parte do corpo
                     if not backup.Parts[i] then
                         backup.Parts[i] = {
                             Color = i.Color,
@@ -394,10 +391,9 @@ return function(env)
             elseif i:IsA("Pants") or i:IsA("Shirt") or i:IsA("ShirtGraphic") or i.Name == "Shirt Graphic" then
                 if not backup.Clothes[i] then
                     backup.Clothes[i] = i.Parent
-                    task.defer(function() i.Parent = nil end) -- Esconde de forma limpa e reversível
+                    task.defer(function() i.Parent = nil end) 
                 end
             elseif i:IsA("SpecialMesh") or i:IsA("Mesh") then
-                -- Lida com meshes de acessórios que carregam depois
                 local p = i.Parent
                 if p and p.Name == "Handle" and backup.Accessories[p] then
                     local hBkp = backup.Accessories[p]
@@ -410,14 +406,12 @@ return function(env)
             end
         end
 
-        -- Processa o que já está carregado
         for _, i in ipairs(char:GetDescendants()) do
             processItem(i)
         end
 
-        -- Conecta ouvinte dinâmico para carregar itens atrasados em tempo de execução
         local conn = char.DescendantAdded:Connect(function(desc)
-            task.wait() -- Dá tempo para as propriedades do Roblox inicializarem no client
+            task.wait() 
             if grayOutfitsEnabled then
                 processItem(desc)
             end
@@ -431,12 +425,10 @@ return function(env)
         local backup = characterBackups[char]
         if not backup then return end
         
-        -- Desconecta ouvinte de inserção dinâmica
         for _, conn in ipairs(backup.Connections) do
             conn:Disconnect()
         end
         
-        -- Restaura partes do corpo
         for part, data in pairs(backup.Parts) do
             if part and part.Parent then
                 part.Color = data.Color
@@ -444,7 +436,6 @@ return function(env)
             end
         end
         
-        -- Restaura acessórios
         for handle, data in pairs(backup.Accessories) do
             if handle and handle.Parent then
                 handle.Color = data.Color
@@ -457,7 +448,6 @@ return function(env)
             end
         end
         
-        -- Restaura roupas
         for clothing, originalParent in pairs(backup.Clothes) do
             if clothing then
                 clothing.Parent = char
@@ -467,12 +457,10 @@ return function(env)
         characterBackups[char] = nil
     end
 
-    -- Gerenciador inteligente de ciclo de vida de Spawns de personagens
     local function handleCharacterLoading(char)
         if not char then return end
         local player = Players:GetPlayerFromCharacter(char)
         if player then
-            -- Redundância de segurança: aguarda o carregamento de roupas nativo do Roblox antes de processar
             if not player:HasAppearanceLoaded() then
                 local loaded = false
                 local appearanceConn
@@ -482,13 +470,13 @@ return function(env)
                 end)
                 
                 local start = os.clock()
-                while not loaded and os.clock() - start < 5 do -- Timeout máximo de 5 segundos para não travar loops
+                while not loaded and os.clock() - start < 5 do 
                     task.wait(0.1)
                 end
                 if appearanceConn then appearanceConn:Disconnect() end
             end
         end
-        task.wait(0.1) -- Delay de sincronização do Roblox
+        task.wait(0.1) 
         if grayOutfitsEnabled then
             applyGreyCharacter(char)
         end
@@ -497,7 +485,6 @@ return function(env)
     Library:CreateToggle(Page, "Gray Characters", false, function(state)
         grayOutfitsEnabled = state
         if state then
-            -- Aplica imediatamente nos players que já estão logados
             for _, player in ipairs(Players:GetPlayers()) do
                 if player.Character then
                     task.spawn(handleCharacterLoading, player.Character)
@@ -508,7 +495,6 @@ return function(env)
                 table.insert(grayCharacterConns, conn)
             end
             
-            -- Ouvinte global de novos players que entrarem na sala
             local conn2 = Players.PlayerAdded:Connect(function(player)
                 local conn = player.CharacterAdded:Connect(function(char)
                     task.spawn(handleCharacterLoading, char)
@@ -517,13 +503,11 @@ return function(env)
             end)
             table.insert(grayCharacterConns, conn2)
         else
-            -- Desconecta todos os rastreadores de spawn
             for _, conn in ipairs(grayCharacterConns) do
                 conn:Disconnect()
             end
             table.clear(grayCharacterConns)
             
-            -- Restaura a coloração e as roupas originais de todos os personagens
             for char, _ in pairs(characterBackups) do
                 restoreCharacter(char)
             end
@@ -646,254 +630,19 @@ return function(env)
     Library:CreateSection(Page, "Double Jump (P2)", "Left")
     local targetParentDJ2 = GetParentTarget(Page)
 
-    -- ==========================================================
-    -- CROSSHAIRS P1 & P2 (Alinhados na Direita - Right)
-    -- ==========================================================
-    Library:CreateSection(Page, "Crosshairs (P1)", "Right")
-    Library:CreateSlider(Page, "Cursor Size", 10, 100, 24, UpdateCursorSizes)
-    local targetParentCur1 = GetParentTarget(Page)
-    
-    Library:CreateSection(Page, "Crosshairs (P2)", "Right")
-    local targetParentCur2 = GetParentTarget(Page)
-
     -- ==========================================
-    -- POPULATE DOUBLE JUMP EFFECTS
+    -- MOBILE JUMP BUTTON P1 & P2 (MOVIDOS PARA ESQUERDA)
     -- ==========================================
-    local currentDoubleJumpConns = {}
-    local originalTextures = setmetatable({}, {__mode = "k"})
-    local OriginalSparkleColors = setmetatable({}, {__mode = "k"})
-    
-    local function EnableDoubleJumpEffect(texturaID)
-        UserConfigs["TexturesPage_DoubleJump"] = texturaID
-        for _, c in ipairs(currentDoubleJumpConns) do c:Disconnect() end
-        table.clear(currentDoubleJumpConns)
-        
-        local function aplicarTextura(obj)
-            if texturaID == "Default" then
-                obj:SetAttribute("CurrentTexture", nil)
-                if obj.ClassName == "ParticleEmitter" then
-                    if originalTextures[obj] then obj.Texture = originalTextures[obj] end
-                elseif obj.ClassName == "Sparkles" then
-                    local oldClone = obj.Parent:FindFirstChild("CustomSparkleClone_" .. obj.Name)
-                    if oldClone then oldClone:Destroy() end
-                    if OriginalSparkleColors[obj] then pcall(function() obj.SparkleColor = OriginalSparkleColors[obj] end)
-                    else pcall(function() obj.SparkleColor = Color3.new(1, 1, 1) end) end
-                end
-                return
-            end
+    local targetParentMJ1, targetParentMJ2
+    local mobileJumpConns = {}
 
-            if obj:GetAttribute("CurrentTexture") == texturaID then return end
-            obj:SetAttribute("CurrentTexture", texturaID)
-            
-            local classe = obj.ClassName
-            if classe == "ParticleEmitter" then
-                local sucesso, texturaAtual = pcall(function() return obj.Texture end)
-                if sucesso and texturaAtual and string.find(string.lower(texturaAtual), "sparkles_main") then
-                    if not originalTextures[obj] then originalTextures[obj] = obj.Texture end
-                    obj.Texture = texturaID
-                end
-            elseif classe == "Sparkles" then
-                if not OriginalSparkleColors[obj] then OriginalSparkleColors[obj] = obj.SparkleColor end
-                pcall(function() obj.SparkleColor = Color3.new(0, 0, 0) end)
-                
-                local oldClone = obj.Parent:FindFirstChild("CustomSparkleClone_" .. obj.Name)
-                if oldClone then oldClone:Destroy() end
-                
-                local clone = Instance.new("ParticleEmitter")
-                clone.Name = "CustomSparkleClone_" .. obj.Name
-                clone.Texture = texturaID
-                clone.Rate = 20
-                clone.Speed = NumberRange.new(2, 4)
-                clone.Lifetime = NumberRange.new(1.5, 2)
-                clone.Rotation = NumberRange.new(0, 360)
-                clone.RotSpeed = NumberRange.new(-50, 50)
-                clone.LightEmission = 0.8
-                clone.ZOffset = 1
-                clone.Brightness = 2
-                clone.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.5, 1), NumberSequenceKeypoint.new(1, 0)})
-                clone.Parent = obj.Parent
-                clone.Enabled = obj.Enabled
-                
-                local conexao = obj:GetPropertyChangedSignal("Enabled"):Connect(function() 
-                    if clone then clone.Enabled = obj.Enabled end
-                end)
-                local destConn = obj.Destroying:Connect(function()
-                    if conexao then conexao:Disconnect() end
-                    if clone then clone:Destroy() end
-                end)
-                
-                table.insert(currentDoubleJumpConns, conexao)
-                table.insert(currentDoubleJumpConns, destConn)
-            end
-        end
-
-        -- Varredura ultrarrápida focada em players atuais
-        for _, plr in ipairs(Players:GetPlayers()) do
-            local char = plr.Character
-            if char then
-                for _, obj in ipairs(char:GetDescendants()) do
-                    if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
-                        aplicarTextura(obj)
-                    end
-                end
-            end
-        end
-
-        -- Varredura fracionada em segundo plano no Workspace
-        task.spawn(function()
-            local desc = Workspace:GetDescendants()
-            local total = #desc
-            local index = 1
-            local chunkSize = 150
-
-            while index <= total do
-                for i = 1, chunkSize do
-                    if index > total then break end
-                    local obj = desc[index]
-                    if obj and (obj:IsA("ParticleEmitter") or obj:IsA("Sparkles")) then
-                        aplicarTextura(obj)
-                    end
-                    index = index + 1
-                end
-                task.wait()
-            end
-        end)
-
-        -- Escuta em tempo real para novos elementos adicionados dinamicamente
-        if texturaID ~= "Default" then
-            table.insert(currentDoubleJumpConns, Workspace.DescendantAdded:Connect(function(obj)
-                if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
-                    task.defer(function() aplicarTextura(obj) end)
-                end
-            end))
-
-            for _, plr in ipairs(Players:GetPlayers()) do
-                table.insert(currentDoubleJumpConns, plr.CharacterAdded:Connect(function(char)
-                    table.insert(currentDoubleJumpConns, char.DescendantAdded:Connect(function(obj)
-                        if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
-                            task.defer(function() aplicarTextura(obj) end)
-                        end
-                    end))
-                end))
-            end
-
-            table.insert(currentDoubleJumpConns, Players.PlayerAdded:Connect(function(plr)
-                table.insert(currentDoubleJumpConns, plr.CharacterAdded:Connect(function(char)
-                    table.insert(currentDoubleJumpConns, char.DescendantAdded:Connect(function(obj)
-                        if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
-                            task.defer(function() aplicarTextura(obj) end)
-                        end
-                    end))
-                end))
-            end))
-        end
-    end
-
-    local CustomInputContainer = Instance.new("Frame")
-    CustomInputContainer.Size = UDim2.new(1, -2, 0, ContentConfig.ItemHeightNew)
-    CustomInputContainer.Position = UDim2.new(0, 1, 0, 0)
-    CustomInputContainer.BackgroundTransparency = 1
-    CustomInputContainer.Parent = targetParentDJ1
-
-    local CustomInputBox = Instance.new("TextBox")
-    CustomInputBox.Size = UDim2.new(1, -65, 1, 0)
-    CustomInputBox.Position = UDim2.new(0, 5, 0, 0)
-    CustomInputBox.BackgroundTransparency = 1
-    CustomInputBox.Text = ""
-    local savedDJ = UserConfigs["TexturesPage_DoubleJump"]
-    if savedDJ and savedDJ ~= "Default" then CustomInputBox.Text = savedDJ:gsub("rbxassetid://", "") end
-    CustomInputBox.PlaceholderText = "Texture ID..."
-    CustomInputBox.TextColor3 = Theme.TextDark
-    CustomInputBox.PlaceholderColor3 = Theme.TextDark
-    CustomInputBox.Font = Theme.Font
-    CustomInputBox.TextSize = 10
-    CustomInputBox.TextXAlignment = Enum.TextXAlignment.Left
-    CustomInputBox.ClearTextOnFocus = false
-    CustomInputBox.Parent = CustomInputContainer
-
-    local ApplyBtn = Instance.new("TextButton")
-    ApplyBtn.Size = UDim2.new(0, 55, 0, 20)
-    ApplyBtn.Position = UDim2.new(1, -60, 0.5, -10)
-    ApplyBtn.BackgroundColor3 = Color3.new(0,0,0)
-    ApplyBtn.BackgroundTransparency = 0.45
-    ApplyBtn.Text = "Apply"
-    ApplyBtn.Font = Enum.Font.GothamBold
-    ApplyBtn.TextSize = 10
-    ApplyBtn.TextColor3 = Theme.TextDark
-    ApplyBtn.Parent = CustomInputContainer
-    Instance.new("UICorner", ApplyBtn).CornerRadius = UDim.new(0, 4)
-    local abStr = Instance.new("UIStroke", ApplyBtn)
-    abStr.Color = Color3.fromRGB(40,40,40)
-
-    ApplyBtn.MouseButton1Click:Connect(function()
-        local val = CustomInputBox.Text
-        if val and val ~= "" then
-            local formatted = formatID(val)
-            if formatted then
-                UserConfigs["TexturesPage_DoubleJump"] = formatted
-                EnableDoubleJumpEffect(formatted)
-            end
-        end
-    end)
-
-    local effectIDs = {
-        "81110491136307", "117864251880006", "120181545812734", "74056211768119", 
-        "116419901031627", "92247449256845", "113423466689563", "90279999098357", 
-        "94123299347751", "105065705443269", "122902019815288", "138617722401997", 
-        "75192344666220", "139646605021296", "133105930199997", "96482830256985", 
-        "107964624563909", "122185636007520", "130200330618832", "84159990264787",
-        "87265760472097", "125925535971201", "99196076742919", "80555494674270", 
-        "77364460442867", "84014330993791", "80081088131892", "70463296258416",
-        "84683340454265", "110707827597886", "94615398600162", "136555497393349", 
-        "115660311620643", "87528090276578", "91090339346537", "104273334466284", 
-        "125877054664162", "99696281853254", "115091366896134", "118044368508403"
-    }
-
-    local GridWrapperDJ1 = createGridContainer(targetParentDJ1)
-    local GridWrapperDJ2 = createGridContainer(targetParentDJ2)
-
-    local defaultBtn = Instance.new("TextButton")
-    defaultBtn.Text = "Default"
-    defaultBtn.Font = Enum.Font.GothamBold
-    defaultBtn.TextSize = 9
-    defaultBtn.TextColor3 = Theme.TextDark
-    defaultBtn.BackgroundColor3 = Color3.new(0,0,0)
-    defaultBtn.BackgroundTransparency = 0.45
-    defaultBtn.Parent = GridWrapperDJ1
-    Instance.new("UICorner", defaultBtn).CornerRadius = UDim.new(0, 4)
-    local dbStr = Instance.new("UIStroke", defaultBtn)
-    dbStr.Color = Color3.fromRGB(40,40,40)
-    
-    defaultBtn.MouseEnter:Connect(function() TweenService:Create(dbStr, TweenInfo.new(0.2), {Color=Theme.Accent}):Play() TweenService:Create(defaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.Accent}):Play() end)
-    defaultBtn.MouseLeave:Connect(function() TweenService:Create(dbStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() TweenService:Create(defaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.TextDark}):Play() end)
-    defaultBtn.MouseButton1Click:Connect(function() UserConfigs["TexturesPage_DoubleJump"] = "Default" EnableDoubleJumpEffect("Default") end)
-
-    for i, id in ipairs(effectIDs) do
-        local targetGrid = (i <= 19) and GridWrapperDJ1 or GridWrapperDJ2
-        local btn = Instance.new("ImageButton")
-        btn.BackgroundColor3 = Color3.new(0,0,0)
-        btn.BackgroundTransparency = 0.45
-        btn.Image = "rbxassetid://" .. id
-        btn.ScaleType = Enum.ScaleType.Crop 
-        btn.Parent = targetGrid
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
-        local ebStr = Instance.new("UIStroke", btn)
-        ebStr.Color = Color3.fromRGB(40,40,40)
-
-        btn.MouseEnter:Connect(function() TweenService:Create(ebStr, TweenInfo.new(0.2), {Color=Theme.Accent}):Play() end)
-        btn.MouseLeave:Connect(function() TweenService:Create(ebStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() end)
-        btn.MouseButton1Click:Connect(function() 
-            UserConfigs["TexturesPage_DoubleJump"] = "rbxassetid://" .. id
-            EnableDoubleJumpEffect("rbxassetid://" .. id)
-        end)
-    end
-
-    -- [ MOBILE JUMP BUTTON ]
     if isMobile then
-        Library:CreateSection(Page, "Mobile Button Jump", "Right")
-        local targetParentMJ = GetParentTarget(Page)
+        Library:CreateSection(Page, "Mobile Button Jump (P1)", "Left")
+        targetParentMJ1 = GetParentTarget(Page)
 
-        local mobileJumpConns = {}
+        Library:CreateSection(Page, "Mobile Button Jump (P2)", "Left")
+        targetParentMJ2 = GetParentTarget(Page)
+
         local function EnableMobileButtonJump(texturaID)
             UserConfigs["TexturesPage_MobileJump"] = texturaID
             if not isMobile then return end
@@ -954,7 +703,7 @@ return function(env)
         MJInputContainer.Size = UDim2.new(1, -2, 0, ContentConfig.ItemHeightNew)
         MJInputContainer.Position = UDim2.new(0, 1, 0, 0)
         MJInputContainer.BackgroundTransparency = 1
-        MJInputContainer.Parent = targetParentMJ
+        MJInputContainer.Parent = targetParentMJ1
 
         local MJumpTextBox = Instance.new("TextBox")
         MJumpTextBox.Size = UDim2.new(1, -65, 1, 0)
@@ -997,7 +746,8 @@ return function(env)
             end
         end)
 
-        local MJGridWrapper = createGridContainer(targetParentMJ)
+        local MJGridWrapper1 = createGridContainer(targetParentMJ1)
+        local MJGridWrapper2 = createGridContainer(targetParentMJ2)
 
         local mDefaultBtn = Instance.new("TextButton")
         mDefaultBtn.Text = "Default"
@@ -1006,7 +756,7 @@ return function(env)
         mDefaultBtn.TextColor3 = Theme.TextDark
         mDefaultBtn.BackgroundColor3 = Color3.new(0,0,0)
         mDefaultBtn.BackgroundTransparency = 0.45
-        mDefaultBtn.Parent = MJGridWrapper
+        mDefaultBtn.Parent = MJGridWrapper1
         Instance.new("UICorner", mDefaultBtn).CornerRadius = UDim.new(0, 4)
         local mDStr = Instance.new("UIStroke", mDefaultBtn)
         mDStr.Color = Color3.fromRGB(40,40,40)
@@ -1015,18 +765,42 @@ return function(env)
         mDefaultBtn.MouseLeave:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() TweenService:Create(defaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.TextDark}):Play() end)
         mDefaultBtn.MouseButton1Click:Connect(function() UserConfigs["TexturesPage_MobileJump"] = "Default" EnableMobileButtonJump("Default") end)
 
-        local mJumpIDs = {
+        local mJumpIDs1 = {
             "126321670529682", "77430663366893", "115979689020396", "101678026501268", 
             "100604012502918", "107988778180975", "106355869384286", "119823685069603"
         }
+        
+        local mJumpIDs2 = {
+            "70463296258416", "80555494674270", "74056211768119", "115091366896134",
+            "117864251880006", "130200330618832", "77364460442867"
+        }
 
-        for _, id in ipairs(mJumpIDs) do
+        for _, id in ipairs(mJumpIDs1) do
             local btn = Instance.new("ImageButton")
             btn.BackgroundColor3 = Color3.new(0,0,0)
             btn.BackgroundTransparency = 0.45
             btn.Image = "rbxassetid://" .. id
             btn.ScaleType = Enum.ScaleType.Crop 
-            btn.Parent = MJGridWrapper
+            btn.Parent = MJGridWrapper1
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+            local str = Instance.new("UIStroke", btn)
+            str.Color = Color3.fromRGB(40,40,40)
+            
+            btn.MouseEnter:Connect(function() TweenService:Create(str, TweenInfo.new(0.2), {Color=Theme.Accent}):Play() end)
+            btn.MouseLeave:Connect(function() TweenService:Create(str, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() end)
+            btn.MouseButton1Click:Connect(function() 
+                UserConfigs["TexturesPage_MobileJump"] = "rbxassetid://" .. id
+                EnableMobileButtonJump("rbxassetid://" .. id)
+            end)
+        end
+
+        for _, id in ipairs(mJumpIDs2) do
+            local btn = Instance.new("ImageButton")
+            btn.BackgroundColor3 = Color3.new(0,0,0)
+            btn.BackgroundTransparency = 0.45
+            btn.Image = "rbxassetid://" .. id
+            btn.ScaleType = Enum.ScaleType.Crop 
+            btn.Parent = MJGridWrapper2
             Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
             local str = Instance.new("UIStroke", btn)
             str.Color = Color3.fromRGB(40,40,40)
@@ -1039,6 +813,16 @@ return function(env)
             end)
         end
     end
+
+    -- ==========================================================
+    -- CROSSHAIRS P1 & P2 (Alinhados na Direita - Right)
+    -- ==========================================================
+    Library:CreateSection(Page, "Crosshairs (P1)", "Right")
+    Library:CreateSlider(Page, "Cursor Size", 10, 100, 24, UpdateCursorSizes)
+    local targetParentCur1 = GetParentTarget(Page)
+    
+    Library:CreateSection(Page, "Crosshairs (P2)", "Right")
+    local targetParentCur2 = GetParentTarget(Page)
 
     -- ==========================================
     -- POPULATE CROSSHAIRS
@@ -1062,7 +846,9 @@ return function(env)
         {Name = "Use Cursor", ID = "112195317343485"}, {Name = "Use Cursor", ID = "89746976355403"},
         {Name = "Use Cursor", ID = "132191954497107"}, {Name = "Use Cursor", ID = "93050147531878"},
         {Name = "Use Cursor", ID = "88343941218179"}, {Name = "Use Cursor", ID = "81277812126144"},
-        {Name = "Use Cursor", ID = "131422226977434"}, {Name = "Use Cursor", ID = "116499481211766"}
+        {Name = "Use Cursor", ID = "131422226977434"}, {Name = "Use Cursor", ID = "116499481211766"},
+        -- NOVOS CURSORES SOLICITADOS
+        {Name = "Use Cursor", ID = "139192004969086"}, {Name = "Use Cursor", ID = "115820239502902"}
     }
 
     local function CreateCursorSystem(isMob)
@@ -1125,7 +911,7 @@ return function(env)
         local GridWrapperCur2 = createGridContainer(targetParentCur2)
         
         for i, item in ipairs(CursorList) do
-            local targetGrid = (i <= 18) and GridWrapperCur1 or GridWrapperCur2
+            local targetGrid = (i <= 19) and GridWrapperCur1 or GridWrapperCur2
 
             if item.ID == "RESET" then
                 local defaultBtn = Instance.new("TextButton")
@@ -1160,8 +946,11 @@ return function(env)
                 btn.BackgroundColor3 = Color3.new(0,0,0)
                 btn.BackgroundTransparency = 0.45
                 btn.Image = "rbxassetid://" .. item.ID
-                btn.ScaleType = Enum.ScaleType.Crop 
+                btn.ImageColor3 = Color3.fromRGB(255, 255, 255) -- CORREÇÃO: Força as cores originais da textura
+                btn.ImageTransparency = 0 -- CORREÇÃO: Força a opacidade total no carregamento
+                btn.ScaleType = Enum.ScaleType.Fit 
                 btn.Parent = targetGrid
+                btn.ZIndex = 5
                 Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
                 local imgStr = Instance.new("UIStroke", btn)
                 imgStr.Color = Color3.fromRGB(40,40,40)
@@ -1209,6 +998,17 @@ return function(env)
                 MobileCrosshair.Image = saved
                 MobileCrosshair.Visible = true 
             end
+        end
+    end)
+
+    -- CORREÇÃO DE RENDERING DO ROBLOX: Força redesenho do layout para evitar imagens cinzas/apagadas
+    task.spawn(function()
+        task.wait(0.3)
+        if Page and Page:IsA("ScrollingFrame") then
+            local current = Page.CanvasPosition
+            Page.CanvasPosition = Vector2.new(current.X, current.Y + 1)
+            task.wait()
+            Page.CanvasPosition = current
         end
     end)
 end
