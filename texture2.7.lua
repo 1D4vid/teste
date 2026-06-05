@@ -27,31 +27,6 @@ return function(env)
         return nil
     end
 
-    -- Processador de altíssima performance baseado em Orçamento de Tempo (Frame Budget de 1.5ms)
-    local function batchProcess(items, processFunc, onComplete)
-        local total = #items
-        local index = 1
-        
-        local function run()
-            local startTime = os.clock()
-            while index <= total do
-                local item = items[index]
-                if item then
-                    processFunc(item)
-                end
-                index = index + 1
-                
-                -- Se a execução deste frame passar de 1.5ms, pausa para o próximo frame
-                if os.clock() - startTime >= 0.0015 then
-                    task.wait()
-                    startTime = os.clock() -- Reseta o cronômetro para o novo frame
-                end
-            end
-            if onComplete then onComplete() end
-        end
-        task.spawn(run)
-    end
-
     local function createGridContainer(parentTarget)
         local bg = Instance.new("Frame")
         bg.Size = UDim2.new(1, -2, 0, 0)
@@ -87,223 +62,148 @@ return function(env)
     end
 
     -- ==========================================
-    -- SISTEMA UNIFICADO DE RENDERIZAÇÃO DO MAPA
+    -- SISTEMA UNIFICADO DE BACKUP DE FABRICA
     -- ==========================================
-    local cachedParts = {}
-    local cachedLights = {}
-    
-    local originalMapStates = setmetatable({}, {__mode = "k"})
-    local originalLightStates = setmetatable({}, {__mode = "k"})
-    local mcTexturesCache = setmetatable({}, {__mode = "k"}) -- Cache local das texturas 3D do Minecraft
+    local originalMaterials = setmetatable({}, {__mode = "k"})
+    local originalColors = setmetatable({}, {__mode = "k"})
+    local originalShadows = setmetatable({}, {__mode = "k"})
+    local originalLightShadows = setmetatable({}, {__mode = "k"})
 
-    local wbEnabled = false
-    local snowEnabled = false
-    local mcEnabled = false
-    local removeShadowsEnabled = false
-
-    local IgnoreNames = { ComputerTable = true, ExitDoor = true }
-    local mcFaces = {"Front", "Back", "Bottom", "Top", "Right", "Left"}
-    
-    -- Mapeamento otimizado usando Enums diretamente (Evita alocação lenta de Strings)
-    local mcMaterials = {
-        [Enum.Material.Wood] = "3258599312", 
-        [Enum.Material.WoodPlanks] = "8676581022", 
-        [Enum.Material.Brick] = "8558400252", 
-        [Enum.Material.Cobblestone] = "5003953441",
-        [Enum.Material.Concrete] = "7341687607", 
-        [Enum.Material.DiamondPlate] = "6849247561", 
-        [Enum.Material.Fabric] = "118776397", 
-        [Enum.Material.Granite] = "4722586771",
-        [Enum.Material.Grass] = "4722588177", 
-        [Enum.Material.Ice] = "3823766459", 
-        [Enum.Material.Marble] = "62967586", 
-        [Enum.Material.Metal] = "62967586", 
-        [Enum.Material.Sand] = "152572215"
-    }
-
-    -- Identificador ultrarrápido de peças pertencentes a personagens (Evita travessias recursivas na árvore)
-    local function isPlayerPart(part)
-        local parent = part.Parent
-        if not parent then return false end
-        if parent:IsA("Model") and Players:GetPlayerFromCharacter(parent) then
-            return true
+    local function setPartVisual(part, material, color)
+        if not part:IsA("BasePart") or part:IsA("Terrain") then return end
+        if not originalMaterials[part] then
+            originalMaterials[part] = part.Material
+            originalColors[part] = part.Color
         end
-        local grand = parent.Parent
-        if grand and grand:IsA("Model") and Players:GetPlayerFromCharacter(grand) then
-            return true
-        end
-        return false
-    end
-
-    -- Função mestre para atualizar o visual de uma parte baseado nos estados ativos
-    local function refreshPartVisual(part)
-        if not part or not part.Parent then return end
-
-        -- 1. Cria o backup de fábrica caso não exista
-        local bkp = originalMapStates[part]
-        if not bkp then
-            bkp = {
-                Material = part.Material,
-                Color = part.Color,
-                CastShadow = part.CastShadow
-            }
-            originalMapStates[part] = bkp
-        end
-
-        -- 2. Define os alvos baseado na hierarquia de prioridades dos Toggles
-        local targetMaterial = bkp.Material
-        local targetColor = bkp.Color
-        local targetShadow = bkp.CastShadow
-
-        -- Otimização de sombras
-        if removeShadowsEnabled then
-            targetShadow = false
-        end
-
-        local mcApplied = false
-
-        -- Prioridade de texturas do mapa (Zero buscas hierárquicas em runtime)
-        if snowEnabled then
-            if part.Anchored and not IgnoreNames[part.Name] then
-                targetMaterial = Enum.Material.Snow
-                targetColor = Color3.fromRGB(255, 255, 255)
-            end
-        elseif wbEnabled then
-            targetMaterial = Enum.Material.Brick
-            targetColor = Color3.fromRGB(255, 255, 255)
-        elseif mcEnabled then
-            local textureId = mcMaterials[bkp.Material]
-            if textureId then
-                targetMaterial = Enum.Material.SmoothPlastic
-                mcApplied = true
-                
-                -- Busca as texturas diretamente pelo cache (Evita usar FindFirstChild)
-                local texGroup = mcTexturesCache[part]
-                if not texGroup then
-                    texGroup = {}
-                    for i = 1, 6 do
-                        local face = mcFaces[i]
-                        local tex = Instance.new("Texture")
-                        tex.Name = "McTexture_" .. face
-                        tex.ZIndex = 2147483647
-                        tex.Face = Enum.NormalId[face]
-                        tex.StudsPerTileU = 4
-                        tex.StudsPerTileV = 4
-                        tex.Parent = part
-                        texGroup[i] = tex
-                    end
-                    mcTexturesCache[part] = texGroup
-                end
-                
-                -- Atualiza propriedades sem recriar objetos
-                local fullTexId = "rbxassetid://" .. textureId
-                local partColor = bkp.Color
-                local partTrans = part.Transparency
-                for i = 1, 6 do
-                    local tex = texGroup[i]
-                    if tex and tex.Parent then
-                        if tex.Texture ~= fullTexId then tex.Texture = fullTexId end
-                        if tex.Color3 ~= partColor then tex.Color3 = partColor end
-                        if tex.Transparency ~= partTrans then tex.Transparency = partTrans end
-                    end
-                end
-            end
-        end
-
-        -- Destrói as texturas do Minecraft e limpa o cache se o toggle for desligado
-        if not mcApplied then
-            local texGroup = mcTexturesCache[part]
-            if texGroup then
-                for i = 1, 6 do
-                    local tex = texGroup[i]
-                    if tex then pcall(function() tex:Destroy() end) end
-                end
-                mcTexturesCache[part] = nil
-            end
-        end
-
-        -- 3. Aplica as propriedades calculadas de forma segura e rápida
         pcall(function()
-            if part.Material ~= targetMaterial then part.Material = targetMaterial end
-            if part.Color ~= targetColor then part.Color = targetColor end
-            if part.CastShadow ~= targetShadow then part.CastShadow = targetShadow end
+            if material then part.Material = material end
+            if color then part.Color = color end
         end)
     end
 
-    -- Atualiza as propriedades de iluminação das lâmpadas do mapa
-    local function refreshLightVisual(light)
-        if not light or not light.Parent then return end
-        local bkp = originalLightStates[light]
-        if not bkp then
-            bkp = { Shadows = light.Shadows }
-            originalLightStates[light] = bkp
-        end
-
-        local targetShadow = bkp.Shadows
-        if removeShadowsEnabled then
-            targetShadow = false
-        end
-
-        pcall(function()
-            if light.Shadows ~= targetShadow then light.Shadows = targetShadow end
-        end)
-    end
-
-    -- Escaneamento progressivo em segundo plano ao iniciar o script (Zero-Lag de inicialização)
-    task.spawn(function()
-        local desc = Workspace:GetDescendants()
-        local startTime = os.clock()
-        for i = 1, #desc do
-            local v = desc[i]
-            local class = v.ClassName
-            
-            -- Filtro de alta velocidade por classe
-            if class == "Part" or class == "MeshPart" or class == "WedgePart" or class == "CornerWedgePart" then
-                if not isPlayerPart(v) then -- Ignora partes de personagens previamente
-                    table.insert(cachedParts, v)
-                end
-            elseif class == "PointLight" or class == "SpotLight" or class == "SurfaceLight" then
-                table.insert(cachedLights, v)
-            end
-            
-            -- Cede o frame se o escaneamento inicial passar de 1.5ms
-            if os.clock() - startTime >= 0.0015 then
-                task.wait()
-                startTime = os.clock()
-            end
-        end
-
-        -- Captura novos elementos de forma extremamente barata (Comparações de Strings)
-        Workspace.DescendantAdded:Connect(function(child)
-            task.defer(function()
-                local class = child.ClassName
-                if class == "Part" or class == "MeshPart" or class == "WedgePart" or class == "CornerWedgePart" then
-                    if not isPlayerPart(child) then
-                        table.insert(cachedParts, child)
-                        refreshPartVisual(child)
-                    end
-                elseif class == "PointLight" or class == "SpotLight" or class == "SurfaceLight" then
-                    table.insert(cachedLights, child)
-                    refreshLightVisual(child)
-                end
+    local function restorePartVisual(part)
+        local origMat = originalMaterials[part]
+        local origCol = originalColors[part]
+        if origMat then
+            pcall(function()
+                part.Material = origMat
+                part.Color = origCol
             end)
-        end)
-    end)
-
+        end
+    end
 
     -- ==========================================
     -- MAP TEXTURES (Coluna Esquerda)
     -- ==========================================
     Library:CreateSection(Page, "Map Textures", "Left")
 
+    -- [ WHITE BRICKS ]
+    local wbEnabled = false
+    local wbDescConn
+    local wbSession = 0
+    
     Library:CreateToggle(Page, "White Bricks", false, function(state)
         wbEnabled = state
-        batchProcess(cachedParts, refreshPartVisual)
+        wbSession = wbSession + 1
+        local currentSession = wbSession
+        
+        if state then
+            task.spawn(function()
+                local desc = Workspace:GetDescendants()
+                local t = os.clock()
+                for i = 1, #desc do
+                    if not wbEnabled or wbSession ~= currentSession then break end
+                    local part = desc[i]
+                    if part:IsA("BasePart") and not part:IsA("Terrain") then
+                        local parentModel = part:FindFirstAncestorOfClass("Model")
+                        if not (parentModel and parentModel:FindFirstChildOfClass("Humanoid")) then
+                            setPartVisual(part, Enum.Material.Brick, Color3.fromRGB(255, 255, 255))
+                        end
+                    end
+                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+                end
+            end)
+            wbDescConn = Workspace.DescendantAdded:Connect(function(child)
+                if wbEnabled and child:IsA("BasePart") then
+                    task.defer(function()
+                        if wbEnabled and wbSession == currentSession then
+                            local parentModel = child:FindFirstAncestorOfClass("Model")
+                            if not (parentModel and parentModel:FindFirstChildOfClass("Humanoid")) then
+                                setPartVisual(child, Enum.Material.Brick, Color3.fromRGB(255, 255, 255))
+                            end
+                        end
+                    end)
+                end
+            end)
+        else
+            if wbDescConn then wbDescConn:Disconnect() wbDescConn = nil end
+            task.spawn(function()
+                local desc = Workspace:GetDescendants()
+                local t = os.clock()
+                for i = 1, #desc do
+                    if wbEnabled or wbSession ~= currentSession then break end
+                    local part = desc[i]
+                    if part:IsA("BasePart") then
+                        restorePartVisual(part)
+                    end
+                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+                end
+            end)
+        end
     end)
 
+    -- [ SNOW TEXTURES ]
+    local snowEnabled = false
+    local snowDescConn
+    local IgnoreNames = { ComputerTable = true, ExitDoor = true }
+    local snowSession = 0
+    
     Library:CreateToggle(Page, "Snow Textures", false, function(state)
         snowEnabled = state
-        batchProcess(cachedParts, refreshPartVisual)
+        snowSession = snowSession + 1
+        local currentSession = snowSession
+        
+        if state then
+            task.spawn(function()
+                local desc = Workspace:GetDescendants()
+                local t = os.clock()
+                for i = 1, #desc do
+                    if not snowEnabled or snowSession ~= currentSession then break end
+                    local part = desc[i]
+                    if part:IsA("BasePart") and not part:IsA("Terrain") then
+                        if part.Anchored and not IgnoreNames[part.Name] then
+                            setPartVisual(part, Enum.Material.Snow, Color3.fromRGB(255, 255, 255))
+                        end
+                    end
+                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+                end
+            end)
+            snowDescConn = Workspace.DescendantAdded:Connect(function(child)
+                if snowEnabled and child:IsA("BasePart") then
+                    task.defer(function()
+                        if snowEnabled and snowSession == currentSession then
+                            if child.Anchored and not IgnoreNames[child.Name] then
+                                setPartVisual(child, Enum.Material.Snow, Color3.fromRGB(255, 255, 255))
+                            end
+                        end
+                    end)
+                end
+            end)
+        else
+            if snowDescConn then snowDescConn:Disconnect() snowDescConn = nil end
+            task.spawn(function()
+                local desc = Workspace:GetDescendants()
+                local t = os.clock()
+                for i = 1, #desc do
+                    if snowEnabled or snowSession ~= currentSession then break end
+                    local part = desc[i]
+                    if part:IsA("BasePart") then
+                        restorePartVisual(part)
+                    end
+                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+                end
+            end)
+        end
     end)
 
     -- [ ULTRA HD GRAPHICS ]
@@ -386,9 +286,115 @@ return function(env)
         end
     end)
 
+    -- [ MINECRAFT TEXTURE ]
+    local mcDescendantConn
+    local mcEnabled = false
+    local mcFaces = {"Front", "Back", "Bottom", "Top", "Right", "Left"}
+    
+    -- Mapeamento rápido usando Enums diretamente
+    local mcMaterials = {
+        [Enum.Material.Wood] = "3258599312", 
+        [Enum.Material.WoodPlanks] = "8676581022", 
+        [Enum.Material.Brick] = "8558400252", 
+        [Enum.Material.Cobblestone] = "5003953441",
+        [Enum.Material.Concrete] = "7341687607", 
+        [Enum.Material.DiamondPlate] = "6849247561", 
+        [Enum.Material.Fabric] = "118776397", 
+        [Enum.Material.Granite] = "4722586771",
+        [Enum.Material.Grass] = "4722588177", 
+        [Enum.Material.Ice] = "3823766459", 
+        [Enum.Material.Marble] = "62967586", 
+        [Enum.Material.Metal] = "62967586", 
+        [Enum.Material.Sand] = "152572215"
+    }
+    local mcSession = 0
+
     Library:CreateToggle(Page, "Minecraft Texture", false, function(state)
         mcEnabled = state
-        batchProcess(cachedParts, refreshPartVisual)
+        mcSession = mcSession + 1
+        local currentSession = mcSession
+        
+        if state then
+            task.spawn(function()
+                local desc = Workspace:GetDescendants()
+                local t = os.clock()
+                for i = 1, #desc do
+                    if not mcEnabled or mcSession ~= currentSession then break end
+                    local part = desc[i]
+                    if part:IsA("BasePart") and part.Transparency < 1 then
+                        local textureId = mcMaterials[part.Material]
+                        if textureId and not part:FindFirstChild("McTexture_Front") then
+                            if not originalMaterials[part] then
+                                originalMaterials[part] = part.Material
+                                originalColors[part] = part.Color
+                            end
+                            for _, face in ipairs(mcFaces) do
+                                local newTex = Instance.new("Texture")
+                                newTex.Name = "McTexture_" .. face
+                                newTex.ZIndex = 2147483647
+                                newTex.Texture = "rbxassetid://" .. textureId
+                                newTex.Face = Enum.NormalId[face]
+                                newTex.StudsPerTileU = 4
+                                newTex.StudsPerTileV = 4
+                                newTex.Color3 = part.Color
+                                newTex.Transparency = part.Transparency
+                                newTex.Parent = part
+                            end
+                            part.Material = Enum.Material.SmoothPlastic
+                        end
+                    end
+                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+                end
+            end)
+            mcDescendantConn = Workspace.DescendantAdded:Connect(function(child)
+                if mcEnabled and child:IsA("BasePart") then
+                    task.defer(function()
+                        if mcEnabled and mcSession == currentSession and child.Transparency < 1 then
+                            local textureId = mcMaterials[child.Material]
+                            if textureId and not child:FindFirstChild("McTexture_Front") then
+                                if not originalMaterials[child] then
+                                    originalMaterials[child] = child.Material
+                                    originalColors[child] = child.Color
+                                end
+                                for _, face in ipairs(mcFaces) do
+                                    local newTex = Instance.new("Texture")
+                                    newTex.Name = "McTexture_" .. face
+                                    newTex.ZIndex = 2147483647
+                                    newTex.Texture = "rbxassetid://" .. textureId
+                                    newTex.Face = Enum.NormalId[face]
+                                    newTex.StudsPerTileU = 4
+                                    newTex.StudsPerTileV = 4
+                                    newTex.Color3 = child.Color
+                                    newTex.Transparency = child.Transparency
+                                    newTex.Parent = child
+                                end
+                                child.Material = Enum.Material.SmoothPlastic
+                            end
+                        end
+                    end)
+                end
+            end)
+        else
+            if mcDescendantConn then mcDescendantConn:Disconnect() mcDescendantConn = nil end
+            task.spawn(function()
+                local desc = Workspace:GetDescendants()
+                local t = os.clock()
+                for i = 1, #desc do
+                    if mcEnabled or mcSession ~= currentSession then break end
+                    local part = desc[i]
+                    if part:IsA("BasePart") then
+                        pcall(function()
+                            for _, face in ipairs(mcFaces) do
+                                local tex = part:FindFirstChild("McTexture_" .. face)
+                                if tex then tex:Destroy() end
+                            end
+                        end)
+                        restorePartVisual(part)
+                    end
+                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+                end
+            end)
+        end
     end)
 
 
@@ -412,10 +418,15 @@ return function(env)
     end)
 
     -- [ REMOVE SHADOWS ]
+    local removeShadowsEnabled = false
+    local shadowDescConn = nil
     local shadowChangedConn = nil
+    local shadowSession = 0
 
     Library:CreateToggle(Page, "Remove Shadows", false, function(state)
         removeShadowsEnabled = state
+        shadowSession = shadowSession + 1
+        local currentSession = shadowSession
         
         if state then
             pcall(function() Lighting.GlobalShadows = false end)
@@ -424,14 +435,65 @@ return function(env)
                     pcall(function() Lighting.GlobalShadows = false end)
                 end
             end)
+
+            task.spawn(function()
+                local desc = Workspace:GetDescendants()
+                local t = os.clock()
+                for i = 1, #desc do
+                    if not removeShadowsEnabled or shadowSession ~= currentSession then break end
+                    local part = desc[i]
+                    if part:IsA("BasePart") then
+                        if not originalShadows[part] then
+                            originalShadows[part] = part.CastShadow
+                        end
+                        pcall(function() part.CastShadow = false end)
+                    elseif part:IsA("Light") then
+                        if not originalLightShadows[part] then
+                            originalLightShadows[part] = part.Shadows
+                        end
+                        pcall(function() part.Shadows = false end)
+                    end
+                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+                end
+            end)
+
+            shadowDescConn = Workspace.DescendantAdded:Connect(function(child)
+                if removeShadowsEnabled and (child:IsA("BasePart") or child:IsA("Light")) then
+                    task.defer(function()
+                        if removeShadowsEnabled and shadowSession == currentSession then
+                            if child:IsA("BasePart") then
+                                if not originalShadows[child] then originalShadows[child] = child.CastShadow end
+                                pcall(function() child.CastShadow = false end)
+                            elseif child:IsA("Light") then
+                                if not originalLightShadows[child] then originalLightShadows[child] = child.Shadows end
+                                pcall(function() child.Shadows = false end)
+                            end
+                        end
+                    end)
+                end
+            end)
         else
+            if shadowDescConn then shadowDescConn:Disconnect() shadowDescConn = nil end
             if shadowChangedConn then shadowChangedConn:Disconnect() shadowChangedConn = nil end
             pcall(function() Lighting.GlobalShadows = true end)
-        end
 
-        batchProcess(cachedParts, refreshPartVisual, function()
-            batchProcess(cachedLights, refreshLightVisual)
-        end)
+            task.spawn(function()
+                local desc = Workspace:GetDescendants()
+                local t = os.clock()
+                for i = 1, #desc do
+                    if removeShadowsEnabled or shadowSession ~= currentSession then break end
+                    local part = desc[i]
+                    if part:IsA("BasePart") then
+                        local orig = originalShadows[part]
+                        if orig ~= nil then pcall(function() part.CastShadow = orig end) end
+                    elseif part:IsA("Light") then
+                        local orig = originalLightShadows[part]
+                        if orig ~= nil then pcall(function() part.Shadows = orig end) end
+                    end
+                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+                end
+            end)
+        end
     end)
 
     -- [ REMOVE PARTICLES ]
@@ -475,12 +537,22 @@ return function(env)
         removeParticlesEnabled = state
         
         if state then
-            local descW = Workspace:GetDescendants()
-            local descL = Lighting:GetDescendants()
-            
-            batchProcess(descW, applyParticleRemoval, function()
+            task.spawn(function()
+                local descW = Workspace:GetDescendants()
+                local t = os.clock()
+                for i = 1, #descW do
+                    if not removeParticlesEnabled then break end
+                    applyParticleRemoval(descW[i])
+                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+                end
+                
                 if removeParticlesEnabled then
-                    batchProcess(descL, applyParticleRemoval)
+                    local descL = Lighting:GetDescendants()
+                    for i = 1, #descL do
+                        if not removeParticlesEnabled then break end
+                        applyParticleRemoval(descL[i])
+                        if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+                    end
                 end
             end)
 
@@ -496,23 +568,30 @@ return function(env)
 
             local currentBkp = particleBkp
             particleBkp = setmetatable({}, {__mode = "k"})
-            local toRevert = {}
-            for obj, data in pairs(currentBkp) do
-                table.insert(toRevert, {obj = obj, data = data})
-            end
-
-            batchProcess(toRevert, function(item)
-                local obj = item.obj
-                local data = item.data
-                
-                if data.Conn then
-                    pcall(function() data.Conn:Disconnect() end)
+            
+            task.spawn(function()
+                local toRevert = {}
+                for obj, data in pairs(currentBkp) do
+                    table.insert(toRevert, {obj = obj, data = data})
                 end
                 
-                if obj and obj.Parent then
-                    pcall(function()
-                        if data.Enabled ~= nil then obj.Enabled = data.Enabled end
-                    end)
+                local t = os.clock()
+                for i = 1, #toRevert do
+                    if removeParticlesEnabled then break end
+                    local item = toRevert[i]
+                    local obj = item.obj
+                    local data = item.data
+                    
+                    if data.Conn then
+                        pcall(function() data.Conn:Disconnect() end)
+                    end
+                    
+                    if obj and obj.Parent then
+                        pcall(function()
+                            if data.Enabled ~= nil then obj.Enabled = data.Enabled end
+                        end)
+                    end
+                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
                 end
             end)
         end
