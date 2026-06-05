@@ -57,7 +57,6 @@ return function(env)
     local fly_Comp = 0
     local fly_notifiedLobby = false
     local fly_SouBeastNessaRodada = false
-    local ExitDoorBanList = {}
 
     -- ==========================================
     -- VARIÁVEIS DO AUTO WIN SURVIVOR (TELEPORT)
@@ -65,12 +64,9 @@ return function(env)
     local tp_bnhide = false
     local tp_lpos = nil
     local tp_safePlatform = nil
-    local tp_bnhideelapse = 0
-    local tp_ComputerBanList = {}
-    local tp_CurrentTargetPC = nil
 
     -- ==========================================
-    -- FUNÇÕES DE LIMPEZA E CONTROLE (FLY & TELEPORT)
+    -- FUNÇÕES DE LIMPEZA E CONTROLE (FLY)
     -- ==========================================
     local function fly_RemoveSafePlatform()
         if fly_safePlatform then
@@ -101,19 +97,7 @@ return function(env)
         fly_TempPlayerStatsModule = nil
         fly_Comp = 0
         fly_notifiedLobby = false
-        table.clear(ExitDoorBanList)
         
-        -- Reset de estados e plataforma do modo Teleport
-        tp_bnhide = false
-        tp_bnhideelapse = 0
-        tp_lpos = nil
-        tp_CurrentTargetPC = nil
-        table.clear(tp_ComputerBanList)
-        if tp_safePlatform then
-            pcall(function() tp_safePlatform:Destroy() end)
-            tp_safePlatform = nil
-        end
-
         if not keepBeastState then
             fly_SouBeastNessaRodada = false
         end
@@ -140,7 +124,7 @@ return function(env)
     -- ==========================================
     -- ELEMENTOS DA INTERFACE (UI)
     -- ==========================================
-    Library:CreateSection(Page, "Main Farming (BETAss)")
+    Library:CreateSection(Page, "Main Farming (BETA)")
 
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
         MasterAutoFarmState = state
@@ -689,39 +673,25 @@ return function(env)
             
             local pcMaisPerto = nil
             local menorDistancia = math.huge
-            local currentTime = tick() * 1000
 
             for _, obj in pairs(Workspace:GetDescendants()) do
                 if obj.Name == "ComputerTable" then
-                    -- Filtro inteligente de computadores banidos (camping)
-                    local isBanned = false
-                    for bannedTime, bannedPC in pairs(tp_ComputerBanList) do
-                        if bannedPC == obj then
-                            if currentTime - bannedTime < 25000 then
-                                isBanned = true
-                            else
-                                tp_ComputerBanList[bannedTime] = nil
-                            end
-                        end
-                    end
-
-                    if not isBanned then
-                        local tela = obj:FindFirstChild("Screen")
-                        local teclado = obj:FindFirstChild("Keyboard") or obj:FindFirstChildWhichIsA("BasePart")
-                        local eventoPC = obj:FindFirstChild("Event", true) or obj:FindFirstChildWhichIsA("RemoteEvent", true)
-                        
-                        if tela and eventoPC and teclado then
-                            local corTela = string.lower(tostring(tela.BrickColor))
-                            if not string.find(corTela, "green") and not TemGenteNoPC(teclado.Position) then
-                                if hrp then
-                                    local distancia = (hrp.Position - teclado.Position).Magnitude
-                                    if distancia < menorDistancia then
-                                        menorDistancia = distancia
-                                        pcMaisPerto = {mesa = obj, tela = tela, evento = eventoPC}
-                                    end
-                                else
-                                    return obj, tela, eventoPC 
+                    local tela = obj:FindFirstChild("Screen")
+                    local teclado = obj:FindFirstChild("Keyboard") or obj:FindFirstChildWhichIsA("BasePart")
+                    local eventoPC = obj:FindFirstChild("Event", true) or obj:FindFirstChildWhichIsA("RemoteEvent", true)
+                    
+                    if tela and eventoPC and teclado then
+                        local corTela = string.lower(tostring(tela.BrickColor))
+                        if not string.find(corTela, "green") and not TemGenteNoPC(teclado.Position) then
+                            
+                            if hrp then
+                                local distancia = (hrp.Position - teclado.Position).Magnitude
+                                if distancia < menorDistancia then
+                                    menorDistancia = distancia
+                                    pcMaisPerto = {mesa = obj, tela = tela, evento = eventoPC}
                                 end
+                            else
+                                return obj, tela, eventoPC 
                             end
                         end
                     end
@@ -757,7 +727,6 @@ return function(env)
                     local mesaPC, tela, eventoPC = ObterPCParaHackear()
                     
                     if mesaPC and tela and eventoPC then
-                        tp_CurrentTargetPC = mesaPC -- Define o computador alvo atual
                         local pcCFrame
                         if mesaPC:IsA("Model") then 
                             pcCFrame = mesaPC:GetPivot() 
@@ -772,17 +741,6 @@ return function(env)
                             if sucesso then
                                 while getgenv().FarmRodando and not getgenv().EscapouDaPartida do
                                     if not PossoAgir() then break end
-                                    
-                                    -- Valida se o computador atual não foi banido enquanto hackeava
-                                    local isPCStillValid = true
-                                    for _, bannedPC in pairs(tp_ComputerBanList) do
-                                        if bannedPC == mesaPC then
-                                            isPCStillValid = false
-                                            break
-                                        end
-                                    end
-                                    if not isPCStillValid then break end
-
                                     local corAtual = string.lower(tostring(tela.BrickColor))
                                     if string.find(corAtual, "green") then break end
                                     
@@ -798,7 +756,7 @@ return function(env)
                                 end
                             end
                         end
-                        tp_CurrentTargetPC = nil
+                        
                     else
                         for _, porta in pairs(Workspace:GetDescendants()) do
                             if porta.Name == "ExitDoor" then
@@ -812,7 +770,7 @@ return function(env)
                                     local cframePorta = painel.CFrame * CFrame.new(0, 0, -3)
                                     local sucesso = EsperarETeleportar(cframePorta)
                                     
-                                    if sucesso then
+                                    if GuideCFrame then
                                         
                                         while getgenv().FarmRodando and not getgenv().EscapouDaPartida do
                                             if not PossoAgir() then break end
@@ -1127,9 +1085,10 @@ return function(env)
         local function GetMapObjects()
             local Result = {Computers = {}, ExitDoors = {}}
             local currentMapVal = ReplicatedStorage.CurrentMap.Value
-            
             if currentMapVal then
-                for _, v in ipairs(currentMapVal:GetChildren()) do
+                local children = currentMapVal:GetChildren()
+                for i = 1, #children do
+                    local v = children[i]
                     if v.Name == "ComputerTable" then
                         table.insert(Result.Computers, v)
                     elseif v.Name == "ExitDoor" then
@@ -1137,16 +1096,6 @@ return function(env)
                     end
                 end
             end
-
-            -- Busca secundária direta no workspace caso não encontre as portas de saída no mapeamento inicial
-            if #Result.ExitDoors == 0 then
-                for _, v in ipairs(Workspace:GetChildren()) do
-                    if v.Name == "ExitDoor" then
-                        table.insert(Result.ExitDoors, v)
-                    end
-                end
-            end
-
             return Result
         end
 
@@ -1351,11 +1300,10 @@ return function(env)
                         end
                     end
                 end
-            end()
+            end)()
 
             repeat
                 task.wait(0.5)
-                -- Otimização: Apenas cessa a fase de hack se não houver NENHUM computador físico no mapa ou por camping
                 local isFinished = (ComputersLeft < 1) or forceEscape
 
                 if isFinished then
@@ -1375,34 +1323,13 @@ return function(env)
                 return
             end
 
-            -- Varredura final atualizada para garantir detecção tardia das portas
-            MapObjects = GetMapObjects()
-
             fly_Notify("Escape", "Heading to exit doors.", 4)
 
             repeat
                 task.wait(0.5)
-                local currentTime = tick() * 1000
-
                 for i = 1, #MapObjects.ExitDoors do
                     local v = MapObjects.ExitDoors[i]
                     if not TaskGood() then continue end
-
-                    -- Filtro inteligente para alternância de portas se uma estiver sob acampamento (camping)
-                    local isBanned = false
-                    if #MapObjects.ExitDoors > 1 then
-                        for bannedTime, bannedDoor in pairs(ExitDoorBanList) do
-                            if bannedDoor == v then
-                                if currentTime - bannedTime < 25000 then
-                                    isBanned = true
-                                else
-                                    ExitDoorBanList[bannedTime] = nil
-                                end
-                            end
-                        end
-                    end
-
-                    if isBanned then continue end
 
                     repeat
                         task.wait(0.5)
@@ -1420,21 +1347,13 @@ return function(env)
                             end
                         until not TaskGood() or not v:FindFirstChild("ExitDoorTrigger") or fly_bnhideelapse >= fly_Config.CampEscapeOut
 
-                        -- Se o limite de acampamento na porta expirar, bane a porta atual e vai para a outra
                         if fly_bnhideelapse >= fly_Config.CampEscapeOut and fly_IsThereChar() then
-                            ExitDoorBanList[math.floor(tick() * 1000)] = v
                             fly_RemoveSafePlatform()
-                            
-                            if fly_IsThereChar() and fly_lpos then
-                                LocalPlayer.Character.HumanoidRootPart.Anchored = false
-                                LocalPlayer.Character:PivotTo(fly_lpos) -- Retorna ao solo com segurança antes de voar para a outra porta
-                            end
-
+                            LocalPlayer.Character.HumanoidRootPart.Anchored = false
                             fly_bnhide = false
                             fly_bnhideelapse = 0
                             fly_lpos = nil
-                            fly_Notify("Target Changed", "Beast is camping this Exit. Swapping to the other exit...", 4)
-                            break 
+                            continue
                         end
                     end
 
@@ -1512,7 +1431,6 @@ return function(env)
                 if not fly_SouBeastNessaRodada then
                     fly_SouBeastNessaRodada = true
                     fly_Notify("Paused", "You are the BEAST. Fly Auto Farm paused.", 5)
-                    -- Força reset mantendo o estado do aviso ativo para evitar spam de loop recursivo
                     fly_ResetAllStates(true)
                 end
                 continue
@@ -1652,7 +1570,6 @@ return function(env)
             if not MasterAutoFarmState or not getgenv().NexVoidLigado or not IsGameActive.Value then
                 if tp_bnhide then
                     tp_bnhide = false
-                    tp_bnhideelapse = 0
                     if tp_safePlatform then 
                         pcall(function() tp_safePlatform:Destroy() end) 
                         tp_safePlatform = nil 
@@ -1680,7 +1597,6 @@ return function(env)
                 if not tp_bnhide and distance < 35 then
                     tp_lpos = hrp.CFrame
                     tp_bnhide = true
-                    tp_bnhideelapse = 0
                     SendNotification("Danger | Beast is near! Going up to safety platform.", 3.5)
                     
                     pcall(function()
@@ -1706,32 +1622,13 @@ return function(env)
 
                     local beastDistanceFromLpos = (beastPos - tp_lpos.Position).Magnitude
                     local ragdoll = stats and stats:FindFirstChild("Ragdoll") and stats.Ragdoll.Value
-                    
-                    -- Detecção de Camping ativa no modo Teleport
-                    tp_bnhideelapse = tp_bnhideelapse + 0.1
-                    if tp_bnhideelapse >= 15 and tp_CurrentTargetPC then
-                        tp_ComputerBanList[math.floor(tick() * 1000)] = tp_CurrentTargetPC
-                        tp_bnhide = false
-                        tp_bnhideelapse = 0
-                        
-                        if tp_safePlatform then 
-                            pcall(function() tp_safePlatform:Destroy() end) 
-                            tp_safePlatform = nil 
-                        end
-                        
-                        hrp.Anchored = false
-                        char:PivotTo(tp_lpos) -- Retorna ao local de origem
-                        tp_lpos = nil
-                        tp_CurrentTargetPC = nil
-                        SendNotification("Target Changed | Beast is camping this PC (Teleport). Swapping targets...", 3.5)
-                    elseif beastDistanceFromLpos > 50 and not ragdoll then
+                    if beastDistanceFromLpos > 50 and not ragdoll then
                         if tp_safePlatform then 
                             pcall(function() tp_safePlatform:Destroy() end) 
                             tp_safePlatform = nil 
                         end
                         char:PivotTo(tp_lpos)
                         tp_bnhide = false
-                        tp_bnhideelapse = 0
                         tp_lpos = nil
                         SendNotification("Clear | Beast moved away. Returning.", 3)
                     end
@@ -1744,7 +1641,6 @@ return function(env)
                     end
                     if tp_lpos then char:PivotTo(tp_lpos) end
                     tp_bnhide = false
-                    tp_bnhideelapse = 0
                     tp_lpos = nil
                     SendNotification("Safe | Resuming activities.", 3)
                 end
