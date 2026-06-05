@@ -431,22 +431,35 @@ return function(env)
     local particlesDescConnL = nil
     local particleBkp = setmetatable({}, {__mode = "k"})
 
-    local particleClasses = {
-        ParticleEmitter = true, Sparkles = true, Fire = true, 
-        Smoke = true, Trail = true, Beam = true,
-        BloomEffect = true, BlurEffect = true, 
-        SunRaysEffect = true, DepthOfFieldEffect = true
-    }
-
     local function applyParticleRemoval(objeto)
         if not removeParticlesEnabled then return end
-        local className = objeto.ClassName
-        if particleClasses[className] then
+        
+        local isParticle = objeto:IsA("ParticleEmitter") or 
+                           objeto:IsA("Sparkles") or 
+                           objeto:IsA("Fire") or 
+                           objeto:IsA("Smoke") or 
+                           objeto:IsA("Trail") or 
+                           objeto:IsA("Beam") or 
+                           objeto:IsA("PostEffect") -- Cobre Bloom, Blur, SunRays, DOF, ColorCorrection, etc.
+        
+        if isParticle then
             if not particleBkp[objeto] then
-                particleBkp[objeto] = {Enabled = objeto.Enabled}
+                -- Cria um listener para bloquear o jogo de reativar a partícula
+                local connection
+                connection = objeto:GetPropertyChangedSignal("Enabled"):Connect(function()
+                    if removeParticlesEnabled and objeto.Enabled == true then
+                        pcall(function() objeto.Enabled = false end)
+                    end
+                end)
+                
+                particleBkp[objeto] = {
+                    Enabled = objeto.Enabled,
+                    Conn = connection
+                }
             end
             pcall(function() objeto.Enabled = false end)
-        elseif className == "Explosion" then
+        elseif objeto:IsA("Explosion") then
+            -- Explosões são instantâneas, destruir é seguro
             pcall(function() objeto:Destroy() end)
         end
     end
@@ -483,6 +496,13 @@ return function(env)
             batchProcess(toRevert, function(item)
                 local obj = item.obj
                 local data = item.data
+                
+                -- Desconecta o escutador para evitar vazamento de memória
+                if data.Conn then
+                    pcall(function() data.Conn:Disconnect() end)
+                end
+                
+                -- Restaura o estado original da partícula
                 if obj and obj.Parent then
                     pcall(function()
                         if data.Enabled ~= nil then obj.Enabled = data.Enabled end
@@ -971,8 +991,8 @@ return function(env)
                 local imgStr = Instance.new("UIStroke", btn)
                 imgStr.Color = Color3.fromRGB(40,40,40)
                 
-                btn.MouseEnter:Connect(function() TweenService:Create(imgStr, TweenInfo.new(0.2), {Color=Theme.Accent}):Play() end)
-                btn.MouseLeave:Connect(function() TweenService:Create(imgStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() end)
+                btn.MouseEnter:Connect(function() imgStr.Color = Theme.Accent end)
+                btn.MouseLeave:Connect(function() imgStr.Color = Color3.fromRGB(40,40,40) end)
                 
                 btn.MouseButton1Click:Connect(function() 
                     local fullID = "rbxassetid://" .. item.ID
