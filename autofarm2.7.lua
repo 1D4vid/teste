@@ -66,9 +66,66 @@ return function(env)
     local tp_safePlatform = nil
 
     -- ==========================================
+    -- FUNÇÕES DE LIMPEZA E CONTROLE (FLY)
+    -- ==========================================
+    local function fly_RemoveSafePlatform()
+        if fly_safePlatform then
+            pcall(function()
+                fly_safePlatform:Destroy()
+            end)
+            fly_safePlatform = nil
+        end
+    end
+
+    local function fly_ResetAllStates()
+        -- 1. Encerra com segurança todas as threads de farm pendentes
+        for i, v in pairs(fly_farmtasks) do
+            pcall(function()
+                if coroutine.status(v) ~= "dead" then
+                    coroutine.close(v)
+                end
+            end)
+            fly_farmtasks[i] = nil
+        end
+
+        -- 2. Limpa variáveis físicas de movimentação
+        fly_onsurvivorfarm = false
+        fly_isMoving = false
+        fly_bnhide = false
+        fly_bnhideelapse = 0
+        fly_noelepse = 0
+        fly_lpos = nil
+        fly_cachedBeast = nil
+        fly_TempPlayerStatsModule = nil
+        fly_Comp = 0
+        fly_notifiedLobby = false
+        fly_SouBeastNessaRodada = false
+
+        -- 3. Limpa estruturas físicas inseridas
+        fly_RemoveSafePlatform()
+
+        -- 4. Garante que o jogador está completamente livre de ancoragem e forças residuais
+        pcall(function()
+            local char = LocalPlayer.Character
+            if char then
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    hrp.Anchored = false
+                    hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                    hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                end
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    humanoid.PlatformStand = false
+                end
+            end
+        end)
+    end
+
+    -- ==========================================
     -- ELEMENTOS DA INTERFACE (UI)
     -- ==========================================
-    Library:CreateSection(Page, "Main Farming (BETA V1)")
+    Library:CreateSection(Page, "Main Farming (BETAadadd)")
 
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
         MasterAutoFarmState = state
@@ -80,6 +137,7 @@ return function(env)
             if AutoWinFlyToggleObj then AutoWinFlyToggleObj.Set(false) end
             if AutoSaveSilentToggleObj then AutoSaveSilentToggleObj.Set(false) end
             if AutoSaveTeleportToggleObj then AutoSaveTeleportToggleObj.Set(false) end
+            fly_ResetAllStates()
         end
     end)
 
@@ -93,6 +151,13 @@ return function(env)
             return
         end
         getgenv().AutoWinBeast = state
+        if not state then
+            pcall(function()
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    LocalPlayer.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                end
+            end)
+        end
     end)
 
     AutoWinTeleportToggleObj = Library:CreateToggle(Page, "Auto Win Survivor (Teleport)", false, function(state)
@@ -130,31 +195,8 @@ return function(env)
         end
 
         getgenv().AutoWinFlyActive = state
-        if state then
-            if IsGameActive.Value == true then
-                if not fly_AmIBeast() then
-                    task.spawn(DoSurvivorFarmFly)
-                else
-                    fly_SouBeastNessaRodada = true
-                    SendNotification("Notification | Beast Mode detected. Fly farm paused.", 5)
-                end
-            else
-                SendNotification("Notification | Waiting for match to start...", 4)
-            end
-        else
-            for i, v in pairs(fly_farmtasks) do
-                pcall(function() coroutine.close(v) end)
-                fly_farmtasks[i] = nil
-            end
-            fly_onsurvivorfarm = false
-            fly_SouBeastNessaRodada = false
-            if fly_safePlatform then
-                pcall(function() fly_safePlatform:Destroy() end)
-                fly_safePlatform = nil
-            end
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                LocalPlayer.Character.HumanoidRootPart.Anchored = false
-            end
+        if not state then
+            fly_ResetAllStates()
         end
     end)
 
@@ -425,6 +467,10 @@ return function(env)
                     pcall(function()
                         if not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
                         
+                        -- PROTEÇÃO: Evita executar código de Beast se for Survivor
+                        local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+                        if not stats or not stats:FindFirstChild("IsBeast") or stats.IsBeast.Value == false then return end
+                        
                         local MeuPersonagem = LocalPlayer.Character
                         local MinhaRaiz = ObterRaiz(MeuPersonagem)
                         
@@ -462,6 +508,10 @@ return function(env)
                 if getgenv().AutoWinBeast and MasterAutoFarmState then
                     pcall(function()
                         if not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
+
+                        -- PROTEÇÃO: Evita executar código de Beast se for Survivor
+                        local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+                        if not stats or not stats:FindFirstChild("IsBeast") or stats.IsBeast.Value == false then return end
 
                         local MeuPersonagem = LocalPlayer.Character
                         local MeuEventoMarreta = MeuPersonagem and MeuPersonagem:FindFirstChild("HammerEvent", true)
@@ -504,6 +554,10 @@ return function(env)
                 if getgenv().AutoWinBeast and MasterAutoFarmState then
                     pcall(function()
                         if not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
+
+                        -- PROTEÇÃO: Evita executar código de Beast se for Survivor
+                        local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+                        if not stats or not stats:FindFirstChild("IsBeast") or stats.IsBeast.Value == false then return end
 
                         local MeuPersonagem = LocalPlayer.Character
                         if not MeuPersonagem:FindFirstChild("HammerEvent", true) then return end
@@ -810,15 +864,6 @@ return function(env)
     -- ==========================================
     local function fly_Notify(title, text, duration)
         SendNotification(title .. " | " .. text, duration or 3)
-    end
-
-    local function fly_RemoveSafePlatform()
-        if fly_safePlatform then
-            pcall(function()
-                fly_safePlatform:Destroy()
-            end)
-            fly_safePlatform = nil
-        end
     end
 
     local function fly_IsThereChar(APlr)
@@ -1303,19 +1348,17 @@ return function(env)
         table.insert(fly_farmtasks, NewFarmTask)
     end
 
-    -- MONITORAMENTO DOS MAPAS (Voo)
+    -- MONITORAMENTO DOS MAPAS (Garante limpeza completa no carregamento do mapa)
     ReplicatedStorage.CurrentMap.Changed:Connect(function(newMap)
-        if newMap and getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
-            if fly_AmIBeast() then 
-                fly_SouBeastNessaRodada = true
-                return 
-            end
-            while fly_IsInLobby() and fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState do
-                task.wait(0.2)
-            end
-            if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
-                if not fly_AmIBeast() then
-                    fly_Notify("Match", "Starting farm on new match.", 3)
+        fly_ResetAllStates()
+    end)
+
+    -- [[ DISPARADOR CENTRALIZADO (MÁQUINA DE ESTADO ÚNICO) ]] --
+    task.spawn(function()
+        while true do
+            task.wait(1.0)
+            if getgenv().AutoWinFlyActive and MasterAutoFarmState and fly_IsMatchActive() and not fly_IsInLobby() and not fly_AmIBeast() then
+                if not fly_onsurvivorfarm then
                     task.spawn(DoSurvivorFarmFly)
                 end
             end
@@ -1324,46 +1367,35 @@ return function(env)
 
     -- LOOP GERAL DE VERIFICAÇÃO DO VOO
     task.spawn(function()
+        local lastRoleIsBeast = false
+
         while true do
             local dt = task.wait(0.1)
             
+            -- Detecta mudança de papel (Survivor <-> Beast) e limpa tudo imediatamente
+            local isBeast = fly_AmIBeast()
+            if isBeast ~= lastRoleIsBeast then
+                lastRoleIsBeast = isBeast
+                fly_ResetAllStates()
+            end
+
             if not fly_IsThereChar() then
                 fly_RemoveSafePlatform()
             end
 
-            if getgenv().AutoWinFlyActive and MasterAutoFarmState and fly_AmIBeast() then
-                if not fly_SouBeastNessaRodada then
-                    fly_SouBeastNessaRodada = true
-                    fly_Notify("Paused", "You are the BEAST. Fly Auto Farm paused.", 5)
-                    
-                    for i, v in pairs(fly_farmtasks) do
-                        pcall(function() coroutine.close(v) end)
-                        fly_farmtasks[i] = nil
-                    end
-                    fly_onsurvivorfarm = false
-                    fly_RemoveSafePlatform()
-                    if fly_IsThereChar() then
-                        LocalPlayer.Character.HumanoidRootPart.Anchored = false
-                    end
+            -- Se a partida terminar ou o jogador for ao lobby, limpa estados concorrentes de imediato
+            if not fly_IsMatchActive() or fly_IsInLobby() then
+                if fly_onsurvivorfarm or fly_isMoving or fly_bnhide then
+                    fly_ResetAllStates()
                 end
                 continue
             end
 
-            if not getgenv().AutoWinFlyActive or not MasterAutoFarmState or not fly_IsMatchActive() then
-                if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Anchored then
-                    LocalPlayer.Character.HumanoidRootPart.Anchored = false
-                end
-                fly_RemoveSafePlatform()
-                fly_onsurvivorfarm = false
-                fly_bnhide = false
-                fly_Comp = 0 
-                fly_SouBeastNessaRodada = false
-                
-                if getgenv().AutoWinFlyActive and MasterAutoFarmState then
-                    if not fly_notifiedLobby then
-                        fly_Notify("Lobby", "Waiting for game start...", 5)
-                        fly_notifiedLobby = true
-                    end
+            if getgenv().AutoWinFlyActive and MasterAutoFarmState and isBeast then
+                if not fly_SouBeastNessaRodada then
+                    fly_SouBeastNessaRodada = true
+                    fly_Notify("Paused", "You are the BEAST. Fly Auto Farm paused.", 5)
+                    fly_ResetAllStates()
                 end
                 continue
             end
@@ -1372,7 +1404,7 @@ return function(env)
                 fly_notifiedLobby = false
             end
 
-            if fly_SouBeastNessaRodada and not fly_AmIBeast() then
+            if fly_SouBeastNessaRodada and not isBeast then
                 fly_SouBeastNessaRodada = false
             end
 
@@ -1411,7 +1443,7 @@ return function(env)
                                     fly_safePlatform = Instance.new("Part")
                                     fly_safePlatform.Size = Vector3.new(15, 1, 15)
                                     fly_safePlatform.Anchored = true
-                                    safePlatform.CanCollide = true
+                                    fly_safePlatform.CanCollide = true
                                     fly_safePlatform.Transparency = 1
                                     fly_safePlatform.Name = "NexVoidSafePlate"
                                     fly_safePlatform.Parent = workspace
@@ -1467,6 +1499,7 @@ return function(env)
                 fly_TPPlayerSpawn()
             end
 
+            -- Apenas atualiza a contagem interna, sem disparar coroutines
             local CurrentMap = ReplicatedStorage.CurrentMap.Value
             if CurrentMap then
                 local GotComputers = 0
@@ -1477,21 +1510,7 @@ return function(env)
                     end
                 end
                 if GotComputers ~= fly_Comp then
-                    if GotComputers > 0 then
-                        task.wait(3)
-                        if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
-                            task.spawn(function()
-                                while fly_IsInLobby() and fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState do
-                                    task.wait(0.2)
-                                end
-                                if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
-                                    if not fly_AmIBeast() then
-                                        task.spawn(DoSurvivorFarmFly)
-                                    end
-                                end
-                            end)
-                        end
-                    else
+                    if GotComputers == 0 then
                         fly_onsurvivorfarm = false
                         fly_Beast = nil
                     end
