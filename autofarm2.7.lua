@@ -22,7 +22,7 @@ return function(env)
     -- ==========================================
     local fly_Config = {
         FarmTweenSpeed = 22,        
-        WaitTweenFast = 8,          
+        WaitTweenFast = 0.1,        -- Otimizado para iniciar o movimento sem esperas artificiais longas
         TriggerPrioritization = 1,  
         CampHackOut = 15,           
         CampEscapeOut = 20,         
@@ -62,7 +62,7 @@ return function(env)
     -- ==========================================
     -- ELEMENTOS DA INTERFACE (UI)
     -- ==========================================
-    Library:CreateSection(Page, "Main Farming (BETAsssssss)")
+    Library:CreateSection(Page, "Main Farming (BETA)")
 
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
         MasterAutoFarmState = state
@@ -565,8 +565,8 @@ return function(env)
 
         local function IniciarRotinaDeFarm()
             task.spawn(function()
-                repeat task.wait(0.1) until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                task.wait(1) 
+                repeat task.wait(0.05) until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                task.wait(0.2) 
                 
                 if ChecarSeSouBeast() then
                     getgenv().SouBeastNessaRodada = true
@@ -877,9 +877,10 @@ return function(env)
             return fly_IsThereChar()
         end
 
+        -- Polling extremamente otimizado (esperas de 50ms para spawn instantâneo)
         local readyAttempts = 0
-        while not PlayerReady() and readyAttempts < 20 do
-            task.wait(0.2)
+        while not PlayerReady() and readyAttempts < 40 do
+            task.wait(0.05)
             readyAttempts = readyAttempts + 1
         end
 
@@ -906,8 +907,8 @@ return function(env)
 
         local MapObjects = GetMapObjects()
         local loadAttempts = 0
-        while #MapObjects.Computers == 0 and loadAttempts < 10 do
-            task.wait(0.5)
+        while #MapObjects.Computers == 0 and loadAttempts < 20 do
+            task.wait(0.1) -- Resposta rápida de carregamento de objetos
             MapObjects = GetMapObjects()
             loadAttempts = loadAttempts + 1
         end
@@ -977,7 +978,7 @@ return function(env)
                         local travelTime = Distance / fly_Config.FarmTweenSpeed
 
                         if travelTime < fly_Config.WaitTweenFast then
-                            task.wait(math.max(0.1, fly_Config.WaitTweenFast - travelTime))
+                            task.wait(math.max(0.05, fly_Config.WaitTweenFast - travelTime))
                         end
 
                         repeat
@@ -1007,9 +1008,9 @@ return function(env)
                                 end
                                 
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Trigger", true, v.Event)
-                                task.wait(0.1)
+                                task.wait(0.05)
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", true)
-                                task.wait(0.4)
+                                task.wait(0.15)
                             elseif TaskGood() and not fly_bnhide then
                                 if CurrentComputer ~= Computer then
                                     fly_Notify("Hacking", "Process started", 3)
@@ -1066,7 +1067,7 @@ return function(env)
 
             coroutine.wrap(function()
                 while TaskGood() do
-                    task.wait(0.2)
+                    task.wait(0.1)
                     
                     if CurrentComputer then
                         ChosenComputer = CurrentComputer
@@ -1134,7 +1135,7 @@ return function(env)
             end)()
 
             repeat
-                task.wait(0.5)
+                task.wait(0.2)
                 local isFinished = (ComputersLeft < 1) or forceEscape
 
                 if isFinished then
@@ -1163,7 +1164,7 @@ return function(env)
                     if not TaskGood() then continue end
 
                     repeat
-                        task.wait(0.5)
+                        task.wait(0.2)
                     until not TaskGood() or fly_bnhide == false or fly_bnhideelapse >= fly_Config.CampEscapeOut
 
                     if v:FindFirstChild("ExitDoorTrigger") then
@@ -1174,7 +1175,7 @@ return function(env)
                                 LocalPlayer.Character:PivotTo(v.ExitDoorTrigger.CFrame * CFrame.new(0, v.ExitDoorTrigger.Size.Y / 2, 0))
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Trigger", true, v.ExitDoorTrigger.Event)
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", true)
-                                task.wait(0.5)
+                                task.wait(0.2)
                             end
                         until not TaskGood() or not v:FindFirstChild("ExitDoorTrigger") or fly_bnhideelapse >= fly_Config.CampEscapeOut
 
@@ -1189,7 +1190,7 @@ return function(env)
                     end
 
                     if TaskGood() then
-                        task.wait(0.5)
+                        task.wait(0.2)
                         if v:FindFirstChild("ExitArea") then
                             fly_Notify("Escape", "Escaping...", 3)
                             fly_GoTween(v.ExitArea)
@@ -1206,7 +1207,7 @@ return function(env)
                 Run()
                 
                 if not DoNotTeleport then
-                    task.wait(1)
+                    task.wait(0.5)
                     if not fly_IsMatchActive() then
                         fly_TPPlayerSpawn()
                     end
@@ -1221,8 +1222,9 @@ return function(env)
     -- MONITORAMENTO DOS MAPAS (Voo)
     ReplicatedStorage.CurrentMap.Changed:Connect(function(newMap)
         if newMap and getgenv().AutoWinFlyActive and MasterAutoFarmState then
-            -- Aguarda a replicação do módulo de atributos para evitar detectar status antigo de Beast
-            task.wait(1.5)
+            -- Espera até que o TempPlayerStatsModule apareça para verificar se você é a Beast de forma limpa
+            repeat task.wait(0.05) until LocalPlayer:FindFirstChild("TempPlayerStatsModule") or not IsGameActive.Value
+            if not IsGameActive.Value then return end
             
             if fly_AmIBeast() then 
                 fly_SouBeastNessaRodada = true
@@ -1232,7 +1234,7 @@ return function(env)
             fly_SouBeastNessaRodada = false
             
             while fly_IsInLobby() and fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState do
-                task.wait(0.2)
+                task.wait(0.1)
             end
             if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
                 if not fly_AmIBeast() then
@@ -1404,11 +1406,11 @@ return function(env)
                 end
                 if GotComputers ~= fly_Comp then
                     if GotComputers > 0 then
-                        task.wait(3)
+                        -- Removido o delay estático de 3 segundos
                         if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and MasterAutoFarmState then
                             task.spawn(function()
                                 while fly_IsInLobby() and fly_IsMatchActive() and getgenv().AutoWinFlyActive and MasterAutoFarmState do
-                                    task.wait(0.2)
+                                    task.wait(0.1)
                                 end
                                 if getgenv().AutoWinFlyActive and not fly_onsurvivorfarm and not fly_IsInLobby() and MasterAutoFarmState then
                                     if not fly_AmIBeast() then
