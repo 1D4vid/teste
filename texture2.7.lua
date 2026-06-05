@@ -19,6 +19,8 @@ return function(env)
     local PCSoftwareCursor = env.PCSoftwareCursor
     local Lighting = game:GetService("Lighting")
 
+    local Mouse = LocalPlayer:GetMouse()
+
     local formatID = function(id)
         if type(id) == "number" and id > 0 then return "rbxassetid://" .. id
         elseif type(id) == "string" and id ~= "" and id ~= "0" then
@@ -610,18 +612,36 @@ return function(env)
         end
 
         task.spawn(function()
-            local desc = Workspace:GetDescendants()
-            batchProcess(desc, function(obj)
-                if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
-                    aplicarTextura(obj)
-                end
-            end)
-            
-            if texturaID ~= "Default" then
-                table.insert(currentDoubleJumpConns, Workspace.DescendantAdded:Connect(function(obj)
-                    if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
-                        task.defer(aplicarTextura, obj)
+            -- OTIMIZAÇÃO EXTREMA: Escaneia somente os personagens dos jogadores ativos (Evita lag de varredura no Workspace/Replicated)
+            for _, player in ipairs(Players:GetPlayers()) do
+                local char = player.Character
+                if char then
+                    local desc = char:GetDescendants()
+                    for i = 1, #desc do
+                        local obj = desc[i]
+                        if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then aplicarTextura(obj) end
                     end
+                end
+            end
+            
+            -- Cria escutadores assíncronos focados estritamente nos personagens dos jogadores
+            if texturaID ~= "Default" then
+                for _, player in ipairs(Players:GetPlayers()) do
+                    local function listenChar(char)
+                        table.insert(currentDoubleJumpConns, char.DescendantAdded:Connect(function(obj)
+                            if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then task.defer(aplicarTextura, obj) end
+                        end))
+                    end
+                    table.insert(currentDoubleJumpConns, player.CharacterAdded:Connect(listenChar))
+                    if player.Character then listenChar(player.Character) end
+                end
+                
+                table.insert(currentDoubleJumpConns, Players.PlayerAdded:Connect(function(player)
+                    table.insert(currentDoubleJumpConns, player.CharacterAdded:Connect(function(char)
+                        table.insert(currentDoubleJumpConns, char.DescendantAdded:Connect(function(obj)
+                            if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then task.defer(aplicarTextura, obj) end
+                        end))
+                    end))
                 end))
             end
         end)
@@ -673,6 +693,19 @@ return function(env)
             end
         end
     end)
+
+    local effectIDs = {
+        "81110491136307", "117864251880006", "120181545812734", "74056211768119", 
+        "116419901031627", "92247449256845", "113423466689563", "90279999098357", 
+        "94123299347751", "105065705443269", "122902019815288", "138617722401997", 
+        "75192344666220", "139646605021296", "133105930199997", "96482830256985", 
+        "107964624563909", "122185636007520", "130200330618832", "84159990264787",
+        "87265760472097", "125925535971201", "99196076742919", "80555494674270", 
+        "77364460442867", "84014330993791", "80081088131892", "70463296258416",
+        "84683340454265", "110707827597886", "94615398600162", "136555497393349", 
+        "115660311620643", "87528090276578", "91090339346537", "104273334466284", 
+        "125877054664162", "99696281853254", "115091366896134", "118044368508403"
+    }
 
     local GridWrapperDJ1 = createGridContainer(targetParentDJ1)
     local GridWrapperDJ2 = createGridContainer(targetParentDJ2)
@@ -868,6 +901,8 @@ return function(env)
     -- ==========================================
     -- POPULATE CROSSHAIRS
     -- ==========================================
+    local usePCCursor = UserInputService.MouseEnabled
+
     local function CreateCursorSystem(isMob)
         local CInputContainer = Instance.new("Frame")
         CInputContainer.Size = UDim2.new(1, -2, 0, ContentConfig.ItemHeightNew)
@@ -916,10 +951,9 @@ return function(env)
                     MobileCrosshair.Image = fullID
                     MobileCrosshair.Visible = true 
                 else 
-                    PCSoftwareCursor.Image = fullID
-                    SetPCCursorActive(true)
-                    PCSoftwareCursor.Visible = true 
-                    pcall(function() LocalPlayer:GetMouse().Icon = "rbxassetid://0" end)
+                    Mouse.Icon = fullID -- Aplica de forma nativa e limpa o cursor no PC
+                    PCSoftwareCursor.Visible = false
+                    SetPCCursorActive(false)
                 end 
             end 
         end)
@@ -952,10 +986,9 @@ return function(env)
                     if isMob then 
                         MobileCrosshair.Visible = false 
                     else 
-                        SetPCCursorActive(false)
+                        Mouse.Icon = "" -- Restaura nativamente o cursor padrão do Windows
                         PCSoftwareCursor.Visible = false
-                        pcall(function() LocalPlayer:GetMouse().Icon = "" end)
-                        UserInputService.MouseIconEnabled = true 
+                        SetPCCursorActive(false)
                     end 
                 end)
             else
@@ -980,17 +1013,15 @@ return function(env)
                         MobileCrosshair.Image = fullID
                         MobileCrosshair.Visible = true 
                     else 
-                        PCSoftwareCursor.Image = fullID
-                        SetPCCursorActive(true)
-                        PCSoftwareCursor.Visible = true 
-                        pcall(function() LocalPlayer:GetMouse().Icon = "rbxassetid://0" end)
+                        Mouse.Icon = fullID -- Aplica nativamente o cursor customizado
+                        PCSoftwareCursor.Visible = false
+                        SetPCCursorActive(false)
                     end 
                 end)
             end
         end
     end
 
-    local usePCCursor = UserInputService.MouseEnabled
     if usePCCursor then CreateCursorSystem(false) else CreateCursorSystem(true) end
 
     -- INICIALIZADOR DE SALVOS
@@ -1001,10 +1032,7 @@ return function(env)
         if usePCCursor then
             local saved = UserConfigs["TexturesPage_Crosshair_PC"]
             if saved and saved ~= "RESET" then
-                PCSoftwareCursor.Image = saved
-                SetPCCursorActive(true)
-                PCSoftwareCursor.Visible = true 
-                pcall(function() LocalPlayer:GetMouse().Icon = "rbxassetid://0" end)
+                Mouse.Icon = saved -- Aplica de forma nativa e limpa na inicialização
             end
         else
             local saved = UserConfigs["TexturesPage_Crosshair_Mobile"]
