@@ -335,32 +335,27 @@ return function(env)
         getgenv().NexOptimization.ToggleFPSBooster(state)
     end)
 
-    -- [ TOGGLE ADAPTADO DE ALTA PERFORMANCE: GRAY CHARACTERS ]
+    -- [ TOGGLE ADAPTADO DE EXTREMA FIDELIDADE: GRAY CHARACTERS ]
     local grayOutfitsEnabled = false
     local grayCharacterConns = {}
     local characterBackups = setmetatable({}, {__mode = "k"})
 
-    local function applyGreyCharacter(char)
-        if not char or not char.Parent then return end
-        if characterBackups[char] then return end -- Já está cinza
+    local function processItem(i, backup, char)
+        if not i or not i.Parent then return end
         
-        local backup = {
-            Parts = {},
-            Accessories = {},
-            Clothes = {}
-        }
-        
-        for _, i in ipairs(char:GetChildren()) do
-            if (i:IsA("BasePart") or i:IsA("MeshPart")) and i.Name ~= "HumanoidRootPart" then
-                backup.Parts[i] = {
-                    Color = i.Color,
-                    Material = i.Material
-                }
-                i.Color = Color3.fromRGB(150, 150, 150)
-                i.Material = Enum.Material.SmoothPlastic
-            elseif i:IsA("Accessory") then
-                local handle = i:FindFirstChild("Handle")
-                if handle and handle:IsA("BasePart") then
+        if (i:IsA("BasePart") or i:IsA("MeshPart")) and i.Name ~= "HumanoidRootPart" then
+            if backup.Parts[i] then return end
+            backup.Parts[i] = {
+                Color = i.Color,
+                Material = i.Material
+            }
+            i.Color = Color3.fromRGB(150, 150, 150)
+            i.Material = Enum.Material.SmoothPlastic
+        elseif i:IsA("Accessory") then
+            -- Acessórios carregam seus Handles assincronamente, monitoramos a criação deles
+            local function handleAccessory(handle)
+                if handle and handle.Name == "Handle" and handle:IsA("BasePart") then
+                    if backup.Accessories[handle] then return end
                     local handleBackup = {
                         Color = handle.Color,
                         Material = handle.Material,
@@ -383,20 +378,58 @@ return function(env)
                     end
                     backup.Accessories[handle] = handleBackup
                 end
-            elseif i:IsA("Pants") or i:IsA("Shirt") or i:IsA("ShirtGraphic") or i.Name == "Shirt Graphic" then
-                backup.Clothes[i] = i.Parent
-                i.Parent = nil -- Oculta a roupa sem destruí-la de forma irreversível
             end
+            
+            local handle = i:FindFirstChild("Handle")
+            if handle then handleAccessory(handle) end
+            
+            local conn = i.ChildAdded:Connect(handleAccessory)
+            table.insert(backup.Conns, conn)
+        elseif i:IsA("Pants") or i:IsA("Shirt") or i:IsA("ShirtGraphic") or i.Name == "Shirt Graphic" then
+            if backup.Clothes[i] then return end
+            backup.Clothes[i] = i.Parent
+            i.Parent = nil -- Esconde temporariamente para possibilitar a restauração sem quebrar o avatar
+        end
+    end
+
+    local function applyGreyCharacter(char)
+        if not char or not char.Parent then return end
+        
+        local backup = characterBackups[char]
+        if not backup then
+            backup = {
+                Parts = {},
+                Accessories = {},
+                Clothes = {},
+                Conns = {}
+            }
+            characterBackups[char] = backup
+            
+            -- Trata qualquer carregamento atrasado ou alteração de acessórios em tempo real
+            local conn = char.ChildAdded:Connect(function(child)
+                if grayOutfitsEnabled then
+                    processItem(child, backup, char)
+                end
+            end)
+            table.insert(backup.Conns, conn)
         end
         
-        characterBackups[char] = backup
+        for _, i in ipairs(char:GetChildren()) do
+            processItem(i, backup, char)
+        end
     end
 
     local function restoreCharacter(char)
         local backup = characterBackups[char]
         if not backup then return end
         
-        -- Restaura partes do corpo
+        if backup.Conns then
+            for _, conn in ipairs(backup.Conns) do
+                conn:Disconnect()
+            end
+        end
+        
+        -- Restaura corpo do personagem
         for part, data in pairs(backup.Parts) do
             if part and part.Parent then
                 part.Color = data.Color
@@ -404,7 +437,7 @@ return function(env)
             end
         end
         
-        -- Restaura acessórios
+        -- Restaura chapéus, cabelos, etc.
         for handle, data in pairs(backup.Accessories) do
             if handle and handle.Parent then
                 handle.Color = data.Color
@@ -417,7 +450,7 @@ return function(env)
             end
         end
         
-        -- Restaura roupas
+        -- Restaura roupas (Shirt e Pants)
         for clothing, originalParent in pairs(backup.Clothes) do
             if clothing then
                 clothing.Parent = char
@@ -430,41 +463,38 @@ return function(env)
     Library:CreateToggle(Page, "Gray Characters", false, function(state)
         grayOutfitsEnabled = state
         if state then
-            -- Aplica o efeito nos players que já estão no jogo
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player.Character then
-                    task.spawn(applyGreyCharacter, player.Character)
-                end
-                local conn = player.CharacterAdded:Connect(function(char)
-                    char:WaitForChild("Humanoid", 5)
-                    task.wait(0.2) -- Aguarda as roupas carregarem
+            local function setupPlayerMonitoring(player)
+                local function onCharacterAdded(char)
+                    -- Monitoramento dinâmico: Aguarda o Roblox carregar 100% dos acessórios e roupas nativos
+                    if not player:HasAppearanceLoaded() then
+                        player.CharacterAppearanceLoaded:Wait()
+                    end
+                    task.wait(0.1) -- Garantia de consistência física
                     if grayOutfitsEnabled then
                         applyGreyCharacter(char)
                     end
-                end)
+                end
+                
+                if player.Character then
+                    task.spawn(onCharacterAdded, player.Character)
+                end
+                
+                local conn = player.CharacterAdded:Connect(onCharacterAdded)
                 table.insert(grayCharacterConns, conn)
             end
+
+            for _, player in ipairs(Players:GetPlayers()) do
+                setupPlayerMonitoring(player)
+            end
             
-            -- Trata players futuros que entrarem no servidor
-            local conn2 = Players.PlayerAdded:Connect(function(player)
-                local conn = player.CharacterAdded:Connect(function(char)
-                    char:WaitForChild("Humanoid", 5)
-                    task.wait(0.2)
-                    if grayOutfitsEnabled then
-                        applyGreyCharacter(char)
-                    end
-                end)
-                table.insert(grayCharacterConns, conn)
-            end)
+            local conn2 = Players.PlayerAdded:Connect(setupPlayerMonitoring)
             table.insert(grayCharacterConns, conn2)
         else
-            -- Desconecta todos os ouvintes de spawns
             for _, conn in ipairs(grayCharacterConns) do
                 conn:Disconnect()
             end
             table.clear(grayCharacterConns)
             
-            -- Restaura as texturas originais e roupas de todos os personagens salvos
             for char, _ in pairs(characterBackups) do
                 restoreCharacter(char)
             end
