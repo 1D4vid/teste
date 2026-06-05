@@ -309,6 +309,7 @@ return function(env)
         batchProcess(cachedParts, refreshPartVisual)
     end)
 
+    -- [ ULTRA HD GRAPHICS - CORRIGIDO ]
     local ultraHDConns = {}
     local createdMaterials = {}
     Library:CreateToggle(Page, "Ultra HD Graphics", false, function(state) 
@@ -325,7 +326,7 @@ return function(env)
                 Mat.NormalMap = normalMap
                 Mat.RoughnessMap = roughnessMap
                 Mat.Parent = MaterialService
-                pcall(function() MaterialService:SetBaseMaterialOverride(baseMaterial, Mat) end)
+                pcall(function() MaterialService:SetBaseMaterialOverride(baseMaterial, Mat.Name) end) -- CORRIGIDO: Agora passa Mat.Name (string) em vez do objeto Mat
                 table.insert(createdMaterials, {Variant = Mat, Base = baseMaterial})
             end
             createMaterial("Concrete", Enum.Material.Concrete, "rbxassetid://6223521473", "rbxassetid://6223521257", "rbxassetid://6223521360")
@@ -609,7 +610,7 @@ return function(env)
             end
         end
 
-        -- Varredura ultrarrápida focada em players atuais (Onde os efeitos de pulo de fato se localizam)
+        -- Varredura ultrarrápida focada em players atuais
         for _, plr in ipairs(Players:GetPlayers()) do
             local char = plr.Character
             if char then
@@ -621,12 +622,12 @@ return function(env)
             end
         end
 
-        -- Varredura fracionada em segundo plano no Workspace (Sem congelar o renderizador principal)
+        -- Varredura fracionada em segundo plano no Workspace
         task.spawn(function()
             local desc = Workspace:GetDescendants()
             local total = #desc
             local index = 1
-            local chunkSize = 150 -- Processa 150 objetos por frame
+            local chunkSize = 150
 
             while index <= total do
                 for i = 1, chunkSize do
@@ -637,7 +638,7 @@ return function(env)
                     end
                     index = index + 1
                 end
-                task.wait() -- Libera o frame de renderização atual
+                task.wait()
             end
         end)
 
@@ -894,7 +895,7 @@ return function(env)
         mDStr.Color = Color3.fromRGB(40,40,40)
         
         mDefaultBtn.MouseEnter:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Theme.Accent}):Play() TweenService:Create(mDefaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.Accent}):Play() end)
-        mDefaultBtn.MouseLeave:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() TweenService:Create(mDefaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.TextDark}):Play() end)
+        mDefaultBtn.MouseLeave:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() TweenService:Create(defaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.TextDark}):Play() end)
         mDefaultBtn.MouseButton1Click:Connect(function() UserConfigs["TexturesPage_MobileJump"] = "Default" EnableMobileButtonJump("Default") end)
 
         local mJumpIDs = {
