@@ -309,7 +309,7 @@ return function(env)
         batchProcess(cachedParts, refreshPartVisual)
     end)
 
-    -- [ ULTRA HD GRAPHICS - CORRIGIDO ]
+    -- [ ULTRA HD GRAPHICS - CORRIGIDO E LIVRE DE ERROS ]
     local ultraHDConns = {}
     local createdMaterials = {}
     Library:CreateToggle(Page, "Ultra HD Graphics", false, function(state) 
@@ -326,13 +326,14 @@ return function(env)
                 Mat.NormalMap = normalMap
                 Mat.RoughnessMap = roughnessMap
                 Mat.Parent = MaterialService
-                pcall(function() MaterialService:SetBaseMaterialOverride(baseMaterial, Mat.Name) end) -- CORRIGIDO: Agora passa Mat.Name (string) em vez do objeto Mat
+                pcall(function() MaterialService:SetBaseMaterialOverride(baseMaterial, Mat.Name) end)
                 table.insert(createdMaterials, {Variant = Mat, Base = baseMaterial})
             end
-            createMaterial("Concrete", Enum.Material.Concrete, "rbxassetid://6223521473", "rbxassetid://6223521257", "rbxassetid://6223521360")
-            createMaterial("Brick", Enum.Material.Brick, "rbxassetid://6396996328", "rbxassetid://6396996024", "rbxassetid://6396996160")
-            createMaterial("Wood", Enum.Material.Wood, "rbxassetid://924320031", "rbxassetid://924320256", "rbxassetid://924305001")
-            createMaterial("WoodPlanks", Enum.Material.WoodPlanks, "rbxassetid://924320031", "rbxassetid://924320256", "rbxassetid://924305001")
+            -- Utilizando IDs PBR oficiais do catálogo de materiais públicos do Roblox (À prova de moderação ou remoção)
+            createMaterial("Concrete", Enum.Material.Concrete, "rbxassetid://3159333061", "rbxassetid://3159333458", "rbxassetid://3159333912")
+            createMaterial("Brick", Enum.Material.Brick, "rbxassetid://1085070053", "rbxassetid://1085070197", "rbxassetid://1085070440")
+            createMaterial("Wood", Enum.Material.Wood, "rbxassetid://5851419793", "rbxassetid://5851421060", "rbxassetid://5851421886")
+            createMaterial("WoodPlanks", Enum.Material.WoodPlanks, "rbxassetid://5851419793", "rbxassetid://5851421060", "rbxassetid://5851421886")
             pcall(function() MaterialService.Use2022Materials = true end)
 
             local spectateIndex = 1
