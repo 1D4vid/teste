@@ -309,178 +309,12 @@ return function(env)
         batchProcess(cachedParts, refreshPartVisual)
     end)
 
-    -- [ ULTRA HD GRAPHICS - OTIMIZADO E SEM WARNINGS ]
-    local hdConnections = {}
-    local hdCreatedObjects = {}
-    local lightingBackup = {}
-    local originalLightingSettings = {}
-    local originalUse2022 = nil
-
-    Library:CreateToggle(Page, "Ultra HD Graphics", false, function(state) 
-        local MaterialService = game:GetService("MaterialService")
-        
-        if state then
-            -- 1. Backup das configurações físicas do Lighting original
-            originalLightingSettings.EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale
-            originalLightingSettings.EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale
-            originalLightingSettings.GlobalShadows = Lighting.GlobalShadows
-            
-            if originalUse2022 == nil then
-                originalUse2022 = MaterialService.Use2022Materials
-            end
-
-            -- 2. Backup e remoção temporária de atmosferas e pós-processamentos originais do mapa
-            local classesToBackup = {
-                "BloomEffect", "ColorCorrectionEffect", "SunRaysEffect", 
-                "DepthOfFieldEffect", "Atmosphere", "Sky", "Clouds"
-            }
-            
-            for _, obj in ipairs(Lighting:GetChildren()) do
-                for _, class in ipairs(classesToBackup) do
-                    if obj:IsA(class) then
-                        table.insert(lightingBackup, {object = obj, parent = obj.Parent})
-                        obj.Parent = nil -- Move para nulo temporariamente sem destruir
-                        break
-                    end
-                end
-            end
-
-            -- 3. Aplicação do seu novo preset físico-atmosférico
-            Lighting.EnvironmentSpecularScale = 1
-            Lighting.EnvironmentDiffuseScale = 1
-            Lighting.GlobalShadows = true
-
-            -- Ativa Use2022Materials apenas se já não estiver ativo (evita spam do aviso azul no console)
-            if not MaterialService.Use2022Materials then
-                pcall(function()
-                    MaterialService.Use2022Materials = true
-                end)
-            end
-
-            -- Atmosfera Volumétrica Realista (Haze)
-            local atmosfera = Instance.new("Atmosphere")
-            atmosfera.Density = 0.28
-            atmosfera.Color = Color3.fromRGB(155, 165, 180)
-            atmosfera.Decay = Color3.fromRGB(105, 110, 120)
-            atmosfera.Glare = 0.4
-            atmosfera.Haze = 1.8
-            atmosfera.Parent = Lighting
-            table.insert(hdCreatedObjects, atmosfera)
-
-            -- Raios de Sol Volumétricos (God Rays)
-            local sunRays = Instance.new("SunRaysEffect")
-            sunRays.Intensity = 0.35
-            sunRays.Spread = 0.7
-            sunRays.Parent = Lighting
-            table.insert(hdCreatedObjects, sunRays)
-
-            -- Bloom de Alta Definição (Espalhamento físico nas bordas)
-            local bloom = Instance.new("BloomEffect")
-            bloom.Intensity = 0.95
-            bloom.Size = 20
-            bloom.Threshold = 0.8
-            bloom.Parent = Lighting
-            table.insert(hdCreatedObjects, bloom)
-
-            -- Depth of Field (Desfoque de profundidade cinemático)
-            local dof = Instance.new("DepthOfFieldEffect")
-            dof.FarIntensity = 0.4
-            dof.FocusDistance = 35
-            dof.InFocusRadius = 20
-            dof.NearIntensity = 0.05
-            dof.Parent = Lighting
-            table.insert(hdCreatedObjects, dof)
-
-            -- Correção de Cores Cinematográfica (Tom dourado simulado)
-            local colorCorrection = Instance.new("ColorCorrectionEffect")
-            colorCorrection.Brightness = 0.04
-            colorCorrection.Contrast = 0.32
-            colorCorrection.Saturation = 0.22
-            colorCorrection.TintColor = Color3.fromRGB(255, 248, 235)
-            colorCorrection.Parent = Lighting
-            table.insert(hdCreatedObjects, colorCorrection)
-
-            -- 4. Processamento Inteligente de Sombras e Luzes (Sem causar lag)
-            local originalShadowStates = {}
-            local function forcarSombras(objeto)
-                if objeto:IsA("BasePart") then
-                    if originalShadowStates[objeto] == nil then
-                        originalShadowStates[objeto] = objeto.CastShadow
-                    end
-                    objeto.CastShadow = true
-                elseif objeto:IsA("Light") then
-                    if originalShadowStates[objeto] == nil then
-                        originalShadowStates[objeto] = objeto.Shadows
-                    end
-                    objeto.Shadows = true
-                end
-            end
-
-            -- Aplica dinamicamente em lote sem engasgar o frame do jogo
-            local currentDescendants = Workspace:GetDescendants()
-            batchProcess(currentDescendants, forcarSombras)
-
-            -- Monitoramento de novos objetos criados no mapa
-            local conn = Workspace.DescendantAdded:Connect(forcarSombras)
-            table.insert(hdConnections, conn)
-            
-            -- Armazena os backups de sombras
-            hdCreatedObjects.originalShadowStates = originalShadowStates
-        else
-            -- Restauração completa de fábrica ao desligar o Ultra HD Graphics
-            if originalLightingSettings.EnvironmentSpecularScale then
-                Lighting.EnvironmentSpecularScale = originalLightingSettings.EnvironmentSpecularScale
-                Lighting.EnvironmentDiffuseScale = originalLightingSettings.EnvironmentDiffuseScale
-                Lighting.GlobalShadows = originalLightingSettings.GlobalShadows
-            end
-
-            if originalUse2022 ~= nil then
-                pcall(function()
-                    MaterialService.Use2022Materials = originalUse2022
-                end)
-            end
-
-            -- Deleta efeitos atmosféricos criados
-            for _, obj in ipairs(hdCreatedObjects) do
-                if typeof(obj) == "Instance" then
-                    pcall(function() obj:Destroy() end)
-                end
-            end
-            table.clear(hdCreatedObjects)
-
-            -- Desconecta ouvidores de eventos
-            for _, conn in ipairs(hdConnections) do
-                pcall(function() conn:Disconnect() end)
-            end
-            table.clear(hdConnections)
-
-            -- Restaura efeitos atmosféricos originais salvos no backup
-            for _, backup in ipairs(lightingBackup) do
-                if backup.object and backup.object.Parent == nil then
-                    pcall(function() backup.object.Parent = backup.parent end)
-                end
-            end
-            table.clear(lightingBackup)
-
-            -- Restaura as sombras originais do mapa de forma assíncrona
-            if hdCreatedObjects.originalShadowStates then
-                local restoreList = {}
-                for obj, val in pairs(hdCreatedObjects.originalShadowStates) do
-                    table.insert(restoreList, {obj = obj, val = val})
-                end
-                batchProcess(restoreList, function(item)
-                    if item.obj and item.obj.Parent then
-                        pcall(function()
-                            if item.obj:IsA("BasePart") then
-                                item.obj.CastShadow = item.val
-                            elseif item.obj:IsA("Light") then
-                                item.obj.Shadows = item.val
-                            end
-                        end)
-                    end
-                end)
-            end
+    -- [ MOVIDO DO FPS BOOSTER ]
+    Library:CreateToggle(Page, "Remove Textures", false, function(state) 
+        if not getgenv().NexOptimization then
+            getgenv().NexOptimization = loadstring(game:HttpGet("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/fps%20booster%20e%20remove%20textures.lua"))()
         end
+        getgenv().NexOptimization.ToggleTextures(state)
     end)
 
     Library:CreateToggle(Page, "Minecraft Texture", false, function(state)
@@ -493,19 +327,120 @@ return function(env)
     -- FPS SETTINGS (Coluna Direita - Topo)
     -- ==========================================
     Library:CreateSection(Page, "FPS Settings", "Right")
-
-    Library:CreateToggle(Page, "Remove Textures", false, function(state) 
-        if not getgenv().NexOptimization then
-            getgenv().NexOptimization = loadstring(game:HttpGet("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/fps%20booster%20e%20remove%20textures.lua"))()
-        end
-        getgenv().NexOptimization.ToggleTextures(state)
-    end)
     
     Library:CreateToggle(Page, "FpsBooster", false, function(state) 
         if not getgenv().NexOptimization then
             getgenv().NexOptimization = loadstring(game:HttpGet("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/fps%20booster%20e%20remove%20textures.lua"))()
         end
         getgenv().NexOptimization.ToggleFPSBooster(state)
+    end)
+
+    -- [ NOVO TOGGLE: GRAY CHARACTERS COM BACKUP SEGURO ]
+    local grayAtmosphereEnabled = false
+    local grayLightingConn = nil
+    local originalLightingSettings = {}
+    local destroyedSkiesBackup = {}
+
+    Library:CreateToggle(Page, "Gray Characters", false, function(state)
+        grayAtmosphereEnabled = state
+        if state then
+            -- Backup das configurações originais antes de aplicar
+            originalLightingSettings.FogColor = Lighting.FogColor
+            originalLightingSettings.FogStart = Lighting.FogStart
+            originalLightingSettings.FogEnd = Lighting.FogEnd
+            originalLightingSettings.Ambient = Lighting.Ambient
+            originalLightingSettings.OutdoorAmbient = Lighting.OutdoorAmbient
+            originalLightingSettings.Brightness = Lighting.Brightness
+            originalLightingSettings.TimeOfDay = Lighting.TimeOfDay
+            
+            local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+            if atmosphere then
+                originalLightingSettings.AtmColor = atmosphere.Color
+                originalLightingSettings.AtmDensity = atmosphere.Density
+                originalLightingSettings.AtmOffset = atmosphere.Offset
+            else
+                originalLightingSettings.AtmColor = nil
+            end
+
+            -- Destrói Skies salvando clones para reversão limpa
+            table.clear(destroyedSkiesBackup)
+            for _, v in ipairs(Lighting:GetDescendants()) do
+                if v:IsA("Sky") then
+                    table.insert(destroyedSkiesBackup, v:Clone())
+                    v:Destroy()
+                end
+            end
+
+            -- Aplicando as definições cinzas solicitadas
+            local GRAY = Color3.fromRGB(128,128,128)
+            local FOG_END = 1000
+
+            local atmosphereInstance = Lighting:FindFirstChildOfClass("Atmosphere")
+            if not atmosphereInstance then
+                atmosphereInstance = Instance.new("Atmosphere")
+                atmosphereInstance.Name = "GrayAtmosphere"
+                atmosphereInstance.Parent = Lighting
+            end
+            
+            atmosphereInstance.Color = GRAY
+            atmosphereInstance.Density = 1
+            atmosphereInstance.Offset = 0
+
+            Lighting.FogColor = GRAY
+            Lighting.FogStart = 0
+            Lighting.FogEnd = FOG_END
+            Lighting.Ambient = GRAY
+            Lighting.OutdoorAmbient = GRAY
+            Lighting.Brightness = 2
+            Lighting.TimeOfDay = "12:00:00"
+
+            -- Monitora e destrói imediatamente novos Skies criados pelo jogo
+            if grayLightingConn then grayLightingConn:Disconnect() end
+            grayLightingConn = Lighting.DescendantAdded:Connect(function(desc)
+                if desc:IsA("Sky") then
+                    task.defer(function()
+                        if grayAtmosphereEnabled then
+                            desc:Destroy()
+                        end
+                    end)
+                end
+            end)
+        else
+            -- Desconecta o monitoramento de novos Skies
+            if grayLightingConn then
+                grayLightingConn:Disconnect()
+                grayLightingConn = nil
+            end
+
+            -- Reverte atmosfera para o estado original
+            local atmosphereInstance = Lighting:FindFirstChildOfClass("Atmosphere")
+            if atmosphereInstance then
+                if originalLightingSettings.AtmColor then
+                    atmosphereInstance.Color = originalLightingSettings.AtmColor
+                    atmosphereInstance.Density = originalLightingSettings.AtmDensity
+                    atmosphereInstance.Offset = originalLightingSettings.AtmOffset
+                else
+                    atmosphereInstance:Destroy()
+                end
+            end
+
+            -- Reverte iluminação básica para o estado original
+            if originalLightingSettings.FogColor then
+                Lighting.FogColor = originalLightingSettings.FogColor
+                Lighting.FogStart = originalLightingSettings.FogStart
+                Lighting.FogEnd = originalLightingSettings.FogEnd
+                Lighting.Ambient = originalLightingSettings.Ambient
+                Lighting.OutdoorAmbient = originalLightingSettings.OutdoorAmbient
+                Lighting.Brightness = originalLightingSettings.Brightness
+                Lighting.TimeOfDay = originalLightingSettings.TimeOfDay
+            end
+
+            -- Restaura os Skies que foram guardados no backup
+            for _, sky in ipairs(destroyedSkiesBackup) do
+                sky.Parent = Lighting
+            end
+            table.clear(destroyedSkiesBackup)
+        end
     end)
 
     local shadowChangedConn = nil
