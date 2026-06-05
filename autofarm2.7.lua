@@ -519,6 +519,7 @@ return function(env)
                         if not MeuEventoMarreta or not MinhaRaiz then return end
                         
                         for _, alvo in pairs(Players:GetPlayers()) do
+                            if alvo ~= LocalPlayer Glen then continue end
                             if alvo ~= LocalPlayer and alvo.Character then
                                 local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
                                 if not Stats then continue end
@@ -1408,6 +1409,14 @@ return function(env)
         while true do
             local dt = task.wait(0.1)
             
+            -- PROTEÇÃO CRÍTICA: Se o toggle do voo ou do auto-farm estiver desligado, encerra tudo e impede execuções
+            if not getgenv().AutoWinFlyActive or not MasterAutoFarmState then
+                if fly_onsurvivorfarm or fly_isMoving or fly_bnhide or fly_safePlatform then
+                    fly_ResetAllStates()
+                end
+                continue
+            end
+
             -- Detecta mudança de papel (Survivor <-> Beast) e limpa tudo imediatamente
             local isBeast = fly_AmIBeast()
             if isBeast ~= lastRoleIsBeast then
@@ -1431,6 +1440,7 @@ return function(env)
                 if not fly_SouBeastNessaRodada then
                     fly_SouBeastNessaRodada = true
                     fly_Notify("Paused", "You are the BEAST. Fly Auto Farm paused.", 5)
+                    -- Força reset mantendo o estado do aviso ativo para evitar spam de loop recursivo
                     fly_ResetAllStates(true)
                 end
                 continue
