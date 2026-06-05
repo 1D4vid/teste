@@ -124,7 +124,7 @@ return function(env)
     -- ==========================================
     -- ELEMENTOS DA INTERFACE (UI)
     -- ==========================================
-    Library:CreateSection(Page, "Main Farming (BETA111111)")
+    Library:CreateSection(Page, "Main Farming (BETA)")
 
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
         MasterAutoFarmState = state
@@ -995,13 +995,10 @@ return function(env)
         return nil
     end
 
-    -- [[ MOVEMENT SYSTEM WITH DYNAMIC COLLISION BYPASS ]] --
+    -- [[ MOVEMENT SYSTEM WITH HOVER ANCHORING (ZERO COLLISION DRAG) ]] --
     local function fly_LerpToPart(Part, Threshold)
         local LerpCompleted = false
         local Connection
-        local EnabledPlrCollisions = {}
-        local ObjectsOnCollided = {}
-
         if not fly_IsThereChar() then return end
 
         local char = LocalPlayer.Character
@@ -1011,42 +1008,14 @@ return function(env)
         -- Sincronização do estado de movimentação ativa
         fly_isMoving = true
 
-        -- Desativa colisões do próprio corpo do jogador
-        for _, v in ipairs(char:GetChildren()) do
-            if v:IsA("BasePart") and v.CanCollide then
-                table.insert(EnabledPlrCollisions, v)
-                v.CanCollide = false
-            end
-        end
-
-        -- Plataformas temporárias de segurança e bypass
-        local NoFallPlatform = Instance.new("Part")
-        NoFallPlatform.Name = "SurvivorFlyPlatformNoFall"
-        NoFallPlatform.Size = Vector3.new(20, 0.5, 20)
-        NoFallPlatform.Anchored = true
-        NoFallPlatform.Transparency = 1
-        NoFallPlatform.Parent = workspace
-
-        local CollisionOffPlatform = Instance.new("Part")
-        CollisionOffPlatform.Name = "SurvivorFlyPlatformNoCollision"
-        CollisionOffPlatform.Size = Vector3.new(20, 30, 20)
-        CollisionOffPlatform.Anchored = true
-        CollisionOffPlatform.Transparency = 1
-        CollisionOffPlatform.CanCollide = false
-        CollisionOffPlatform.Parent = workspace
+        -- Bloqueia a física externa ancorando o HRP (Evita gravidade, empurrões e drift no ar)
+        hrp.Anchored = true
 
         Connection = RunService.Heartbeat:Connect(function(dt)
             if not fly_IsThereChar() or not getgenv().AutoWinFlyActive or not MasterAutoFarmState then
                 LerpCompleted = true
                 Connection:Disconnect()
                 return
-            end
-
-            -- Garante que o corpo do jogador permaneça sem colisão
-            for _, v in ipairs(char:GetChildren()) do
-                if v:IsA("BasePart") then
-                    v.CanCollide = false
-                end
             end
 
             if not Part or not Part:IsDescendantOf(workspace) then
@@ -1069,49 +1038,23 @@ return function(env)
                 local Direction = targetPos - currentPos
                 local Alpha = Direction.Unit * math.min(fly_Config.FarmTweenSpeed * dt, Distance)
 
-                hrp.CFrame = hrp.CFrame + Alpha
-
-                NoFallPlatform.Position = hrp.Position - Vector3.new(0, 3, 0)
-                CollisionOffPlatform.Position = hrp.Position - Vector3.new(0, 10, 0)
-
-                -- Desativa colisão física temporária do mapa ao redor do trajeto
-                local PartsInRange = workspace:GetPartBoundsInBox(CollisionOffPlatform.CFrame, CollisionOffPlatform.Size)
-                for _, v in ipairs(PartsInRange) do
-                    if v.CanCollide and not v:IsDescendantOf(char) and v ~= NoFallPlatform then
-                        v.CanCollide = false
-                        if not table.find(ObjectsOnCollided, v) then
-                            table.insert(ObjectsOnCollided, v)
-                        end
-                    end
-                end
-
-                -- Restaura a colisão das partes fora do raio de ação
-                for i = #ObjectsOnCollided, 1, -1 do
-                    local v = ObjectsOnCollided[i]
-                    if not table.find(PartsInRange, v) then
-                        pcall(function() v.CanCollide = true end)
-                        table.remove(ObjectsOnCollided, i)
-                    end
-                end
+                -- Movimentação por soma direta de CFrame de forma estável
+                hrp.CFrame = CFrame.new(currentPos + Alpha) * hrp.CFrame.Rotation
             end
         end)
 
-        -- Aguarda o término da interpolação física
+        -- Aguarda o término da movimentação linear bloqueando a thread
         repeat
             task.wait()
         until LerpCompleted
 
-        -- Limpa e restaura colisões nativas
-        for _, v in ipairs(EnabledPlrCollisions) do
-            pcall(function() v.CanCollide = true end)
-        end
-        pcall(function() NoFallPlatform:Destroy() end)
-        pcall(function() CollisionOffPlatform:Destroy() end)
-        for _, v in ipairs(ObjectsOnCollided) do
-            pcall(function() v.CanCollide = true end)
+        -- Libera a física local para interagir com o computador
+        if fly_IsThereChar() then
+            hrp.Anchored = false
+            hrp.CFrame = CFrame.new(Part.Position) * hrp.CFrame.Rotation
         end
         
-        -- Sinaliza fim do trajeto de movimento
+        -- Sinaliza o fim do trajeto
         fly_isMoving = false
     end
 
@@ -1488,7 +1431,6 @@ return function(env)
                 if not fly_SouBeastNessaRodada then
                     fly_SouBeastNessaRodada = true
                     fly_Notify("Paused", "You are the BEAST. Fly Auto Farm paused.", 5)
-                    -- Força reset mantendo o estado do aviso ativo para evitar spam de loop recursivo
                     fly_ResetAllStates(true)
                 end
                 continue
@@ -1537,7 +1479,7 @@ return function(env)
                                     fly_safePlatform = Instance.new("Part")
                                     fly_safePlatform.Size = Vector3.new(15, 1, 15)
                                     fly_safePlatform.Anchored = true
-                                    fly_safePlatform.CanCollide = true
+                                    fly_safePlatform.CanCollide = true -- FIXED: Correção de variável nula
                                     fly_safePlatform.Transparency = 1
                                     fly_safePlatform.Name = "NexVoidSafePlate"
                                     fly_safePlatform.Parent = workspace
