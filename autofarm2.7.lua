@@ -1,3 +1,4 @@
+
 return function(env)
     local Library = env.Library
     local Page = env.Page
@@ -54,6 +55,10 @@ return function(env)
     local tp_bnhide = false
     local tp_lpos = nil
     local tp_safePlatform = nil
+
+    -- REFERÊNCIAS DO SISTEMA
+    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
+    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
 
     -- ==========================================
     -- ELEMENTOS DA INTERFACE (UI)
@@ -211,10 +216,6 @@ return function(env)
         end
         _G.AntiAfkEnabled = state
     end)
-
-    -- REFERÊNCIAS DO SISTEMA
-    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
-    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
 
     -- [[ ANTI AFK ]] --
     task.spawn(function()
@@ -629,7 +630,7 @@ return function(env)
                                     local cframePorta = painel.CFrame * CFrame.new(0, 0, -3)
                                     local sucesso = EsperarETeleportar(cframePorta)
                                     
-                                    if pointer then
+                                    if sucesso then
                                         
                                         while getgenv().FarmRodando and not getgenv().EscapouDaPartida do
                                             if not PossoAgir() then break end
@@ -798,19 +799,9 @@ return function(env)
         return false
     end
 
+    -- CORREÇÃO: Lê diretamente o valor booleano do jogo para evitar falsos negativos
     local function fly_IsMatchActive()
-        local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
-        if not currentMap or not currentMap.Value then
-            return false
-        end
-        local status = ReplicatedStorage:FindFirstChild("GameStatus")
-        if status then
-            local statusText = string.lower(status.Value)
-            if string.find(statusText, "intermission") or string.find(statusText, "game over") or string.find(statusText, "lobby") then
-                return false
-            end
-        end
-        return true
+        return IsGameActive.Value
     end
 
     local function fly_GetBeast()
@@ -881,6 +872,13 @@ return function(env)
                 end
             end
             return fly_IsThereChar()
+        end
+
+        -- Aguarda o personagem e dados estarem 100% carregados antes de iniciar qualquer loop
+        local readyAttempts = 0
+        while not PlayerReady() and readyAttempts < 20 do
+            task.wait(0.2)
+            readyAttempts = readyAttempts + 1
         end
 
         local function TaskGood()
@@ -1062,9 +1060,6 @@ return function(env)
             local CancelComputers = false
             local LeastTriggers = 4
             local Closest = math.huge
-            
-            -- CORREÇÃO DO BUG DE DETECÇÃO: 
-            -- Inicializamos com a contagem real dos computadores carregados no mapa para evitar finalização prematura
             local ComputersLeft = #MapObjects.Computers > 0 and #MapObjects.Computers or 5
 
             coroutine.wrap(function()
@@ -1208,11 +1203,12 @@ return function(env)
                 fly_Notify("Auto Farm", "Auto Farm started.", 3)
                 Run()
                 
-                -- CORREÇÃO: Só teleporta de volta para o lobby se a partida acabou.
-                -- Evita que desconexões rápidas do loop joguem o jogador no lobby com a partida em andamento.
-                if not DoNotTeleport and not fly_IsMatchActive() then
+                if not DoNotTeleport then
                     task.wait(1)
-                    fly_TPPlayerSpawn()
+                    -- CORREÇÃO: Verifica se a partida não iniciou de novo durante a espera antes de teleportar para o lobby
+                    if not fly_IsMatchActive() then
+                        fly_TPPlayerSpawn()
+                    end
                 end
                 fly_onsurvivorfarm = false
             end
@@ -1267,6 +1263,8 @@ return function(env)
                 continue
             end
 
+            -- CORREÇÃO: Se a partida não estiver ativa, removemos corrotinas antigas na hora 
+            -- para impedir que threads em background façam o teleporte fantasma para o lobby.
             if not getgenv().AutoWinFlyActive or not MasterAutoFarmState or not fly_IsMatchActive() then
                 if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Anchored then
                     LocalPlayer.Character.HumanoidRootPart.Anchored = false
@@ -1277,6 +1275,12 @@ return function(env)
                 fly_Comp = 0 
                 fly_SouBeastNessaRodada = false
                 
+                -- Limpa instantaneamente as threads anteriores pendentes
+                for i, v in pairs(fly_farmtasks) do
+                    pcall(function() coroutine.close(v) end)
+                    fly_farmtasks[i] = nil
+                end
+
                 if getgenv().AutoWinFlyActive and MasterAutoFarmState then
                     if not fly_notifiedLobby then
                         fly_Notify("Lobby", "Waiting for game start...", 5)
