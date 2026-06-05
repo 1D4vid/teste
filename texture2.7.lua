@@ -18,7 +18,6 @@ return function(env)
     local MobileCrosshair = env.MobileCrosshair
     local PCSoftwareCursor = env.PCSoftwareCursor
     local Lighting = game:GetService("Lighting")
-
     local Mouse = LocalPlayer:GetMouse()
 
     local formatID = function(id)
@@ -88,6 +87,24 @@ return function(env)
         return wrapper
     end
 
+    -- Controle dinâmico de visibilidade do cursor do mouse padrão
+    local cursorLoopConn = nil
+    local function updateMouseVisibility()
+        local savedPC = UserConfigs["TexturesPage_Crosshair_PC"]
+        if savedPC and savedPC ~= "RESET" and not isMobile then
+            UserInputService.MouseIconEnabled = false
+            Mouse.Icon = "rbxassetid://0" -- Força textura vazia/invisível para anular o cursor padrão
+        else
+            if Mouse.Icon == "rbxassetid://0" then
+                Mouse.Icon = ""
+                UserInputService.MouseIconEnabled = true
+            end
+        end
+    end
+
+    if cursorLoopConn then cursorLoopConn:Disconnect() end
+    cursorLoopConn = RunService.RenderStepped:Connect(updateMouseVisibility)
+
     -- ==========================================
     -- SISTEMA UNIFICADO DE RENDERIZAÇÃO DO MAPA
     -- ==========================================
@@ -106,7 +123,6 @@ return function(env)
     local IgnoreNames = { ComputerTable = true, ExitDoor = true }
     local mcFaces = {"Front", "Back", "Bottom", "Top", "Right", "Left"}
     
-    -- Mapeamento otimizado usando Enums diretamente (Evita alocação lenta de Strings)
     local mcMaterials = {
         [Enum.Material.Wood] = "3258599312", 
         [Enum.Material.WoodPlanks] = "8676581022", 
@@ -123,7 +139,6 @@ return function(env)
         [Enum.Material.Sand] = "152572215"
     }
 
-    -- Identificador ultrarrápido de peças pertencentes a personagens (Evita travessias recursivas na árvore)
     local function isPlayerPart(part)
         local parent = part.Parent
         if not parent then return false end
@@ -137,11 +152,9 @@ return function(env)
         return false
     end
 
-    -- Função mestre para atualizar o visual de uma parte baseado nos estados ativos
     local function refreshPartVisual(part)
         if not part or not part.Parent then return end
 
-        -- 1. Cria o backup de fábrica caso não exista
         local bkp = originalMapStates[part]
         if not bkp then
             bkp = {
@@ -152,19 +165,16 @@ return function(env)
             originalMapStates[part] = bkp
         end
 
-        -- 2. Define os alvos baseado na hierarquia de prioridades dos Toggles
         local targetMaterial = bkp.Material
         local targetColor = bkp.Color
         local targetShadow = bkp.CastShadow
 
-        -- Otimização de sombras
         if removeShadowsEnabled then
             targetShadow = false
         end
 
         local mcApplied = false
 
-        -- Prioridade de texturas do mapa (Zero buscas hierárquicas em runtime)
         if snowEnabled then
             if part.Anchored and not IgnoreNames[part.Name] then
                 targetMaterial = Enum.Material.Snow
@@ -179,7 +189,6 @@ return function(env)
                 targetMaterial = Enum.Material.SmoothPlastic
                 mcApplied = true
                 
-                -- Busca as texturas diretamente pelo cache (Evita usar FindFirstChild)
                 local texGroup = mcTexturesCache[part]
                 if not texGroup then
                     texGroup = {}
@@ -197,7 +206,6 @@ return function(env)
                     mcTexturesCache[part] = texGroup
                 end
                 
-                -- Atualiza propriedades sem recriar objetos
                 local fullTexId = "rbxassetid://" .. textureId
                 local partColor = bkp.Color
                 local partTrans = part.Transparency
@@ -212,7 +220,6 @@ return function(env)
             end
         end
 
-        -- Destrói as texturas do Minecraft e limpa o cache se o toggle for desligado
         if not mcApplied then
             local texGroup = mcTexturesCache[part]
             if texGroup then
@@ -224,7 +231,6 @@ return function(env)
             end
         end
 
-        -- 3. Aplica as propriedades calculadas de forma segura e rápida
         pcall(function()
             if part.Material ~= targetMaterial then part.Material = targetMaterial end
             if part.Color ~= targetColor then part.Color = targetColor end
@@ -232,7 +238,6 @@ return function(env)
         end)
     end
 
-    -- Atualiza as propriedades de iluminação das lâmpadas do mapa
     local function refreshLightVisual(light)
         if not light or not light.Parent then return end
         local bkp = originalLightStates[light]
@@ -251,7 +256,6 @@ return function(env)
         end)
     end
 
-    -- Escaneamento progressivo em segundo plano ao iniciar o script (Zero-Lag de inicialização)
     task.spawn(function()
         local desc = Workspace:GetDescendants()
         local startTime = os.clock()
@@ -259,23 +263,20 @@ return function(env)
             local v = desc[i]
             local class = v.ClassName
             
-            -- Filtro de alta velocidade por classe
             if class == "Part" or class == "MeshPart" or class == "WedgePart" or class == "CornerWedgePart" then
-                if not isPlayerPart(v) then -- Ignora partes de personagens previamente
+                if not isPlayerPart(v) then
                     table.insert(cachedParts, v)
                 end
             elseif class == "PointLight" or class == "SpotLight" or class == "SurfaceLight" then
                 table.insert(cachedLights, v)
             end
             
-            -- Cede o frame se o escaneamento inicial passar de 1.5ms
             if os.clock() - startTime >= 0.0015 then
                 task.wait()
                 startTime = os.clock()
             end
         end
 
-        -- Captura novos elementos de forma extremamente barata (Comparações de Strings)
         Workspace.DescendantAdded:Connect(function(child)
             task.defer(function()
                 local class = child.ClassName
@@ -308,7 +309,6 @@ return function(env)
         batchProcess(cachedParts, refreshPartVisual)
     end)
 
-    -- [ ULTRA HD GRAPHICS ]
     local ultraHDConns = {}
     local createdMaterials = {}
     Library:CreateToggle(Page, "Ultra HD Graphics", false, function(state) 
@@ -413,7 +413,6 @@ return function(env)
         getgenv().NexOptimization.ToggleFPSBooster(state)
     end)
 
-    -- [ REMOVE SHADOWS ]
     local shadowChangedConn = nil
 
     Library:CreateToggle(Page, "Remove Shadows", false, function(state)
@@ -436,7 +435,6 @@ return function(env)
         end)
     end)
 
-    -- [ REMOVE PARTICLES ]
     local removeParticlesEnabled = false
     local particlesDescConnW = nil
     local particlesDescConnL = nil
@@ -611,40 +609,66 @@ return function(env)
             end
         end
 
-        task.spawn(function()
-            -- OTIMIZAÇÃO EXTREMA: Escaneia somente os personagens dos jogadores ativos (Evita lag de varredura no Workspace/Replicated)
-            for _, player in ipairs(Players:GetPlayers()) do
-                local char = player.Character
-                if char then
-                    local desc = char:GetDescendants()
-                    for i = 1, #desc do
-                        local obj = desc[i]
-                        if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then aplicarTextura(obj) end
+        -- Varredura ultrarrápida focada em players atuais (Onde os efeitos de pulo de fato se localizam)
+        for _, plr in ipairs(Players:GetPlayers()) do
+            local char = plr.Character
+            if char then
+                for _, obj in ipairs(char:GetDescendants()) do
+                    if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
+                        aplicarTextura(obj)
                     end
                 end
             end
-            
-            -- Cria escutadores assíncronos focados estritamente nos personagens dos jogadores
-            if texturaID ~= "Default" then
-                for _, player in ipairs(Players:GetPlayers()) do
-                    local function listenChar(char)
-                        table.insert(currentDoubleJumpConns, char.DescendantAdded:Connect(function(obj)
-                            if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then task.defer(aplicarTextura, obj) end
-                        end))
+        end
+
+        -- Varredura fracionada em segundo plano no Workspace (Sem congelar o renderizador principal)
+        task.spawn(function()
+            local desc = Workspace:GetDescendants()
+            local total = #desc
+            local index = 1
+            local chunkSize = 150 -- Processa 150 objetos por frame
+
+            while index <= total do
+                for i = 1, chunkSize do
+                    if index > total then break end
+                    local obj = desc[index]
+                    if obj and (obj:IsA("ParticleEmitter") or obj:IsA("Sparkles")) then
+                        aplicarTextura(obj)
                     end
-                    table.insert(currentDoubleJumpConns, player.CharacterAdded:Connect(listenChar))
-                    if player.Character then listenChar(player.Character) end
+                    index = index + 1
                 end
-                
-                table.insert(currentDoubleJumpConns, Players.PlayerAdded:Connect(function(player)
-                    table.insert(currentDoubleJumpConns, player.CharacterAdded:Connect(function(char)
-                        table.insert(currentDoubleJumpConns, char.DescendantAdded:Connect(function(obj)
-                            if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then task.defer(aplicarTextura, obj) end
-                        end))
+                task.wait() -- Libera o frame de renderização atual
+            end
+        end)
+
+        -- Escuta em tempo real para novos elementos adicionados dinamicamente
+        if texturaID ~= "Default" then
+            table.insert(currentDoubleJumpConns, Workspace.DescendantAdded:Connect(function(obj)
+                if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
+                    task.defer(function() aplicarTextura(obj) end)
+                end
+            end))
+
+            for _, plr in ipairs(Players:GetPlayers()) do
+                table.insert(currentDoubleJumpConns, plr.CharacterAdded:Connect(function(char)
+                    table.insert(currentDoubleJumpConns, char.DescendantAdded:Connect(function(obj)
+                        if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
+                            task.defer(function() aplicarTextura(obj) end)
+                        end
                     end))
                 end))
             end
-        end)
+
+            table.insert(currentDoubleJumpConns, Players.PlayerAdded:Connect(function(plr)
+                table.insert(currentDoubleJumpConns, plr.CharacterAdded:Connect(function(char)
+                    table.insert(currentDoubleJumpConns, char.DescendantAdded:Connect(function(obj)
+                        if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
+                            task.defer(function() aplicarTextura(obj) end)
+                        end
+                    end))
+                end))
+            end))
+        end
     end
 
     local CustomInputContainer = Instance.new("Frame")
@@ -870,7 +894,7 @@ return function(env)
         mDStr.Color = Color3.fromRGB(40,40,40)
         
         mDefaultBtn.MouseEnter:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Theme.Accent}):Play() TweenService:Create(mDefaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.Accent}):Play() end)
-        mDefaultBtn.MouseLeave:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() TweenService:Create(defaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.TextDark}):Play() end)
+        mDefaultBtn.MouseLeave:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() TweenService:Create(mDefaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.TextDark}):Play() end)
         mDefaultBtn.MouseButton1Click:Connect(function() UserConfigs["TexturesPage_MobileJump"] = "Default" EnableMobileButtonJump("Default") end)
 
         local mJumpIDs = {
@@ -901,7 +925,27 @@ return function(env)
     -- ==========================================
     -- POPULATE CROSSHAIRS
     -- ==========================================
-    local usePCCursor = UserInputService.MouseEnabled
+    local CursorList = {
+        {Name = "Default", ID = "RESET"},
+        {Name = "Use Cursor", ID = "15368174199"}, {Name = "Use Cursor", ID = "12701650945"},
+        {Name = "Use Cursor", ID = "128514706094926"}, {Name = "Use Cursor", ID = "119350232226515"},
+        {Name = "Use Cursor", ID = "5060823578"}, {Name = "Use Cursor", ID = "9896571799"},
+        {Name = "Use Cursor", ID = "139654963330788"}, {Name = "Use Cursor", ID = "13441649168"},
+        {Name = "Use Cursor", ID = "88005681147215"}, {Name = "Use Cursor", ID = "72902755839437"},
+        {Name = "Use Cursor", ID = "128926155948846"}, {Name = "Use Cursor", ID = "95348763251820"},
+        {Name = "Use Cursor", ID = "138513473967293"}, {Name = "Use Cursor", ID = "82043397777881"},
+        {Name = "Use Cursor", ID = "84583215296063"}, {Name = "Use Cursor", ID = "120058675182639"},
+        {Name = "Use Cursor", ID = "130210380679877"}, {Name = "Use Cursor", ID = "74264514489577"},
+        {Name = "Use Cursor", ID = "115877213393063"}, {Name = "Use Cursor", ID = "133579119074302"},
+        {Name = "Use Cursor", ID = "137970082797101"}, {Name = "Use Cursor", ID = "116865736993390"},
+        {Name = "Use Cursor", ID = "70613337612134"}, {Name = "Use Cursor", ID = "75670552980458"}, 
+        {Name = "Use Cursor", ID = "100822311002882"}, {Name = "Use Cursor", ID = "135331308026486"},
+        {Name = "Use Cursor", ID = "91090339346537"}, {Name = "Use Cursor", ID = "99626703938913"},
+        {Name = "Use Cursor", ID = "112195317343485"}, {Name = "Use Cursor", ID = "89746976355403"},
+        {Name = "Use Cursor", ID = "132191954497107"}, {Name = "Use Cursor", ID = "93050147531878"},
+        {Name = "Use Cursor", ID = "88343941218179"}, {Name = "Use Cursor", ID = "81277812126144"},
+        {Name = "Use Cursor", ID = "131422226977434"}, {Name = "Use Cursor", ID = "116499481211766"}
+    }
 
     local function CreateCursorSystem(isMob)
         local CInputContainer = Instance.new("Frame")
@@ -951,9 +995,10 @@ return function(env)
                     MobileCrosshair.Image = fullID
                     MobileCrosshair.Visible = true 
                 else 
-                    Mouse.Icon = fullID -- Aplica de forma nativa e limpa o cursor no PC
-                    PCSoftwareCursor.Visible = false
-                    SetPCCursorActive(false)
+                    PCSoftwareCursor.Image = fullID
+                    SetPCCursorActive(true)
+                    PCSoftwareCursor.Visible = true 
+                    updateMouseVisibility()
                 end 
             end 
         end)
@@ -986,9 +1031,10 @@ return function(env)
                     if isMob then 
                         MobileCrosshair.Visible = false 
                     else 
-                        Mouse.Icon = "" -- Restaura nativamente o cursor padrão do Windows
-                        PCSoftwareCursor.Visible = false
                         SetPCCursorActive(false)
+                        PCSoftwareCursor.Visible = false
+                        UserInputService.MouseIconEnabled = true 
+                        Mouse.Icon = ""
                     end 
                 end)
             else
@@ -1013,15 +1059,17 @@ return function(env)
                         MobileCrosshair.Image = fullID
                         MobileCrosshair.Visible = true 
                     else 
-                        Mouse.Icon = fullID -- Aplica nativamente o cursor customizado
-                        PCSoftwareCursor.Visible = false
-                        SetPCCursorActive(false)
+                        PCSoftwareCursor.Image = fullID
+                        SetPCCursorActive(true)
+                        PCSoftwareCursor.Visible = true 
+                        updateMouseVisibility()
                     end 
                 end)
             end
         end
     end
 
+    local usePCCursor = UserInputService.MouseEnabled
     if usePCCursor then CreateCursorSystem(false) else CreateCursorSystem(true) end
 
     -- INICIALIZADOR DE SALVOS
@@ -1032,7 +1080,10 @@ return function(env)
         if usePCCursor then
             local saved = UserConfigs["TexturesPage_Crosshair_PC"]
             if saved and saved ~= "RESET" then
-                Mouse.Icon = saved -- Aplica de forma nativa e limpa na inicialização
+                PCSoftwareCursor.Image = saved
+                SetPCCursorActive(true)
+                PCSoftwareCursor.Visible = true 
+                updateMouseVisibility()
             end
         else
             local saved = UserConfigs["TexturesPage_Crosshair_Mobile"]
