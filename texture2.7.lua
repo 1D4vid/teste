@@ -28,36 +28,7 @@ return function(env)
         return nil
     end
 
-    -- Função auxiliar para forçar a atualização de layouts cortados/sem cor em ScrollingFrames
-    local function forceScrollRefresh(targetFrame)
-        task.spawn(function()
-            local sf = targetFrame:FindFirstAncestorWhichIsA("ScrollingFrame")
-            if sf then
-                local current = sf.CanvasPosition
-                sf.CanvasPosition = current + Vector2.new(0, 1)
-                task.wait()
-                sf.CanvasPosition = current
-            end
-        end)
-    end
-
-    -- Função segura para carregar scripts externos sem travar a execução
-    local function safeLoadExternal(url)
-        local success, content = pcall(game.HttpGet, game, url)
-        if success and content then
-            local compilSucess, func = pcall(loadstring, content)
-            if compilSucess and type(func) == "function" then
-                local runSuccess, result = pcall(func)
-                if runSuccess then
-                    return result
-                end
-            end
-        end
-        warn("Não foi possível carregar o script de otimização externo de forma segura.")
-        return nil
-    end
-
-    -- Processador de performance baseado em Orçamento de Tempo (Frame Budget de 1.5ms)
+    -- Processador de altíssima performance baseado em Orçamento de Tempo (Frame Budget de 1.5ms)
     local function batchProcess(items, processFunc, onComplete)
         local total = #items
         local index = 1
@@ -66,8 +37,8 @@ return function(env)
             local startTime = os.clock()
             while index <= total do
                 local item = items[index]
-                if item and item.Parent then
-                    pcall(processFunc, item)
+                if item then
+                    processFunc(item)
                 end
                 index = index + 1
                 
@@ -82,22 +53,23 @@ return function(env)
         task.spawn(run)
     end
 
+    -- [ RESOLVIDO BUG VISUAL DA CROSSHAIR ]
     local function createGridContainer(parentTarget)
         local bg = Instance.new("Frame")
-        bg.Size = UDim2.new(1, -2, 0, 0)
+        bg.Size = UDim2.new(1, -2, 0, 1) -- Inicializado com 1px para evitar falha no cálculo nativo
         bg.Position = UDim2.new(0, 1, 0, 0)
-        bg.AutomaticSize = Enum.AutomaticSize.Y
         bg.BackgroundColor3 = Color3.new(0, 0, 0)
         bg.BackgroundTransparency = 0.45
+        bg.Visible = true
         bg.Parent = parentTarget
+        
         Instance.new("UICorner", bg).CornerRadius = UDim.new(0, 6)
         local str = Instance.new("UIStroke", bg)
         str.Color = Color3.fromRGB(40, 40, 40)
         str.Thickness = 1
 
         local wrapper = Instance.new("Frame")
-        wrapper.Size = UDim2.new(1, 0, 0, 0)
-        wrapper.AutomaticSize = Enum.AutomaticSize.Y
+        wrapper.Size = UDim2.new(1, 0, 0, 1)
         wrapper.BackgroundTransparency = 1
         wrapper.Parent = bg
         
@@ -113,20 +85,24 @@ return function(env)
         pad.PaddingBottom = UDim.new(0, 8)
         pad.Parent = wrapper
 
+        -- Recalculador diferido de layout (Força a correção de cores e dimensões imediatamente)
+        task.defer(function()
+            bg.AutomaticSize = Enum.AutomaticSize.Y
+            wrapper.AutomaticSize = Enum.AutomaticSize.Y
+            bg.Visible = false
+            bg.Visible = true
+        end)
+
         return wrapper
     end
 
     -- Controle dinâmico de visibilidade do cursor do mouse padrão
-    if shared.CursorLoopConn then 
-        shared.CursorLoopConn:Disconnect() 
-        shared.CursorLoopConn = nil
-    end
-
+    local cursorLoopConn = nil
     local function updateMouseVisibility()
         local savedPC = UserConfigs["TexturesPage_Crosshair_PC"]
         if savedPC and savedPC ~= "RESET" and not isMobile then
             UserInputService.MouseIconEnabled = false
-            Mouse.Icon = "rbxassetid://0" -- Força textura vazia para anular o cursor padrão
+            Mouse.Icon = "rbxassetid://0" -- Força textura vazia/invisível para anular o cursor padrão
         else
             if Mouse.Icon == "rbxassetid://0" then
                 Mouse.Icon = ""
@@ -135,7 +111,8 @@ return function(env)
         end
     end
 
-    shared.CursorLoopConn = RunService.RenderStepped:Connect(updateMouseVisibility)
+    if cursorLoopConn then cursorLoopConn:Disconnect() end
+    cursorLoopConn = RunService.RenderStepped:Connect(updateMouseVisibility)
 
     -- ==========================================
     -- SISTEMA UNIFICADO DE RENDERIZAÇÃO DO MAPA
@@ -145,7 +122,7 @@ return function(env)
     
     local originalMapStates = setmetatable({}, {__mode = "k"})
     local originalLightStates = setmetatable({}, {__mode = "k"})
-    local mcTexturesCache = setmetatable({}, {__mode = "k"})
+    local mcTexturesCache = setmetatable({}, {__mode = "k"}) -- Cache local das texturas 3D do Minecraft
 
     local wbEnabled = false
     local snowEnabled = false
@@ -172,15 +149,14 @@ return function(env)
     }
 
     local function isPlayerPart(part)
-        local model = part:FindFirstAncestorOfClass("Model")
-        if model then
-            if Players:GetPlayerFromCharacter(model) then
-                return true
-            end
-            local superModel = model.Parent and model.Parent:IsA("Model") and model.Parent
-            if superModel and Players:GetPlayerFromCharacter(superModel) then
-                return true
-            end
+        local parent = part.Parent
+        if not parent then return false end
+        if parent:IsA("Model") and Players:GetPlayerFromCharacter(parent) then
+            return true
+        end
+        local grand = parent.Parent
+        if grand and grand:IsA("Model") and Players:GetPlayerFromCharacter(grand) then
+            return true
         end
         return false
     end
@@ -294,15 +270,14 @@ return function(env)
         local startTime = os.clock()
         for i = 1, #desc do
             local v = desc[i]
-            if v and v.Parent then
-                local class = v.ClassName
-                if class == "Part" or class == "MeshPart" or class == "WedgePart" or class == "CornerWedgePart" then
-                    if not isPlayerPart(v) then
-                        table.insert(cachedParts, v)
-                    end
-                elseif class == "PointLight" or class == "SpotLight" or class == "SurfaceLight" then
-                    table.insert(cachedLights, v)
+            local class = v.ClassName
+            
+            if class == "Part" or class == "MeshPart" or class == "WedgePart" or class == "CornerWedgePart" then
+                if not isPlayerPart(v) then
+                    table.insert(cachedParts, v)
                 end
+            elseif class == "PointLight" or class == "SpotLight" or class == "SurfaceLight" then
+                table.insert(cachedLights, v)
             end
             
             if os.clock() - startTime >= 0.0015 then
@@ -313,7 +288,6 @@ return function(env)
 
         Workspace.DescendantAdded:Connect(function(child)
             task.defer(function()
-                if not child or not child.Parent then return end
                 local class = child.ClassName
                 if class == "Part" or class == "MeshPart" or class == "WedgePart" or class == "CornerWedgePart" then
                     if not isPlayerPart(child) then
@@ -346,11 +320,9 @@ return function(env)
 
     Library:CreateToggle(Page, "Remove Textures", false, function(state) 
         if not getgenv().NexOptimization then
-            getgenv().NexOptimization = safeLoadExternal("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/fps%20booster%20e%20remove%20textures.lua")
+            getgenv().NexOptimization = loadstring(game:HttpGet("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/fps%20booster%20e%20remove%20textures.lua"))()
         end
-        if getgenv().NexOptimization and getgenv().NexOptimization.ToggleTextures then
-            getgenv().NexOptimization.ToggleTextures(state)
-        end
+        getgenv().NexOptimization.ToggleTextures(state)
     end)
 
     Library:CreateToggle(Page, "Minecraft Texture", false, function(state)
@@ -366,14 +338,11 @@ return function(env)
     
     Library:CreateToggle(Page, "FpsBooster", false, function(state) 
         if not getgenv().NexOptimization then
-            getgenv().NexOptimization = safeLoadExternal("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/fps%20booster%20e%20remove%20textures.lua")
+            getgenv().NexOptimization = loadstring(game:HttpGet("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/fps%20booster%20e%20remove%20textures.lua"))()
         end
-        if getgenv().NexOptimization and getgenv().NexOptimization.ToggleFPSBooster then
-            getgenv().NexOptimization.ToggleFPSBooster(state)
-        end
+        getgenv().NexOptimization.ToggleFPSBooster(state)
     end)
 
-    -- CONTROLADOR DE PERSONAGENS CINZAS
     local grayOutfitsEnabled = false
     local grayCharacterConns = {}
     local characterBackups = setmetatable({}, {__mode = "k"})
@@ -431,9 +400,7 @@ return function(env)
             elseif i:IsA("Pants") or i:IsA("Shirt") or i:IsA("ShirtGraphic") or i.Name == "Shirt Graphic" then
                 if not backup.Clothes[i] then
                     backup.Clothes[i] = i.Parent
-                    task.defer(function() 
-                        if i.Parent then i.Parent = nil end 
-                    end)
+                    task.defer(function() i.Parent = nil end)
                 end
             elseif i:IsA("SpecialMesh") or i:IsA("Mesh") then
                 local p = i.Parent
@@ -453,8 +420,8 @@ return function(env)
         end
 
         local conn = char.DescendantAdded:Connect(function(desc)
-            task.wait() 
-            if grayOutfitsEnabled and desc and desc.Parent then
+            task.wait()
+            if grayOutfitsEnabled then
                 processItem(desc)
             end
         end)
@@ -491,7 +458,7 @@ return function(env)
         end
         
         for clothing, originalParent in pairs(backup.Clothes) do
-            if clothing and originalParent then
+            if clothing then
                 clothing.Parent = char
             end
         end
@@ -519,7 +486,7 @@ return function(env)
             end
         end
         task.wait(0.1)
-        if grayOutfitsEnabled and char.Parent then
+        if grayOutfitsEnabled then
             applyGreyCharacter(char)
         end
     end
@@ -585,7 +552,7 @@ return function(env)
     local particleBkp = setmetatable({}, {__mode = "k"})
 
     local function applyParticleRemoval(objeto)
-        if not removeParticlesEnabled or not objeto or not objeto.Parent then return end
+        if not removeParticlesEnabled then return end
         
         local isParticle = objeto:IsA("ParticleEmitter") or 
                            objeto:IsA("Sparkles") or 
@@ -695,8 +662,6 @@ return function(env)
         table.clear(currentDoubleJumpConns)
         
         local function aplicarTextura(obj)
-            if not obj or not obj.Parent then return end
-            
             if texturaID == "Default" then
                 obj:SetAttribute("CurrentTexture", nil)
                 if obj.ClassName == "ParticleEmitter" then
@@ -755,6 +720,7 @@ return function(env)
             end
         end
 
+        -- Varredura ultrarrápida focada em players atuais
         for _, plr in ipairs(Players:GetPlayers()) do
             local char = plr.Character
             if char then
@@ -766,6 +732,7 @@ return function(env)
             end
         end
 
+        -- Varredura fracionada em segundo plano no Workspace
         task.spawn(function()
             local desc = Workspace:GetDescendants()
             local total = #desc
@@ -785,6 +752,7 @@ return function(env)
             end
         end)
 
+        -- Escuta em tempo real para novos elementos adicionados dinamicamente
         if texturaID ~= "Default" then
             table.insert(currentDoubleJumpConns, Workspace.DescendantAdded:Connect(function(obj)
                 if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
@@ -827,9 +795,9 @@ return function(env)
     CustomInputBox.Text = ""
     local savedDJ = UserConfigs["TexturesPage_DoubleJump"]
     if savedDJ and savedDJ ~= "Default" then CustomInputBox.Text = savedDJ:gsub("rbxassetid://", "") end
-    CustomInputBox.PlaceholderText = "Textura ID..."
-    CustomInputBox.TextColor3 = Color3.fromRGB(220, 220, 220)
-    CustomInputBox.PlaceholderColor3 = Color3.fromRGB(130, 130, 130)
+    CustomInputBox.PlaceholderText = "Texture ID..."
+    CustomInputBox.TextColor3 = Theme.TextDark
+    CustomInputBox.PlaceholderColor3 = Theme.TextDark
     CustomInputBox.Font = Theme.Font
     CustomInputBox.TextSize = 10
     CustomInputBox.TextXAlignment = Enum.TextXAlignment.Left
@@ -841,10 +809,10 @@ return function(env)
     ApplyBtn.Position = UDim2.new(1, -60, 0.5, -10)
     ApplyBtn.BackgroundColor3 = Color3.new(0,0,0)
     ApplyBtn.BackgroundTransparency = 0.45
-    ApplyBtn.Text = "Aplicar"
+    ApplyBtn.Text = "Apply"
     ApplyBtn.Font = Enum.Font.GothamBold
     ApplyBtn.TextSize = 10
-    ApplyBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+    ApplyBtn.TextColor3 = Theme.TextDark
     ApplyBtn.Parent = CustomInputContainer
     Instance.new("UICorner", ApplyBtn).CornerRadius = UDim.new(0, 4)
     local abStr = Instance.new("UIStroke", ApplyBtn)
@@ -861,13 +829,13 @@ return function(env)
         end
     end)
 
-    -- Removido ID "84159990264787" conforme solicitação
+    -- [ REMOVIDO ID 84159990264787 CONFORME SOLICITADO ]
     local effectIDs = {
         "81110491136307", "117864251880006", "120181545812734", "74056211768119", 
         "116419901031627", "92247449256845", "113423466689563", "90279999098357", 
         "94123299347751", "105065705443269", "122902019815288", "138617722401997", 
         "75192344666220", "139646605021296", "133105930199997", "96482830256985", 
-        "107964624563909", "122185636007520", "130200330618832",
+        "107964624563909", "122185636007520", "130200330618832", 
         "87265760472097", "125925535971201", "99196076742919", "80555494674270", 
         "77364460442867", "84014330993791", "80081088131892", "70463296258416",
         "84683340454265", "110707827597886", "94615398600162", "136555497393349", 
@@ -914,15 +882,14 @@ return function(env)
         end)
     end
 
-
-    -- ==========================================
-    -- MOBILE BUTTON JUMP (P1 & P2 na Esquerda)
-    -- ==========================================
+    -- ==========================================================
+    -- MOBILE BUTTON JUMP (DIVIDIDO EM P1 NA ESQUERDA E P2 NA DIREITA)
+    -- ==========================================================
     if isMobile then
         Library:CreateSection(Page, "Mobile Button Jump (P1)", "Left")
         local targetParentMJ1 = GetParentTarget(Page)
 
-        Library:CreateSection(Page, "Mobile Button (P2)", "Left")
+        Library:CreateSection(Page, "Mobile Button Jump (P2)", "Right")
         local targetParentMJ2 = GetParentTarget(Page)
 
         local mobileJumpConns = {}
@@ -935,7 +902,6 @@ return function(env)
 
             local playerGui = LocalPlayer:WaitForChild("PlayerGui")
             local function applyCustomButton(touchGui)
-                if not touchGui then return end
                 local touchControlFrame = touchGui:FindFirstChild("TouchControlFrame") or touchGui:WaitForChild("TouchControlFrame", 2)
                 if not touchControlFrame then return end
                 local jumpButton = touchControlFrame:FindFirstChild("JumpButton") or touchControlFrame:WaitForChild("JumpButton", 2)
@@ -996,9 +962,9 @@ return function(env)
         MJumpTextBox.Text = ""
         local savedMJ = UserConfigs["TexturesPage_MobileJump"]
         if savedMJ and savedMJ ~= "Default" then MJumpTextBox.Text = savedMJ:gsub("rbxassetid://", "") end
-        MJumpTextBox.PlaceholderText = "Textura ID..."
-        MJumpTextBox.TextColor3 = Color3.fromRGB(220, 220, 220)
-        MJumpTextBox.PlaceholderColor3 = Color3.fromRGB(130, 130, 130)
+        MJumpTextBox.PlaceholderText = "Texture ID..."
+        MJumpTextBox.TextColor3 = Theme.TextDark
+        MJumpTextBox.PlaceholderColor3 = Theme.TextDark
         MJumpTextBox.Font = Theme.Font
         MJumpTextBox.TextSize = 10
         MJumpTextBox.TextXAlignment = Enum.TextXAlignment.Left
@@ -1010,10 +976,10 @@ return function(env)
         MJumpApplyBtn.Position = UDim2.new(1, -60, 0.5, -10)
         MJumpApplyBtn.BackgroundColor3 = Color3.new(0,0,0)
         MJumpApplyBtn.BackgroundTransparency = 0.45
-        MJumpApplyBtn.Text = "Aplicar"
+        MJumpApplyBtn.Text = "Apply"
         MJumpApplyBtn.Font = Enum.Font.GothamBold
         MJumpApplyBtn.TextSize = 10
-        MJumpApplyBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+        MJumpApplyBtn.TextColor3 = Theme.TextDark
         MJumpApplyBtn.Parent = MJInputContainer
         Instance.new("UICorner", MJumpApplyBtn).CornerRadius = UDim.new(0, 4)
         local mbStr = Instance.new("UIStroke", MJumpApplyBtn)
@@ -1049,17 +1015,13 @@ return function(env)
         mDefaultBtn.MouseLeave:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() TweenService:Create(defaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.TextDark}):Play() end)
         mDefaultBtn.MouseButton1Click:Connect(function() UserConfigs["TexturesPage_MobileJump"] = "Default" EnableMobileButtonJump("Default") end)
 
-        local mJumpIDsP1 = {
+        -- [ IDs DA PARTE 1 ]
+        local mJumpIDs_P1 = {
             "126321670529682", "77430663366893", "115979689020396", "101678026501268", 
             "100604012502918", "107988778180975", "106355869384286", "119823685069603"
         }
 
-        local mJumpIDsP2 = {
-            "70463296258416", "80555494674270", "74056211768119", "115091366896134",
-            "117864251880006", "130200330618832", "77364460442867"
-        }
-
-        for _, id in ipairs(mJumpIDsP1) do
+        for _, id in ipairs(mJumpIDs_P1) do
             local btn = Instance.new("ImageButton")
             btn.BackgroundColor3 = Color3.new(0,0,0)
             btn.BackgroundTransparency = 0.45
@@ -1078,7 +1040,13 @@ return function(env)
             end)
         end
 
-        for _, id in ipairs(mJumpIDsP2) do
+        -- [ IDs SOLICITADOS PARA A PARTE 2 ]
+        local mJumpIDs_P2 = {
+            "70463296258416", "80555494674270", "74056211768119", "115091366896134", 
+            "117864251880006", "130200330618832", "77364460442867"
+        }
+
+        for _, id in ipairs(mJumpIDs_P2) do
             local btn = Instance.new("ImageButton")
             btn.BackgroundColor3 = Color3.new(0,0,0)
             btn.BackgroundTransparency = 0.45
@@ -1099,13 +1067,13 @@ return function(env)
     end
 
     -- ==========================================
-    -- POPULATE CROSSHAIRS
+    -- POPULATE CROSSHAIRS (IDs ATUALIZADOS)
     -- ==========================================
-    -- ID "128514706094926" removido. IDs "139192004969086" e "115820239502902" adicionados.
+    -- [ REMOVIDO ID 128514706094926 ]
+    -- [ ADICIONADOS IDs 139192004969086 E 115820239502902 ]
     local CursorList = {
         {Name = "Default", ID = "RESET"},
         {Name = "Use Cursor", ID = "15368174199"}, {Name = "Use Cursor", ID = "12701650945"},
-        {Name = "Use Cursor", ID = "139192004969086"}, {Name = "Use Cursor", ID = "115820239502902"},
         {Name = "Use Cursor", ID = "119350232226515"}, {Name = "Use Cursor", ID = "5060823578"}, 
         {Name = "Use Cursor", ID = "9896571799"}, {Name = "Use Cursor", ID = "139654963330788"}, 
         {Name = "Use Cursor", ID = "13441649168"}, {Name = "Use Cursor", ID = "88005681147215"}, 
@@ -1122,7 +1090,8 @@ return function(env)
         {Name = "Use Cursor", ID = "89746976355403"}, {Name = "Use Cursor", ID = "132191954497107"}, 
         {Name = "Use Cursor", ID = "93050147531878"}, {Name = "Use Cursor", ID = "88343941218179"}, 
         {Name = "Use Cursor", ID = "81277812126144"}, {Name = "Use Cursor", ID = "131422226977434"}, 
-        {Name = "Use Cursor", ID = "116499481211766"}
+        {Name = "Use Cursor", ID = "116499481211766"}, {Name = "Use Cursor", ID = "139192004969086"}, 
+        {Name = "Use Cursor", ID = "115820239502902"}
     }
 
     local function CreateCursorSystem(isMob)
@@ -1140,9 +1109,9 @@ return function(env)
         local flagKey = "TexturesPage_Crosshair_" .. (isMob and "Mobile" or "PC")
         local savedCross = UserConfigs[flagKey]
         if savedCross and savedCross ~= "RESET" then TextBox.Text = savedCross:gsub("rbxassetid://", "") end
-        TextBox.PlaceholderText = "Textura ID..."
-        TextBox.TextColor3 = Color3.fromRGB(220, 220, 220)
-        TextBox.PlaceholderColor3 = Color3.fromRGB(130, 130, 130)
+        TextBox.PlaceholderText = "Texture ID..."
+        TextBox.TextColor3 = Theme.TextDark
+        TextBox.PlaceholderColor3 = Theme.TextDark
         TextBox.Font = Theme.Font
         TextBox.TextSize = 10
         TextBox.TextXAlignment = Enum.TextXAlignment.Left
@@ -1154,10 +1123,10 @@ return function(env)
         ApplyBtn.Position = UDim2.new(1, -60, 0.5, -10)
         ApplyBtn.BackgroundColor3 = Color3.new(0,0,0)
         ApplyBtn.BackgroundTransparency = 0.45
-        ApplyBtn.Text = "Aplicar"
+        ApplyBtn.Text = "Apply"
         ApplyBtn.Font = Enum.Font.GothamBold
         ApplyBtn.TextSize = 10
-        ApplyBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+        ApplyBtn.TextColor3 = Theme.TextDark
         ApplyBtn.Parent = CInputContainer
         Instance.new("UICorner", ApplyBtn).CornerRadius = UDim.new(0, 4)
         local apStr = Instance.new("UIStroke", ApplyBtn)
@@ -1245,16 +1214,12 @@ return function(env)
                 end)
             end
         end
-
-        -- Corrige o carregamento de visual apagado/sem cor forçando o redesenho do Canvas
-        forceScrollRefresh(targetParentCur1)
-        forceScrollRefresh(targetParentCur2)
     end
 
     local usePCCursor = UserInputService.MouseEnabled
     if usePCCursor then CreateCursorSystem(false) else CreateCursorSystem(true) end
 
-    -- INICIALIZADOR DE CONFIGURAÇÕES SALVAS
+    -- INICIALIZADOR DE SALVOS
     if UserConfigs["TexturesPage_DoubleJump"] then task.spawn(function() EnableDoubleJumpEffect(UserConfigs["TexturesPage_DoubleJump"]) end) end
     if isMobile and UserConfigs["TexturesPage_MobileJump"] then task.spawn(function() EnableMobileButtonJump(UserConfigs["TexturesPage_MobileJump"]) end) end
 
