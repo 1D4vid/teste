@@ -610,20 +610,19 @@ return function(env)
         end
 
         task.spawn(function()
-            local pastasSeguras = {Workspace, game:GetService("ReplicatedStorage"), Players}
-            local t = os.clock()
-            for _, pasta in ipairs(pastasSeguras) do
-                local desc = pasta:GetDescendants()
-                for i = 1, #desc do
-                    local obj = desc[i]
-                    if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then aplicarTextura(obj) end
-                    if os.clock() - t > 0.01 then task.wait() t = os.clock() end
+            local desc = Workspace:GetDescendants()
+            batchProcess(desc, function(obj)
+                if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
+                    aplicarTextura(obj)
                 end
-                if texturaID ~= "Default" then
-                    table.insert(currentDoubleJumpConns, pasta.DescendantAdded:Connect(function(obj)
-                        if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then task.defer(function() aplicarTextura(obj) end) end
-                    end))
-                end
+            end)
+            
+            if texturaID ~= "Default" then
+                table.insert(currentDoubleJumpConns, Workspace.DescendantAdded:Connect(function(obj)
+                    if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
+                        task.defer(aplicarTextura, obj)
+                    end
+                end))
             end
         end)
     end
@@ -674,19 +673,6 @@ return function(env)
             end
         end
     end)
-
-    local effectIDs = {
-        "81110491136307", "117864251880006", "120181545812734", "74056211768119", 
-        "116419901031627", "92247449256845", "113423466689563", "90279999098357", 
-        "94123299347751", "105065705443269", "122902019815288", "138617722401997", 
-        "75192344666220", "139646605021296", "133105930199997", "96482830256985", 
-        "107964624563909", "122185636007520", "130200330618832", "84159990264787",
-        "87265760472097", "125925535971201", "99196076742919", "80555494674270", 
-        "77364460442867", "84014330993791", "80081088131892", "70463296258416",
-        "84683340454265", "110707827597886", "94615398600162", "136555497393349", 
-        "115660311620643", "87528090276578", "91090339346537", "104273334466284", 
-        "125877054664162", "99696281853254", "115091366896134", "118044368508403"
-    }
 
     local GridWrapperDJ1 = createGridContainer(targetParentDJ1)
     local GridWrapperDJ2 = createGridContainer(targetParentDJ2)
@@ -851,7 +837,7 @@ return function(env)
         mDStr.Color = Color3.fromRGB(40,40,40)
         
         mDefaultBtn.MouseEnter:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Theme.Accent}):Play() TweenService:Create(mDefaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.Accent}):Play() end)
-        mDefaultBtn.MouseLeave:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() TweenService:Create(mDefaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.TextDark}):Play() end)
+        mDefaultBtn.MouseLeave:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() TweenService:Create(defaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.TextDark}):Play() end)
         mDefaultBtn.MouseButton1Click:Connect(function() UserConfigs["TexturesPage_MobileJump"] = "Default" EnableMobileButtonJump("Default") end)
 
         local mJumpIDs = {
@@ -882,28 +868,6 @@ return function(env)
     -- ==========================================
     -- POPULATE CROSSHAIRS
     -- ==========================================
-    local CursorList = {
-        {Name = "Default", ID = "RESET"},
-        {Name = "Use Cursor", ID = "15368174199"}, {Name = "Use Cursor", ID = "12701650945"},
-        {Name = "Use Cursor", ID = "128514706094926"}, {Name = "Use Cursor", ID = "119350232226515"},
-        {Name = "Use Cursor", ID = "5060823578"}, {Name = "Use Cursor", ID = "9896571799"},
-        {Name = "Use Cursor", ID = "139654963330788"}, {Name = "Use Cursor", ID = "13441649168"},
-        {Name = "Use Cursor", ID = "88005681147215"}, {Name = "Use Cursor", ID = "72902755839437"},
-        {Name = "Use Cursor", ID = "128926155948846"}, {Name = "Use Cursor", ID = "95348763251820"},
-        {Name = "Use Cursor", ID = "138513473967293"}, {Name = "Use Cursor", ID = "82043397777881"},
-        {Name = "Use Cursor", ID = "84583215296063"}, {Name = "Use Cursor", ID = "120058675182639"},
-        {Name = "Use Cursor", ID = "130210380679877"}, {Name = "Use Cursor", ID = "74264514489577"},
-        {Name = "Use Cursor", ID = "115877213393063"}, {Name = "Use Cursor", ID = "133579119074302"},
-        {Name = "Use Cursor", ID = "137970082797101"}, {Name = "Use Cursor", ID = "116865736993390"},
-        {Name = "Use Cursor", ID = "70613337612134"}, {Name = "Use Cursor", ID = "75670552980458"}, 
-        {Name = "Use Cursor", ID = "100822311002882"}, {Name = "Use Cursor", ID = "135331308026486"},
-        {Name = "Use Cursor", ID = "91090339346537"}, {Name = "Use Cursor", ID = "99626703938913"},
-        {Name = "Use Cursor", ID = "112195317343485"}, {Name = "Use Cursor", ID = "89746976355403"},
-        {Name = "Use Cursor", ID = "132191954497107"}, {Name = "Use Cursor", ID = "93050147531878"},
-        {Name = "Use Cursor", ID = "88343941218179"}, {Name = "Use Cursor", ID = "81277812126144"},
-        {Name = "Use Cursor", ID = "131422226977434"}, {Name = "Use Cursor", ID = "116499481211766"}
-    }
-
     local function CreateCursorSystem(isMob)
         local CInputContainer = Instance.new("Frame")
         CInputContainer.Size = UDim2.new(1, -2, 0, ContentConfig.ItemHeightNew)
@@ -955,6 +919,7 @@ return function(env)
                     PCSoftwareCursor.Image = fullID
                     SetPCCursorActive(true)
                     PCSoftwareCursor.Visible = true 
+                    pcall(function() LocalPlayer:GetMouse().Icon = "rbxassetid://0" end)
                 end 
             end 
         end)
@@ -989,6 +954,7 @@ return function(env)
                     else 
                         SetPCCursorActive(false)
                         PCSoftwareCursor.Visible = false
+                        pcall(function() LocalPlayer:GetMouse().Icon = "" end)
                         UserInputService.MouseIconEnabled = true 
                     end 
                 end)
@@ -1017,6 +983,7 @@ return function(env)
                         PCSoftwareCursor.Image = fullID
                         SetPCCursorActive(true)
                         PCSoftwareCursor.Visible = true 
+                        pcall(function() LocalPlayer:GetMouse().Icon = "rbxassetid://0" end)
                     end 
                 end)
             end
@@ -1037,6 +1004,7 @@ return function(env)
                 PCSoftwareCursor.Image = saved
                 SetPCCursorActive(true)
                 PCSoftwareCursor.Visible = true 
+                pcall(function() LocalPlayer:GetMouse().Icon = "rbxassetid://0" end)
             end
         else
             local saved = UserConfigs["TexturesPage_Crosshair_Mobile"]
