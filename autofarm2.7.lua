@@ -32,9 +32,6 @@ return function(env)
     local AutoSaveTeleportToggleObj
     local AutoRejoinToggleObj
     local ModAlertToggleObj
-    
-    -- Configuração de Whitelist para o Auto Win Beast
-    local WhitelistedPlayer = "None"
 
     -- Gerenciadores de Conexões Globais
     local RejoinConnection = nil
@@ -464,7 +461,7 @@ return function(env)
                         end
                     end
                 end
-            end)();
+            end)()
 
             repeat
                 task_wait(0.5)
@@ -740,7 +737,6 @@ return function(env)
             if AutoWinSurvivorToggleObj then AutoWinSurvivorToggleObj.Set(false) end
             if AutoWinSurvivorFlyToggleObj then AutoWinSurvivorFlyToggleObj.Set(false) end
             if AutoWinBeastToggleObj then AutoWinBeastToggleObj.Set(false) end
-            if AutoSaveTeleportToggleObj then AutoSaveTeleportToggleObj.Set(false) end
         end
     end)
 
@@ -900,7 +896,7 @@ return function(env)
                                     end
                                     RemoteEvent:FireServer("Input", "Action", true)
                                     
-                                until not (alvoCaptured.Value and getgenv().AutoHelpTeleport) 
+                                end until not (alvoCaptured.Value and getgenv().AutoHelpTeleport) 
                                    or (myRagdoll.Value or myCaptured.Value or myHealth.Value <= 0)
 
                                 if oldCFrame and LocalPlayer.Character then
@@ -923,11 +919,6 @@ return function(env)
     -- SEÇÃO: FARM SETTINGS
     -- =========================================================================
     Library:CreateSection(Page, "Farm Settings")
-
-    -- Beast Whitelist Player Dropdown
-    Library:CreatePlayerDropdown(Page, "Beast Whitelist Player", "None", function(val)
-        WhitelistedPlayer = val
-    end)
 
     -- Anti AFK
     AntiAfkToggleObj = Library:CreateToggle(Page, "Anti AFK", false, function(state)
@@ -1015,7 +1006,7 @@ return function(env)
         end
     end)
 
-    -- Fly Speed Slider (Posicionado no final das configurações)
+    -- Fly Speed Slider (Posicionado no final da categoria)
     Library:CreateSlider(Page, "Fly Farm Speed", 16, 30, 22, function(val)
         FlyConfig.FarmTweenSpeed = val
     end)
@@ -1083,8 +1074,7 @@ return function(env)
                     local RaizAlvo = nil
                     
                     for _, alvo in pairs(Players:GetPlayers()) do
-                        -- Ignora jogador na Whitelist
-                        if alvo ~= LocalPlayer and alvo.Name ~= WhitelistedPlayer and alvo.Character then
+                        if alvo ~= LocalPlayer and alvo.Character then
                             local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
                             if Stats and Stats:FindFirstChild("Captured") and not Stats.Captured.Value then
                                 local tempRaiz = ObterRaiz(alvo.Character)
@@ -1121,8 +1111,7 @@ return function(env)
                     if not MeuEventoMarreta or not MinhaRaiz then return end
                     
                     for _, alvo in pairs(Players:GetPlayers()) do
-                        -- Ignora jogador na Whitelist
-                        if alvo ~= LocalPlayer and alvo.Name ~= WhitelistedPlayer and alvo.Character then
+                        if alvo ~= LocalPlayer and alvo.Character then
                             local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
                             if not Stats then continue end
                             
@@ -1164,8 +1153,7 @@ return function(env)
                     local mapa = ObterMapaAtual()
                     
                     for _, alvo in pairs(Players:GetPlayers()) do
-                        -- Ignora jogador na Whitelist
-                        if alvo ~= LocalPlayer and alvo.Name ~= WhitelistedPlayer and alvo.Character then
+                        if alvo ~= LocalPlayer and alvo.Character then
                             local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
                             if not Stats then continue end
                             
