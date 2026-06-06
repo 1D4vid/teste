@@ -5,7 +5,6 @@ return function(env)
     local LocalPlayer = env.LocalPlayer
     local Workspace = env.Workspace
     local ReplicatedStorage = env.ReplicatedStorage
-    local SendNotification = env.SendNotification
 
     -- Serviços adicionais necessários
     local GuiService = game:GetService("GuiService")
@@ -26,6 +25,29 @@ return function(env)
     local pairs = pairs
     local math_floor = math.floor
     local tick = tick
+
+    -- Função de Notificações Unificada e Otimizada
+    local function SendNotification(title, text, duration)
+        if not text then
+            text = title
+            title = "NexVoid"
+            duration = 3
+        elseif type(text) == "number" then
+            duration = text
+            text = title
+            title = "NexVoid"
+        end
+        duration = duration or 3
+        task_spawn(function()
+            pcall(function()
+                StarterGui:SetCore("SendNotification", {
+                    Title = title,
+                    Text = text,
+                    Duration = duration
+                })
+            end)
+        end)
+    end
 
     local MasterAutoFarmState = false
     local AntiAfkToggleObj
@@ -458,8 +480,8 @@ return function(env)
                             local AmtTriggers = 3
 
                             for i3 = 1, #Triggers do
-                                local v2 = Triggers[i3]
-                                if v2 and v2.ActionSign.Value ~= 20 then
+                                RunningVal = Triggers[i3]
+                                if RunningVal and RunningVal.ActionSign.Value ~= 20 then
                                     AmtTriggers = AmtTriggers - 1
                                 end
                             end
@@ -985,8 +1007,7 @@ return function(env)
             if not RejoinConnection then
                 RejoinConnection = GuiService.ErrorMessageChanged:Connect(function(errorMessage)
                     if getgenv().AutoRejoinEnabled and errorMessage and errorMessage ~= "" then
-                        print("[AutoRejoin] Erro detectado: " .. errorMessage .. ". Tentando reconectar...")
-                        task.wait(3)
+                        task_wait(3)
                         pcall(function()
                             TeleportService:Teleport(game.PlaceId, LocalPlayer)
                         end)
@@ -1026,7 +1047,6 @@ return function(env)
                 if MOD_ACTION == "KICK" then
                     LocalPlayer:Kick("[Segurança] Um moderador (" .. player.Name .. ") entrou no servidor. Você foi desconectado para evitar punições.")
                 elseif MOD_ACTION == "ALERT" then
-                    warn("[AVISO DE SEGURANÇA] Moderator detectado no servidor: " .. player.Name)
                     SendNotification("[PERIGO] Moderador detectado: " .. player.Name, 10)
                 end
             end
@@ -1225,8 +1245,8 @@ return function(env)
         getgenv().EscapouDaPartida = false 
         getgenv().SouBeastNessaRodada = false
 
-        local function Alertar(titulo, texto, tempo)
-            SendNotification(titulo .. " | " .. texto, tempo or 3)
+        local function Alertar(titulo, text, tempo)
+            SendNotification(titulo, text, tempo or 3)
         end
 
         local function EsperarETeleportar(destinoCFrame)
@@ -1334,15 +1354,23 @@ return function(env)
                         if not string.find(corTela, "green") and not TemGenteNoPC(teclado.Position) then
                             
                             if hrp then
-                                table.insert(Result.Computers, v)
-                            elseif v.Name == "ExitDoor" then
-                                table.insert(Result.ExitDoors, v)
+                                local distancia = (hrp.Position - teclado.Position).Magnitude
+                                if distancia < menorDistancia then
+                                    menorDistancia = distancia
+                                    pcMaisPerto = {mesa = obj, tela = tela, evento = eventoPC}
+                                end
+                            else
+                                return obj, tela, eventoPC 
                             end
                         end
                     end
                 end
             end
-            return Result
+            
+            if pcMaisPerto then
+                return pcMaisPerto.mesa, pcMaisPerto.tela, pcMaisPerto.evento
+            end
+            return nil, nil, nil
         end
 
         local function IniciarRotinaDeFarm()
