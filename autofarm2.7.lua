@@ -173,7 +173,7 @@ return function(env)
     end
 
     -- =========================================================================
-    -- MOTOR DE TELEPORTE / SELEÇÃO DINÂMICA DA MARRETA (BEAST ADVANCED)
+    -- FUNÇÕES DE SUPORTE DO AUTO WIN BEAST ORIGINAL
     -- =========================================================================
     local function ObterRaiz(character)
         if not character then return nil end
@@ -204,39 +204,6 @@ return function(env)
             end
         end
         return nil
-    end
-
-    local function ObterMarretaEEquipar()
-        local char = LocalPlayer.Character
-        if not char then return nil, nil end
-        
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        local root = ObterRaiz(char)
-        
-        -- Procura no personagem primeiro (se já estiver equipada)
-        local event = char:FindFirstChild("HammerEvent", true)
-        if event and root then
-            return event, root
-        end
-        
-        -- Procura na mochila (Backpack) e equipa automaticamente caso desequipada
-        local backpack = LocalPlayer:FindFirstChild("Backpack")
-        if backpack then
-            for _, tool in ipairs(backpack:GetChildren()) do
-                if tool:IsA("Tool") and (tool.Name:match("Hammer") or tool.Name:match("Mallet") or tool:FindFirstChild("HammerEvent")) then
-                    if humanoid then
-                        humanoid:EquipTool(tool)
-                        task_wait(0.1)
-                    end
-                    local ev = tool:FindFirstChild("HammerEvent") or tool:FindFirstChildWhichIsA("RemoteEvent", true)
-                    if ev and root then
-                        return ev, root
-                    end
-                end
-            end
-        end
-        
-        return nil, nil
     end
 
     -- =========================================================================
@@ -585,7 +552,7 @@ return function(env)
                     fly_RemoveSafePlatform()
                 end
 
-                -- CORRIGIDO: Se for a Besta, apenas pausa o Survivor Farm sem desativar a toggle
+                -- Se for a Besta, apenas pausa o Survivor Farm sem desativar a toggle
                 if fly_AutoFarmEnabled and fly_AmIBeast() then
                     for i, v in pairs(fly_farmtasks) do
                         pcall(function()
@@ -604,7 +571,7 @@ return function(env)
                             LocalPlayer.PlayerGui.SimpleAutoFarmGUI.MainFrame.StatusLabel.Text = "Status: Paused (Beast Round)"
                         end
                     end)
-                    continue -- Pula o loop do survivor nesta rodada
+                    continue 
                 end
 
                 if not fly_AutoFarmEnabled or not fly_IsMatchActive() then
@@ -721,7 +688,7 @@ return function(env)
                     fly_TPPlayerSpawn()
                 end
 
-                -- Auto-retomada automática no meio da partida se as condições forem favoráveis
+                -- Retomada Survivor automática quando as condições permitirem
                 if fly_AutoFarmEnabled and not fly_onsurvivorfarm and not fly_AmIBeast() and fly_IsMatchActive() then
                     task_spawn(fly_DoSurvivorFarm)
                 end
@@ -757,7 +724,7 @@ return function(env)
     -- =========================================================================
     -- ELEMENTOS DA INTERFACE (TABS / TOGGLES)
     -- =========================================================================
-    Library:CreateSection(Page, "Main Farming (BETAa)")
+    Library:CreateSection(Page, "Main Farming (BETA)")
 
     -- Enable Auto Farm
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
@@ -1008,7 +975,7 @@ return function(env)
                 if MOD_ACTION == "KICK" then
                     LocalPlayer:Kick("[Segurança] Um moderador (" .. player.Name .. ") entrou no servidor. Você foi desconectado para evitar punições.")
                 elseif MOD_ACTION == "ALERT" then
-                    warn("[AVISO DE SEGURANÇA] Moderador detectado no servidor: " .. player.Name)
+                    warn("[AVISO DE SEGURANÇA] Moderator detectado no servidor: " .. player.Name)
                     SendNotification("[PERIGO] Moderador detectado: " .. player.Name, 10)
                 end
             end
@@ -1053,16 +1020,43 @@ return function(env)
         end)
     end)
 
-    -- [[ AUTO WIN BEAST - CHASE LOOP (CORRIGIDO) ]] --
+    -- [[ NOVO: AUTO-EQUIP DA MARRETA EM SEGUNDO PLANO ]] --
+    task.spawn(function()
+        while true do
+            task.wait(0.5) -- Loop leve executado a cada 0.5 segundos
+            if getgenv().AutoWinBeast and IsGameActive.Value then
+                pcall(function()
+                    local char = LocalPlayer.Character
+                    local backpack = LocalPlayer:FindFirstChild("Backpack")
+                    if char and backpack then
+                        for _, tool in ipairs(backpack:GetChildren()) do
+                            -- Localiza qualquer marreta ou ferramenta com o evento de ataque
+                            if tool:IsA("Tool") and (tool.Name:match("Hammer") or tool.Name:match("Mallet") or tool:FindFirstChild("HammerEvent")) then
+                                local hum = char:FindFirstChildOfClass("Humanoid")
+                                if hum then
+                                    hum:EquipTool(tool)
+                                end
+                                break
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    -- [[ AUTO WIN BEAST - CHASE LOOP ORIGINAL ]] --
     task.spawn(function()
         while true do
             task.wait(0.1) 
             if getgenv().AutoWinBeast then
                 pcall(function()
-                    if not IsGameActive.Value then return end
+                    if not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
                     
-                    local event, root = ObterMarretaEEquipar()
-                    if not event or not root then return end
+                    local MeuPersonagem = LocalPlayer.Character
+                    local MinhaRaiz = ObterRaiz(MeuPersonagem)
+                    
+                    if not MeuPersonagem:FindFirstChild("HammerEvent", true) or not MinhaRaiz then return end
                     
                     local AlvoAtual = nil
                     local RaizAlvo = nil
@@ -1083,23 +1077,26 @@ return function(env)
                     
                     if RaizAlvo and LocalPlayer.Character then
                         LocalPlayer.Character:PivotTo(RaizAlvo.CFrame * CFrame.new(0, 0, 1.5))
-                        root.Velocity = Vector3.zero 
+                        MinhaRaiz.Velocity = Vector3.zero 
                     end
                 end)
             end
         end
     end)
 
-    -- [[ AUTO WIN BEAST - ATTACK LOOP (CORRIGIDO) ]] --
+    -- [[ AUTO WIN BEAST - ATTACK LOOP ORIGINAL ]] --
     task.spawn(function()
         while true do
             task.wait(0.1)
             if getgenv().AutoWinBeast then
                 pcall(function()
-                    if not IsGameActive.Value then return end
+                    if not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
 
-                    local event, root = ObterMarretaEEquipar()
-                    if not event or not root then return end
+                    local MeuPersonagem = LocalPlayer.Character
+                    local MeuEventoMarreta = MeuPersonagem and MeuPersonagem:FindFirstChild("HammerEvent", true)
+                    local MinhaRaiz = ObterRaiz(MeuPersonagem)
+                    
+                    if not MeuEventoMarreta or not MinhaRaiz then return end
                     
                     for _, alvo in pairs(Players:GetPlayers()) do
                         if alvo ~= LocalPlayer and alvo.Character then
@@ -1111,15 +1108,15 @@ return function(env)
                             local RaizAlvo = ObterRaiz(alvo.Character)
                             
                             if RaizAlvo and alvoCaptured and not alvoCaptured.Value then
-                                local distancia = (RaizAlvo.Position - root.Position).Magnitude
+                                local distancia = (RaizAlvo.Position - MinhaRaiz.Position).Magnitude
                                 
                                 if distancia <= 12 then
                                     if alvoCaido and not alvoCaido.Value then
-                                        event:FireServer("HammerHit", RaizAlvo)
+                                        MeuEventoMarreta:FireServer("HammerHit", RaizAlvo)
                                     end
                                     
                                     if alvoCaido and alvoCaido.Value == true then
-                                        event:FireServer("HammerTieUp", RaizAlvo, RaizAlvo.Position)
+                                        MeuEventoMarreta:FireServer("HammerTieUp", RaizAlvo, RaizAlvo.Position)
                                     end
                                 end
                             end
@@ -1130,16 +1127,16 @@ return function(env)
         end
     end)
 
-    -- [[ AUTO WIN BEAST - FREEZEPOD LOOP (CORRIGIDO) ]] --
+    -- [[ AUTO WIN BEAST - FREEZEPOD LOOP ORIGINAL ]] --
     task.spawn(function()
         while true do
             task.wait(0.1)
             if getgenv().AutoWinBeast then
                 pcall(function()
-                    if not IsGameActive.Value then return end
+                    if not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
 
-                    local event, root = ObterMarretaEEquipar()
-                    if not event or not root then return end
+                    local MeuPersonagem = LocalPlayer.Character
+                    if not MeuPersonagem:FindFirstChild("HammerEvent", true) then return end
                     
                     local mapa = ObterMapaAtual()
                     
