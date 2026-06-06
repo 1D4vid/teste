@@ -10,8 +10,13 @@ return function(env)
     local MasterAutoFarmState = false
     local AntiAfkToggleObj
     local AutoWinSurvivorToggleObj
+    local AutoWinSurvivorFlyToggleObj
     local AutoWinBeastToggleObj
+    local AutoSaveTeleportToggleObj
 
+    -- ==========================================
+    -- SEÇÃO: MAIN FARMING (BETA)
+    -- ==========================================
     Library:CreateSection(Page, "Main Farming (BETA)")
 
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
@@ -20,6 +25,7 @@ return function(env)
             if AntiAfkToggleObj then AntiAfkToggleObj.Set(true) end
         else
             if AutoWinSurvivorToggleObj then AutoWinSurvivorToggleObj.Set(false) end
+            if AutoWinSurvivorFlyToggleObj then AutoWinSurvivorFlyToggleObj.Set(false) end
             if AutoWinBeastToggleObj then AutoWinBeastToggleObj.Set(false) end
         end
     end)
@@ -39,6 +45,19 @@ return function(env)
         end
     end)
 
+    -- Nova Toggle: Auto Win Survivor (Fly) [Vazia]
+    AutoWinSurvivorFlyToggleObj = Library:CreateToggle(Page, "Auto win survivor (fly)", false, function(state)
+        if state and not MasterAutoFarmState then
+            task.spawn(function()
+                task.wait()
+                AutoWinSurvivorFlyToggleObj.Set(false)
+                SendNotification("Enable 'Enable Auto Farm' first!", 3)
+            end)
+            return
+        end
+        -- Código do voo/fly será implementado aqui posteriormente
+    end)
+
     AutoWinBeastToggleObj = Library:CreateToggle(Page, "Auto Win Beast", false, function(state)
         if state and not MasterAutoFarmState then
             task.spawn(function()
@@ -51,14 +70,24 @@ return function(env)
         getgenv().AutoWinBeast = state
     end)
 
-    Library:CreateSection(Page, "Farm Settings")
-
+    -- Movido de "Farm Settings" para "Main Farming (BETA)"
     Library:CreateToggle(Page, "Auto Save (Silent)", false, function(state)
         getgenv().AutoHelpSilent = state
         if state then
             SendNotification("Auto Save (Silent) | Players in pod will be saved magically.", 5)
         end
     end)
+
+    -- Nova Toggle: Auto Save (Teleport) [Vazia]
+    AutoSaveTeleportToggleObj = Library:CreateToggle(Page, "Auto Save (Teleport)", false, function(state)
+        -- Código do salvamento por teleporte será implementado aqui posteriormente
+    end)
+
+
+    -- ==========================================
+    -- SEÇÃO: FARM SETTINGS
+    -- ==========================================
+    Library:CreateSection(Page, "Farm Settings")
 
     AntiAfkToggleObj = Library:CreateToggle(Page, "Anti AFK", false, function(state)
         if MasterAutoFarmState and not state then
@@ -72,7 +101,9 @@ return function(env)
         _G.AntiAfkEnabled = state
     end)
 
+    -- ==========================================
     -- SCRIPTS DO AUTO FARM E UTILS
+    -- ==========================================
     local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
     local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
 
