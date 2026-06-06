@@ -24,6 +24,10 @@ return function(env)
     local math_floor = math.floor
     local tick = tick
 
+    -- Referências de eventos
+    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
+    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
+
     local MasterAutoFarmState = false
     local AntiAfkToggleObj
     local AutoWinSurvivorToggleObj
@@ -896,7 +900,7 @@ return function(env)
                                     end
                                     RemoteEvent:FireServer("Input", "Action", true)
                                     
-                                end until not (alvoCaptured.Value and getgenv().AutoHelpTeleport) 
+                                until not (alvoCaptured.Value and getgenv().AutoHelpTeleport) 
                                    or (myRagdoll.Value or myCaptured.Value or myHealth.Value <= 0)
 
                                 if oldCFrame and LocalPlayer.Character then
@@ -1006,7 +1010,7 @@ return function(env)
         end
     end)
 
-    -- Fly Speed Slider (Posicionado no final da categoria)
+    -- Fly Speed Slider (Adicionado ao final da categoria)
     Library:CreateSlider(Page, "Fly Farm Speed", 16, 30, 22, function(val)
         FlyConfig.FarmTweenSpeed = val
     end)
@@ -1015,9 +1019,7 @@ return function(env)
     -- =========================================================================
     -- DETECTORES DO AUTO FARM TELEPORT CLASSIC E OUTROS LOOPS DE SUPORTE
     -- =========================================================================
-    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
-    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
-
+    
     -- [[ ANTI AFK LOOP ]] --
     task.spawn(function()
         local VirtualUser = game:GetService("VirtualUser")
@@ -1219,7 +1221,7 @@ return function(env)
         local function PossoAgir()
             if getgenv().EscapouDaPartida then return false end 
             if getgenv().SouBeastNessaRodada then return false end
-            if fly_bnhide then return false end -- Pausa as ações se estiver escondido da Beast
+            if fly_bnhide then return false end -- Pausa as ações se estiver escondido da Besta
             
             local char = LocalPlayer.Character
             if not char then return false end
