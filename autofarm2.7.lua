@@ -552,7 +552,7 @@ return function(env)
                         end
                     end
                 end
-            end)()
+            end()
 
             repeat
                 task_wait(0.5)
@@ -695,7 +695,7 @@ return function(env)
         end
     end)
 
-    -- Auto Win Survivor (Fly) [Integrado]
+    -- Auto Win Survivor (Fly) [Integrado com Correção de Bug]
     AutoWinSurvivorFlyToggleObj = Library:CreateToggle(Page, "Auto win survivor (fly)", false, function(state)
         if state and not MasterAutoFarmState then
             task.spawn(function()
@@ -1113,7 +1113,7 @@ return function(env)
         end
     end)
 
-    -- Loop de Monitoramento em Segundo Plano
+    -- Loop de Monitoramento em Segundo Plano (Survivor Fly)
     task_spawn(function()
         while true do
             local dt = task_wait(0.1)
@@ -1122,12 +1122,13 @@ return function(env)
                 RemoveSafePlatform()
             end
 
-            if not fly_AutoFarmEnabled or not IsMatchActive() then
+            -- CORREÇÃO: Limita a proteção estática de proximidade da Besta apenas se estiver em jogo ativo e fora do Lobby
+            if not fly_AutoFarmEnabled or not IsMatchActive() or IsInLobby() then
                 if fly_onsurvivorfarm or fly_bnhide then
                     GlobalReset()
                 end
 
-                if fly_AutoFarmEnabled then
+                if fly_AutoFarmEnabled and not IsMatchActive() then
                     if not notifiedLobby then
                         Notify("Lobby State", "Waiting for the game match to start...", 5)
                         notifiedLobby = true
@@ -1152,8 +1153,8 @@ return function(env)
             if fly_AutoFarmEnabled and not AmIBeast() then
                 fly_Beast = GetBeast()
 
-                -- Lógica de Proteção Estática
-                if Config.HideBeastNear and IsThereChar() and TempPlayerStatsModule and not TempPlayerStatsModule.IsBeast.Value then
+                -- Lógica de Proteção Estática (Besta por Perto)
+                if Config.HideBeastNear and IsThereChar() and TempPlayerStatsModule and not TempPlayerStatsModule.IsBeast.Value and IsMatchActive() and not IsInLobby() then
                     if (fly_Beast == nil or not IsThereChar(fly_Beast)) then
                         if fly_bnhide then
                             fly_bnhide = false
@@ -1183,7 +1184,7 @@ return function(env)
                                 pcall(function()
                                     if not fly_safePlatform then
                                         fly_safePlatform = Instance.new("Part")
-                                        fly_safePlatform.Size = Vector3_new(15, 1, 15)
+                                        fly_safePlatform.Size = Vector3_new(20, 1, 20) -- Tamanho aumentado para maior segurança física
                                         fly_safePlatform.Anchored = true
                                         fly_safePlatform.CanCollide = true
                                         fly_safePlatform.Transparency = 1
@@ -1194,8 +1195,10 @@ return function(env)
                                     LocalPlayer.Character:PivotTo(fly_safePlatform.CFrame * CFrame_new(0, 3, 0))
                                     
                                     task_spawn(function()
-                                        task_wait()
-                                        if IsThereChar() then
+                                        task_wait(0.1)
+                                        if IsThereChar() and fly_bnhide then
+                                            -- CORREÇÃO: Ancora o personagem enquanto estiver na plataforma para evitar deslizamento por física
+                                            LocalPlayer.Character.HumanoidRootPart.Anchored = true
                                             LocalPlayer.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3_new(0, 0, 0)
                                             LocalPlayer.Character.HumanoidRootPart.AssemblyAngularVelocity = Vector3_new(0, 0, 0)
                                         end
@@ -1215,6 +1218,7 @@ return function(env)
                             if beastDistanceFromLpos > (Config.HideBeastNearDist + 15) and TempPlayerStatsModule.Ragdoll.Value == false then
                                 RemoveSafePlatform()
                                 if IsThereChar() then
+                                    -- CORREÇÃO: Desancora o personagem antes de retornar ao chão
                                     LocalPlayer.Character.HumanoidRootPart.Anchored = false
                                     LocalPlayer.Character:PivotTo(fly_lpos)
                                 end
@@ -1275,274 +1279,4 @@ return function(env)
             end
         end
     end)
-
-    -- [[ AUTO WIN SURVIVOR (TELEPORT) ]] --
-    do
-        local VELOCIDADE_ANTI_CHUTE = 25 
-        getgenv().FarmRodando = false
-        getgenv().EscapouDaPartida = false 
-        getgenv().SouBeastNessaRodada = false
-
-        local function Alertar(titulo, texto, tempo)
-            SendNotification(titulo .. " | " .. texto, tempo or 3)
-        end
-
-        local function EsperarETeleportar(destinoCFrame)
-            local char = LocalPlayer.Character
-            if not char then return false end
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if not hrp then return false end
-
-            local distancia = (hrp.Position - destinoCFrame.Position).Magnitude
-            local tempoDeEspera = distancia / VELOCIDADE_ANTI_CHUTE
-
-            if tempoDeEspera > 0.5 then
-                Alertar("Anti-Cheat Bypass", "Calculating jump... Waiting " .. string.format("%.1f", tempoDeEspera) .. "s", tempoDeEspera)
-                hrp.Velocity = Vector3.new(0,0,0)
-                task.wait(tempoDeEspera)
-            end
-
-            hrp.CFrame = destinoCFrame
-            hrp.Velocity = Vector3.new(0, 0, 0)
-            task.wait(1.2)
-            return true
-        end
-
-        local function ChecarSeSouBeast()
-            local char = LocalPlayer.Character
-            if not char then return false end
-            if char:FindFirstChild("Hammer") or char:FindFirstChild("BeastPowers") then
-                return true
-            end
-            return false
-        end
-
-        local function PossoAgir()
-            if getgenv().EscapouDaPartida then return false end 
-            if getgenv().SouBeastNessaRodada then return false end
-            
-            local char = LocalPlayer.Character
-            if not char then return false end
-            
-            local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
-            
-            if not stats then 
-                if IsGameActive.Value == true then
-                    return true 
-                else
-                    getgenv().EscapouDaPartida = true
-                    getgenv().FarmRodando = false
-                    return false 
-                end
-            end
-            
-            local ragdoll = stats:FindFirstChild("Ragdoll")
-            local captured = stats:FindFirstChild("Captured")
-            if (ragdoll and ragdoll.Value) or (captured and captured.Value) then return false end
-            
-            return true
-        end
-
-        local function TemGenteNoPC(pcPos)
-            for _, player in pairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer and player.Character then
-                    local raiz = player.Character:FindFirstChild("HumanoidRootPart")
-                    if raiz and (raiz.Position - pcPos).Magnitude <= 6 then 
-                        return true 
-                    end
-                end
-            end
-            return false
-        end
-
-        local function ObterPCParaHackear()
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            
-            local pcMaisPerto = nil
-            local menorDistancia = math.huge
-
-            for _, obj in pairs(Workspace:GetDescendants()) do
-                if obj.Name == "ComputerTable" then
-                    local tela = obj:FindFirstChild("Screen")
-                    local teclado = obj:FindFirstChild("Keyboard") or obj:FindFirstChildWhichIsA("BasePart")
-                    local eventoPC = obj:FindFirstChild("Event", true) or obj:FindFirstChildWhichIsA("RemoteEvent", true)
-                    
-                    if tela and eventoPC and teclado then
-                        local corTela = string.lower(tostring(tela.BrickColor))
-                        if not string.find(corTela, "green") and not TemGenteNoPC(teclado.Position) then
-                            
-                            if hrp then
-                                local distancia = (hrp.Position - teclado.Position).Magnitude
-                                if distancia < menorDistancia then
-                                    menorDistancia = distancia
-                                    pcMaisPerto = {mesa = obj, tela = tela, evento = eventoPC}
-                                end
-                            else
-                                return obj, tela, eventoPC 
-                            end
-                        end
-                    end
-                end
-            end
-            
-            if pcMaisPerto then
-                return pcMaisPerto.mesa, pcMaisPerto.tela, pcMaisPerto.evento
-            end
-            return nil, nil, nil
-        end
-
-        local function IniciarRotinaDeFarm()
-            task.spawn(function()
-                repeat task.wait(0.1) until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                task.wait(1) 
-                
-                if ChecarSeSouBeast() then
-                    getgenv().SouBeastNessaRodada = true
-                    getgenv().FarmRodando = false
-                    Alertar("System Status", "Beast Mode Detected. Farm Disabled.", 6)
-                    return 
-                end
-                
-                Alertar("NexVoid System", "Targets detected. Farm started.", 3)
-                
-                while getgenv().FarmRodando and getgenv().NexVoidLigado do
-                    task.wait(0.2) 
-                    
-                    if getgenv().EscapouDaPartida then break end
-                    if not PossoAgir() then continue end
-
-                    local mesaPC, tela, eventoPC = ObterPCParaHackear()
-                    
-                    if mesaPC and tela and eventoPC then
-                        local pcCFrame
-                        if mesaPC:IsA("Model") then 
-                            pcCFrame = mesaPC:GetPivot() 
-                        else
-                            local part = mesaPC:FindFirstChildWhichIsA("BasePart")
-                            if part then pcCFrame = part.CFrame end
-                        end
-
-                        if pcCFrame then
-                            local sucesso = EsperarETeleportar(pcCFrame * CFrame.new(0, 3, -3))
-                            
-                            if sucesso then
-                                while getgenv().FarmRodando and not getgenv().EscapouDaPartida do
-                                    if not PossoAgir() then break end
-                                    local corAtual = string.lower(tostring(tela.BrickColor))
-                                    if string.find(corAtual, "green") then break end
-                                    
-                                    RemoteEvent:FireServer("Input", "Trigger", true, eventoPC)
-                                    RemoteEvent:FireServer("Input", "Action", true)
-                                    RemoteEvent:FireServer("SetPlayerMinigameResult", true)
-                                    
-                                    local char = LocalPlayer.Character
-                                    if char and char:FindFirstChild("HumanoidRootPart") then
-                                        char.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
-                                    end
-                                    task.wait(0.1) 
-                                end
-                            end
-                        end
-                        
-                    else
-                        for _, porta in pairs(Workspace:GetDescendants()) do
-                            if porta.Name == "ExitDoor" then
-                                local painel = porta:FindFirstChild("Light", true) or porta:FindFirstChild("Lock", true) or porta:FindFirstChildWhichIsA("BasePart")
-                                local eventoPorta = porta:FindFirstChild("Event", true) or porta:FindFirstChildWhichIsA("RemoteEvent", true)
-
-                                if painel and eventoPorta and not TemGenteNoPC(painel.Position) then
-                                    
-                                    Alertar("Target Locked", "Moving to Exit Door.", 4)
-                                    
-                                    local cframePorta = painel.CFrame * CFrame.new(0, 0, -3)
-                                    local sucesso = EsperarETeleportar(cframePorta)
-                                    
-                                    if sucesso then
-                                        
-                                        while getgenv().FarmRodando and not getgenv().EscapouDaPartida do
-                                            if not PossoAgir() then break end
-                                            
-                                            local corLuz = string.lower(tostring(painel.BrickColor))
-                                            if string.find(corLuz, "green") then break end
-                                            
-                                            local actionVal = LocalPlayer:FindFirstChild("ActionProgress", true)
-                                            if actionVal and actionVal:IsA("NumberValue") then
-                                                if actionVal.Value >= 0.99 then break end
-                                            end
-                                            
-                                            RemoteEvent:FireServer("Input", "Trigger", true, eventoPorta)
-                                            RemoteEvent:FireServer("Input", "Action", true)
-                                            task.wait(0.1)
-                                        end
-                                        
-                                        if getgenv().EscapouDaPartida then break end 
-                                        
-                                        Alertar("Target Unlocked", "Door opened. Escaping...", 4)
-                                        task.wait(3) 
-                                        
-                                        local char = LocalPlayer.Character
-                                        if char and char:FindFirstChild("HumanoidRootPart") then
-                                            local hrp = char.HumanoidRootPart
-                                            
-                                            local centroPortaCFrame = porta:GetBoundingBox()
-                                            hrp.CFrame = CFrame.new(centroPortaCFrame.Position)
-                                            task.wait(0.5)
-                                            
-                                            for _, parte in pairs(porta:GetDescendants()) do
-                                                if parte:IsA("BasePart") and parte.Transparency >= 0.8 and not parte.CanCollide then
-                                                    hrp.CFrame = parte.CFrame
-                                                    task.wait(0.2) 
-                                                    
-                                                    if not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then
-                                                        break
-                                                    end
-                                                end
-                                            end
-                                        end
-                                        
-                                        getgenv().EscapouDaPartida = true
-                                        getgenv().FarmRodando = false 
-                                        Alertar("System Status", "Successfully escaped. Paused.", 6)
-                                        break 
-                                    end
-                                end
-                            end
-                        end
-                        if getgenv().EscapouDaPartida then break end
-                    end
-                end
-            end)
-        end
-
-        task.spawn(function()
-            while true do
-                if getgenv().NexVoidLigado then
-                    pcall(function() 
-                        if IsGameActive.Value == true then
-                            if not getgenv().FarmRodando and not getgenv().EscapouDaPartida and not getgenv().SouBeastNessaRodada then
-                                getgenv().FarmRodando = true
-                                Alertar("NexVoid System", "Auto Farm initialized. Waiting for round.", 5)
-                                IniciarRotinaDeFarm()
-                            end
-                        else
-                            if getgenv().FarmRodando or getgenv().EscapouDaPartida or getgenv().SouBeastNessaRodada then
-                                getgenv().FarmRodando = false 
-                                getgenv().EscapouDaPartida = false 
-                                getgenv().SouBeastNessaRodada = false 
-                                
-                                Alertar("System Status", "Round ended. Resetting to Standby mode.", 5)
-                                
-                                local char = LocalPlayer.Character
-                                if char and char:FindFirstChild("HumanoidRootPart") then
-                                    char.HumanoidRootPart.Velocity = Vector3.new(0,0,0)
-                                end
-                            end
-                        end
-                    end)
-                end
-                task.wait(1) 
-            end
-        end)
-    end
 end
