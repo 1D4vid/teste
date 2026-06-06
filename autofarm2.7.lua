@@ -58,7 +58,7 @@ return function(env)
     local ModAddedConnection = nil
 
     -- Estados Isolados do Auto Win Survivor (Fly)
-    local AutoFarmEnabled = false -- Controla o estado ativo do fly
+    local AutoFarmEnabled = false 
     local notifiedLobby = false
     local TempPlayerStatsModule = nil
 
@@ -577,7 +577,7 @@ return function(env)
                         end
                     end
                 end
-            end)()
+            end)
 
             repeat
                 task_wait(0.5)
@@ -680,7 +680,7 @@ return function(env)
     end
 
     -- ==========================================================
-    -- SISTEMA 2: LOGICA DE AUTO WIN BESTA (OTIMIZADA)
+    -- SISTEMA 2: LOGICA DE AUTO WIN BESTA (TOTALMENTE AUTÔNOMA)
     -- ==========================================================
     local function ObterMapaAtual()
         local currentMapVal = ReplicatedStorage.CurrentMap.Value
@@ -724,9 +724,9 @@ return function(env)
         StopBeastAutoWin() 
         beast_active = true
         
-        -- Task 1: Teleporte/Perseguição ao Sobrevivente Ativo
+        -- Task 1: Teleporte/Perseguição ao Sobrevivente Ativo (Desvinculado do Fly/AutoFarmEnabled)
         local t1 = task_spawn(function()
-            while beast_active and AutoFarmEnabled do
+            while beast_active do
                 task_wait(0.1)
                 pcall(function()
                     if not IsMatchActive() or not AmIBeast() then return end
@@ -771,9 +771,9 @@ return function(env)
         end)
         table.insert(beast_tasks, t1)
 
-        -- Task 2: Ataque com Marreta e Amarrar
+        -- Task 2: Ataque com Marreta e Amarrar (Desvinculado do Fly/AutoFarmEnabled)
         local t2 = task_spawn(function()
-            while beast_active and AutoFarmEnabled do
+            while beast_active do
                 task_wait(0.1)
                 pcall(function()
                     if not IsMatchActive() or not AmIBeast() then return end
@@ -816,9 +816,9 @@ return function(env)
         end)
         table.insert(beast_tasks, t2)
 
-        -- Task 3: Capturar Sobreviventes nos Tubos (Pods)
+        -- Task 3: Capturar Sobreviventes nos Tubos (Desvinculado do Fly/AutoFarmEnabled)
         local t3 = task_spawn(function()
-            while beast_active and AutoFarmEnabled do
+            while beast_active do
                 task_wait(0.1)
                 pcall(function()
                     if not IsMatchActive() or not AmIBeast() then return end
@@ -902,7 +902,6 @@ return function(env)
     -- Auto Win Survivor (Teleport)
     AutoWinSurvivorToggleObj = Library:CreateToggle(Page, "Auto Win Survivor (Teleport)", false, function(state)
         if state then
-            -- Previne conflitos de teleporte e física desligando o modo Fly
             if AutoWinSurvivorFlyToggleObj then AutoWinSurvivorFlyToggleObj.Set(false) end
             
             if not MasterAutoFarmState then
@@ -920,10 +919,9 @@ return function(env)
         end
     end)
 
-    -- Auto Win Survivor (Fly) [Integrado]
+    -- Auto Win Survivor (Fly)
     AutoWinSurvivorFlyToggleObj = Library:CreateToggle(Page, "Auto win survivor (fly)", false, function(state)
         if state then
-            -- Previne conflitos de física desligando o modo Teleport
             if AutoWinSurvivorToggleObj then AutoWinSurvivorToggleObj.Set(false) end
             
             if not MasterAutoFarmState then
@@ -949,7 +947,7 @@ return function(env)
         end
     end)
 
-    -- Auto Win Beast [Motor Otimizado]
+    -- Auto Win Beast
     AutoWinBeastToggleObj = Library:CreateToggle(Page, "Auto Win Beast", false, function(state)
         if state and not MasterAutoFarmState then
             task.spawn(function()
@@ -1051,7 +1049,7 @@ return function(env)
     -- ==========================================
     -- SEÇÃO: FARM SETTINGS
     -- ==========================================
-    Library:CreateSection(Page, "Farm Settingsadadas")
+    Library:CreateSection(Page, "Farm Settings")
 
     -- Anti AFK
     AntiAfkToggleObj = Library:CreateToggle(Page, "Anti AFK", false, function(state)
@@ -1461,7 +1459,7 @@ return function(env)
 
             TempPlayerStatsModule = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
 
-            -- Se for Besta, gerencia threads de combate otimizados
+            -- Se for Besta, gerencia threads de combate otimizados (Totalmente Desvinculado de Outros Estados)
             if AutoFarmEnabled and AmIBeast() then
                 if not beast_active then
                     StartBeastAutoWin()
@@ -1475,10 +1473,24 @@ return function(env)
                     StopBeastAutoWin()
                 end
 
+                -- Correção crucial para o bug do lobby / transição de carregamento demonstrada no vídeo
+                if IsInLobby() then
+                    if fly_bnhide then
+                        fly_bnhide = false
+                        fly_bnhideelapse = 0
+                        RemoveSafePlatform()
+                        if IsThereChar() then
+                            LocalPlayer.Character.HumanoidRootPart.Anchored = false
+                        end
+                        fly_lpos = nil
+                    end
+                    continue -- Ignora a busca por Besta e Safe Platform enquanto estiver fisicamente no Lobby
+                end
+
                 fly_Beast = GetBeast()
 
                 -- Mecanismo de Proteção Estática (Safe Platform Hover)
-                if FlyConfig.HideBeastNear and IsThereChar() and TempPlayerStatsModule and not TempPlayerStatsModule.IsBeast.Value then
+                if FlyConfig.HideBeastNear and IsThereChar() and TempPlayerStatsModule and not TempPlayerStatsModule.IsBeast.Value and not IsInLobby() then
                     if (fly_Beast == nil or not IsThereChar(fly_Beast)) then
                         if fly_bnhide then
                             fly_bnhide = false
