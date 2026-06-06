@@ -38,7 +38,7 @@ return function(env)
     local ModAddedConnection = nil
 
     -- =========================================================================
-    -- VARIÁVEIS DE CONTROLE DO AUTO FARM FLY (MOTO OPTIMIZADO)
+    -- CONFIGURAÇÕES E ESTADOS INTERNOS DO AUTO FARM FLY (ENGINE)
     -- =========================================================================
     local FlyConfig = {
         FarmTweenSpeed = 22,        
@@ -73,7 +73,7 @@ return function(env)
     local fly_BackgroundLoopActive = false
 
     -- =========================================================================
-    -- FUNÇÕES AUXILIARES DO AUTO FARM FLY
+    -- FUNÇÕES DE SUPORTE DO AUTO FARM FLY
     -- =========================================================================
     local function fly_RemoveSafePlatform()
         if fly_safePlatform then
@@ -108,7 +108,7 @@ return function(env)
             end
         end
         local char = LocalPlayer.Character
-        if char and (char:FindFirstChild("BeastHammer") or char:FindFirstChild("Hammer")) then
+        if char and (char:FindFirstChild("BeastHammer") or char:FindFirstChild("Hammer") or char:FindFirstChild("Weapon")) then
             return true
         end
         return false
@@ -170,6 +170,73 @@ return function(env)
         end
         fly_cachedBeast = nil
         return nil
+    end
+
+    -- =========================================================================
+    -- MOTOR DE TELEPORTE / SELEÇÃO DINÂMICA DA MARRETA (BEAST ADVANCED)
+    -- =========================================================================
+    local function ObterRaiz(character)
+        if not character then return nil end
+        return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+    end
+
+    local function ObterMapaAtual()
+        for _, obj in pairs(Workspace:GetChildren()) do
+            if obj:FindFirstChild("FreezePod") or obj:FindFirstChild("ComputerTable") then
+                return obj
+            end
+        end
+        return nil
+    end
+
+    local function ObterTuboVazio(mapa)
+        if not mapa then return nil end
+        for _, obj in pairs(mapa:GetChildren()) do
+            if obj.Name == "FreezePod" then
+                local trigger = obj:FindFirstChild("PodTrigger", true)
+                if trigger then
+                    local capturedTorso = trigger:FindFirstChild("CapturedTorso")
+                    local event = trigger:FindFirstChild("Event")
+                    if capturedTorso and event and capturedTorso.Value == nil then
+                        return event
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
+    local function ObterMarretaEEquipar()
+        local char = LocalPlayer.Character
+        if not char then return nil, nil end
+        
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        local root = ObterRaiz(char)
+        
+        -- Procura no personagem primeiro (se já estiver equipada)
+        local event = char:FindFirstChild("HammerEvent", true)
+        if event and root then
+            return event, root
+        end
+        
+        -- Procura na mochila (Backpack) e equipa automaticamente caso desequipada
+        local backpack = LocalPlayer:FindFirstChild("Backpack")
+        if backpack then
+            for _, tool in ipairs(backpack:GetChildren()) do
+                if tool:IsA("Tool") and (tool.Name:match("Hammer") or tool.Name:match("Mallet") or tool:FindFirstChild("HammerEvent")) then
+                    if humanoid then
+                        humanoid:EquipTool(tool)
+                        task_wait(0.1)
+                    end
+                    local ev = tool:FindFirstChild("HammerEvent") or tool:FindFirstChildWhichIsA("RemoteEvent", true)
+                    if ev and root then
+                        return ev, root
+                    end
+                end
+            end
+        end
+        
+        return nil, nil
     end
 
     -- =========================================================================
@@ -518,11 +585,8 @@ return function(env)
                     fly_RemoveSafePlatform()
                 end
 
+                -- CORRIGIDO: Se for a Besta, apenas pausa o Survivor Farm sem desativar a toggle
                 if fly_AutoFarmEnabled and fly_AmIBeast() then
-                    fly_AutoFarmEnabled = false
-                    AutoWinSurvivorFlyToggleObj.Set(false)
-                    SendNotification("NexVoid Paused | You are the BEAST! Paused.", 5)
-                    
                     for i, v in pairs(fly_farmtasks) do
                         pcall(function()
                             coroutine.close(v)
@@ -534,7 +598,13 @@ return function(env)
                     if fly_IsThereChar() then
                         LocalPlayer.Character.HumanoidRootPart.Anchored = false
                     end
-                    break
+                    
+                    pcall(function()
+                        if LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild("SimpleAutoFarmGUI") then
+                            LocalPlayer.PlayerGui.SimpleAutoFarmGUI.MainFrame.StatusLabel.Text = "Status: Paused (Beast Round)"
+                        end
+                    end)
+                    continue -- Pula o loop do survivor nesta rodada
                 end
 
                 if not fly_AutoFarmEnabled or not fly_IsMatchActive() then
@@ -651,6 +721,11 @@ return function(env)
                     fly_TPPlayerSpawn()
                 end
 
+                -- Auto-retomada automática no meio da partida se as condições forem favoráveis
+                if fly_AutoFarmEnabled and not fly_onsurvivorfarm and not fly_AmIBeast() and fly_IsMatchActive() then
+                    task_spawn(fly_DoSurvivorFarm)
+                end
+
                 local CurrentMap = ReplicatedStorage.CurrentMap.Value
                 if CurrentMap then
                     local GotComputers = 0
@@ -663,7 +738,7 @@ return function(env)
                     if GotComputers ~= fly_Comp then
                         if GotComputers > 0 then
                             task_wait(3)
-                            if fly_AutoFarmEnabled and not fly_onsurvivorfarm then
+                            if fly_AutoFarmEnabled and not fly_onsurvivorfarm and not fly_AmIBeast() then
                                 task_spawn(fly_DoSurvivorFarm)
                             end
                         else
@@ -682,7 +757,7 @@ return function(env)
     -- =========================================================================
     -- ELEMENTOS DA INTERFACE (TABS / TOGGLES)
     -- =========================================================================
-    Library:CreateSection(Page, "Main Farming (BETA)")
+    Library:CreateSection(Page, "Main Farming (BETAa)")
 
     -- Enable Auto Farm
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
@@ -707,7 +782,6 @@ return function(env)
                 end)
                 return
             end
-            -- Desliga o modo Fly para evitar conflito
             if AutoWinSurvivorFlyToggleObj then AutoWinSurvivorFlyToggleObj.Set(false) end
         end
 
@@ -717,7 +791,7 @@ return function(env)
         end
     end)
 
-    -- Auto Win Survivor (Fly) [INTEGRADO COM MOTO NOVO]
+    -- Auto Win Survivor (Fly)
     AutoWinSurvivorFlyToggleObj = Library:CreateToggle(Page, "Auto win survivor (fly)", false, function(state)
         if state then
             if not MasterAutoFarmState then
@@ -728,15 +802,6 @@ return function(env)
                 end)
                 return
             end
-            if fly_AmIBeast() then
-                task.spawn(function()
-                    task.wait()
-                    AutoWinSurvivorFlyToggleObj.Set(false)
-                    SendNotification("NexVoid Error | Cannot enable Auto Farm while you are the BEAST.", 4)
-                end)
-                return
-            end
-            -- Desliga o modo Teleport para evitar conflito
             if AutoWinSurvivorToggleObj then AutoWinSurvivorToggleObj.Set(false) end
         end
 
@@ -745,7 +810,6 @@ return function(env)
         if state then
             fly_StartBackgroundLoop()
             
-            -- Gatilho de mudança de mapa
             if not fly_MapConnection then
                 fly_MapConnection = ReplicatedStorage.CurrentMap.Changed:Connect(function(newMap)
                     if newMap and fly_AutoFarmEnabled and not fly_onsurvivorfarm then
@@ -757,13 +821,12 @@ return function(env)
                 end)
             end
 
-            if fly_IsMatchActive() then
+            if fly_IsMatchActive() and not fly_AmIBeast() then
                 task_spawn(fly_DoSurvivorFarm)
             else
                 SendNotification("NexVoid | Waiting for the match to start...", 4)
             end
         else
-            -- Limpeza limpa do estado do Auto Farm Fly ao desativar
             if fly_MapConnection then
                 fly_MapConnection:Disconnect()
                 fly_MapConnection = nil
@@ -990,154 +1053,118 @@ return function(env)
         end)
     end)
 
-    -- [[ AUTO WIN BEAST ]] --
-    do
-        local function ObterRaiz(character)
-            if not character then return nil end
-            return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-        end
-
-        local function ObterMapaAtual()
-            for _, obj in pairs(Workspace:GetChildren()) do
-                if obj:FindFirstChild("FreezePod") or obj:FindFirstChild("ComputerTable") then
-                    return obj
-                end
-            end
-            return nil
-        end
-
-        local function ObterTuboVazio(mapa)
-            if not mapa then return nil end
-            for _, obj in pairs(mapa:GetChildren()) do
-                if obj.Name == "FreezePod" then
-                    local trigger = obj:FindFirstChild("PodTrigger", true)
-                    if trigger then
-                        local capturedTorso = trigger:FindFirstChild("CapturedTorso")
-                        local event = trigger:FindFirstChild("Event")
-                        if capturedTorso and event and capturedTorso.Value == nil then
-                            return event
+    -- [[ AUTO WIN BEAST - CHASE LOOP (CORRIGIDO) ]] --
+    task.spawn(function()
+        while true do
+            task.wait(0.1) 
+            if getgenv().AutoWinBeast then
+                pcall(function()
+                    if not IsGameActive.Value then return end
+                    
+                    local event, root = ObterMarretaEEquipar()
+                    if not event or not root then return end
+                    
+                    local AlvoAtual = nil
+                    local RaizAlvo = nil
+                    
+                    for _, alvo in pairs(Players:GetPlayers()) do
+                        if alvo ~= LocalPlayer and alvo.Character then
+                            local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
+                            if Stats and Stats:FindFirstChild("Captured") and not Stats.Captured.Value then
+                                local tempRaiz = ObterRaiz(alvo.Character)
+                                if tempRaiz then
+                                    AlvoAtual = alvo
+                                    RaizAlvo = tempRaiz
+                                    break
+                                end
+                            end
                         end
                     end
-                end
+                    
+                    if RaizAlvo and LocalPlayer.Character then
+                        LocalPlayer.Character:PivotTo(RaizAlvo.CFrame * CFrame.new(0, 0, 1.5))
+                        root.Velocity = Vector3.zero 
+                    end
+                end)
             end
-            return nil
         end
+    end)
 
-        task.spawn(function()
-            while true do
-                task.wait(0.1) 
-                if getgenv().AutoWinBeast then
-                    pcall(function()
-                        if not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
-                        
-                        local MeuPersonagem = LocalPlayer.Character
-                        local MinhaRaiz = ObterRaiz(MeuPersonagem)
-                        
-                        if not MeuPersonagem:FindFirstChild("HammerEvent", true) or not MinhaRaiz then return end
-                        
-                        local AlvoAtual = nil
-                        local RaizAlvo = nil
-                        
-                        for _, alvo in pairs(Players:GetPlayers()) do
-                            if alvo ~= LocalPlayer and alvo.Character then
-                                local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
-                                if Stats and Stats:FindFirstChild("Captured") and not Stats.Captured.Value then
-                                    local tempRaiz = ObterRaiz(alvo.Character)
-                                    if tempRaiz then
-                                        AlvoAtual = alvo
-                                        RaizAlvo = tempRaiz
-                                        break
+    -- [[ AUTO WIN BEAST - ATTACK LOOP (CORRIGIDO) ]] --
+    task.spawn(function()
+        while true do
+            task.wait(0.1)
+            if getgenv().AutoWinBeast then
+                pcall(function()
+                    if not IsGameActive.Value then return end
+
+                    local event, root = ObterMarretaEEquipar()
+                    if not event or not root then return end
+                    
+                    for _, alvo in pairs(Players:GetPlayers()) do
+                        if alvo ~= LocalPlayer and alvo.Character then
+                            local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
+                            if not Stats then continue end
+                            
+                            local alvoCaido = Stats:FindFirstChild("Ragdoll")
+                            local alvoCaptured = Stats:FindFirstChild("Captured")
+                            local RaizAlvo = ObterRaiz(alvo.Character)
+                            
+                            if RaizAlvo and alvoCaptured and not alvoCaptured.Value then
+                                local distancia = (RaizAlvo.Position - root.Position).Magnitude
+                                
+                                if distancia <= 12 then
+                                    if alvoCaido and not alvoCaido.Value then
+                                        event:FireServer("HammerHit", RaizAlvo)
                                     end
-                                end
-                            end
-                        end
-                        
-                        if RaizAlvo then
-                            MeuPersonagem:PivotTo(RaizAlvo.CFrame * CFrame.new(0, 0, 1.5))
-                            MinhaRaiz.Velocity = Vector3.zero 
-                        end
-                    end)
-                end
-            end
-        end)
-
-        task.spawn(function()
-            while true do
-                task.wait(0.1)
-                if getgenv().AutoWinBeast then
-                    pcall(function()
-                        if not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
-
-                        local MeuPersonagem = LocalPlayer.Character
-                        local MeuEventoMarreta = MeuPersonagem and MeuPersonagem:FindFirstChild("HammerEvent", true)
-                        local MinhaRaiz = ObterRaiz(MeuPersonagem)
-                        
-                        if not MeuEventoMarreta or not MinhaRaiz then return end
-                        
-                        for _, alvo in pairs(Players:GetPlayers()) do
-                            if alvo ~= LocalPlayer and alvo.Character then
-                                local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
-                                if not Stats then continue end
-                                
-                                local alvoCaido = Stats:FindFirstChild("Ragdoll")
-                                local alvoCapturado = Stats:FindFirstChild("Captured")
-                                local RaizAlvo = ObterRaiz(alvo.Character)
-                                
-                                if RaizAlvo and alvoCapturado and not alvoCapturado.Value then
-                                    local distancia = (RaizAlvo.Position - MinhaRaiz.Position).Magnitude
                                     
-                                    if distancia <= 12 then
-                                        if alvoCaido and not alvoCaido.Value then
-                                            MeuEventoMarreta:FireServer("HammerHit", RaizAlvo)
-                                        end
-                                        
-                                        if alvoCaido and alvoCaido.Value == true then
-                                            MeuEventoMarreta:FireServer("HammerTieUp", RaizAlvo, RaizAlvo.Position)
-                                        end
+                                    if alvoCaido and alvoCaido.Value == true then
+                                        event:FireServer("HammerTieUp", RaizAlvo, RaizAlvo.Position)
                                     end
                                 end
                             end
                         end
-                    end)
-                end
+                    end
+                end)
             end
-        end)
+        end
+    end)
 
-        task.spawn(function()
-            while true do
-                task.wait(0.1)
-                if getgenv().AutoWinBeast then
-                    pcall(function()
-                        if not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
+    -- [[ AUTO WIN BEAST - FREEZEPOD LOOP (CORRIGIDO) ]] --
+    task.spawn(function()
+        while true do
+            task.wait(0.1)
+            if getgenv().AutoWinBeast then
+                pcall(function()
+                    if not IsGameActive.Value then return end
 
-                        local MeuPersonagem = LocalPlayer.Character
-                        if not MeuPersonagem:FindFirstChild("HammerEvent", true) then return end
-                        
-                        local mapa = ObterMapaAtual()
-                        
-                        for _, alvo in pairs(Players:GetPlayers()) do
-                            if alvo ~= LocalPlayer and alvo.Character then
-                                local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
-                                if not Stats then continue end
-                                
-                                local alvoCaido = Stats:FindFirstChild("Ragdoll")
-                                local alvoCapturado = Stats:FindFirstChild("Captured")
-                                
-                                if alvoCaido and alvoCaido.Value == true and alvoCapturado and alvoCapturado.Value == false then
-                                    local tuboVazio = ObterTuboVazio(mapa)
-                                    if tuboVazio then
-                                        RemoteEvent:FireServer("Input", "Trigger", true, tuboVazio)
-                                        task.wait(0.05)
-                                        RemoteEvent:FireServer("Input", "Action", true)
-                                    end
+                    local event, root = ObterMarretaEEquipar()
+                    if not event or not root then return end
+                    
+                    local mapa = ObterMapaAtual()
+                    
+                    for _, alvo in pairs(Players:GetPlayers()) do
+                        if alvo ~= LocalPlayer and alvo.Character then
+                            local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
+                            if not Stats then continue end
+                            
+                            local alvoCaido = Stats:FindFirstChild("Ragdoll")
+                            local alvoCaptured = Stats:FindFirstChild("Captured")
+                            
+                            if alvoCaido and alvoCaido.Value == true and alvoCaptured and alvoCaptured.Value == false then
+                                local tuboVazio = ObterTuboVazio(mapa)
+                                if tuboVazio then
+                                    RemoteEvent:FireServer("Input", "Trigger", true, tuboVazio)
+                                    task.wait(0.05)
+                                    RemoteEvent:FireServer("Input", "Action", true)
                                 end
                             end
                         end
-                    end)
-                end
+                    end
+                end)
             end
-        end)
-    end
+        end
+    end)
 
     -- [[ AUTO WIN SURVIVOR (TELEPORT CLASSIC) ]] --
     do
