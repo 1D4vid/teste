@@ -13,6 +13,8 @@ return function(env)
     local AutoWinSurvivorFlyToggleObj
     local AutoWinBeastToggleObj
     local AutoSaveTeleportToggleObj
+    local AutoRejoinToggleObj
+    local ModAlertToggleObj
 
     -- ==========================================
     -- SEÇÃO: MAIN FARMING (BETA)
@@ -30,7 +32,8 @@ return function(env)
         end
     end)
 
-    AutoWinSurvivorToggleObj = Library:CreateToggle(Page, "Auto Win Survivor", false, function(state)
+    -- Nome alterado de "Auto Win Survivor" para "Auto Win Survivor (Teleport)"
+    AutoWinSurvivorToggleObj = Library:CreateToggle(Page, "Auto Win Survivor (Teleport)", false, function(state)
         if state and not MasterAutoFarmState then
             task.spawn(function()
                 task.wait()
@@ -45,7 +48,7 @@ return function(env)
         end
     end)
 
-    -- Nova Toggle: Auto Win Survivor (Fly) [Vazia]
+    -- Toggle: Auto Win Survivor (Fly) [Vazia]
     AutoWinSurvivorFlyToggleObj = Library:CreateToggle(Page, "Auto win survivor (fly)", false, function(state)
         if state and not MasterAutoFarmState then
             task.spawn(function()
@@ -70,7 +73,7 @@ return function(env)
         getgenv().AutoWinBeast = state
     end)
 
-    -- Movido de "Farm Settings" para "Main Farming (BETA)"
+    -- Auto Save (Silent)
     Library:CreateToggle(Page, "Auto Save (Silent)", false, function(state)
         getgenv().AutoHelpSilent = state
         if state then
@@ -78,7 +81,7 @@ return function(env)
         end
     end)
 
-    -- Nova Toggle: Auto Save (Teleport) [Vazia]
+    -- Toggle: Auto Save (Teleport) [Vazia]
     AutoSaveTeleportToggleObj = Library:CreateToggle(Page, "Auto Save (Teleport)", false, function(state)
         -- Código do salvamento por teleporte será implementado aqui posteriormente
     end)
@@ -99,6 +102,16 @@ return function(env)
             return
         end
         _G.AntiAfkEnabled = state
+    end)
+
+    -- Nova Toggle: Auto Rejoin (Disconnection) [Vazia]
+    AutoRejoinToggleObj = Library:CreateToggle(Page, "Auto Rejoin (Disconnection)", false, function(state)
+        -- Código para reconexão automática será implementado aqui posteriormente
+    end)
+
+    -- Nova Toggle: Moderator Alert/Kick [Vazia]
+    ModAlertToggleObj = Library:CreateToggle(Page, "Moderator Alert/Kick", false, function(state)
+        -- Código de detecção e ação contra moderadores será implementado aqui posteriormente
     end)
 
     -- ==========================================
