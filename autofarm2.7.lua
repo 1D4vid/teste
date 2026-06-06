@@ -25,7 +25,7 @@ return function(env)
     -- ==========================================
     -- SEÇÃO: MAIN FARMING (BETA)
     -- ==========================================
-    Library:CreateSection(Page, "Main Farming (BETA)")
+    Library:CreateSection(Page, "Main Farming (BETA1212)")
 
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
         MasterAutoFarmState = state
