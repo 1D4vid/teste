@@ -32,6 +32,7 @@ return function(env)
     local AutoSaveTeleportToggleObj
     local AutoRejoinToggleObj
     local ModAlertToggleObj
+    local BeastProtectionToggleObj
 
     -- Gerenciadores de Conexões Globais
     local RejoinConnection = nil
@@ -50,21 +51,12 @@ return function(env)
         HideBeastNearDist = 35,     
         TriggerUnCampOut = 5,       
         ExitCancel = false,         
-        AntiPCError = true,         
-        HideBeastNear = true        
+        AntiPCError = true          
     }
 
     local fly_AutoFarmEnabled = false
     local fly_onsurvivorfarm = false
-    local fly_bnhide = false
     local fly_isMoving = false          
-    local fly_bnhideelapse = 0
-    local fly_noelepse = 0
-    local fly_lpos = nil
-    local fly_Beast = nil
-    local fly_cachedBeast = nil         
-    local fly_safePlatform = nil        
-    local fly_farmtasks = {}
     local fly_TempPlayerStatsModule = nil
     local fly_Comp = 0
     local fly_notifiedLobby = false
@@ -73,17 +65,130 @@ return function(env)
     local fly_BackgroundLoopActive = false
 
     -- =========================================================================
-    -- FUNÇÕES DE SUPORTE DO AUTO FARM FLY
+    -- SISTEMA DE SEGURANÇA UNIFICADO CONTRA BEAST (SAFE PLATFORM)
     -- =========================================================================
-    local function fly_RemoveSafePlatform()
-        if fly_safePlatform then
-            pcall(function()
-                fly_safePlatform:Destroy()
-            end)
-            fly_safePlatform = nil
+    local universal_SafePlatform = nil
+    local universal_lpos = nil
+    local universal_hiding = false
+
+    local function RemoveUniversalPlatform()
+        if universal_SafePlatform then
+            pcall(function() universal_SafePlatform:Destroy() end)
+            universal_SafePlatform = nil
         end
     end
 
+    local function GetBeastPlayer()
+        for _, v in ipairs(Players:GetPlayers()) do
+            local stats = v:FindFirstChild("TempPlayerStatsModule")
+            if stats and stats:FindFirstChild("IsBeast") and stats.IsBeast.Value then
+                return v
+            end
+            local char = v.Character
+            if char and (char:FindFirstChild("BeastHammer") or char:FindFirstChild("Hammer") or char:FindFirstChild("Weapon")) then
+                return v
+            end
+        end
+        return nil
+    end
+
+    local function IsBeastNear(dist)
+        local beast = GetBeastPlayer()
+        if beast and beast.Character and beast.Character:FindFirstChild("HumanoidRootPart") then
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local myPos = char.HumanoidRootPart.Position
+                local beastPos = beast.Character.HumanoidRootPart.Position
+                if (beastPos - myPos).Magnitude < (dist or 35) then
+                    return true, beast
+                end
+            end
+        end
+        return false, nil
+    end
+
+    local function ManageBeastProtection(dt)
+        if not getgenv().BeastProtectionEnabled or not fly_IsMatchActive() or fly_AmIBeast() then
+            if universal_hiding then
+                universal_hiding = false
+                RemoveUniversalPlatform()
+                if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Anchored then
+                    LocalPlayer.Character.HumanoidRootPart.Anchored = false
+                end
+                if universal_lpos and fly_IsThereChar() then
+                    LocalPlayer.Character:PivotTo(universal_lpos)
+                end
+                universal_lpos = nil
+            end
+            return
+        end
+
+        local isNear, beast = IsBeastNear(FlyConfig.HideBeastNearDist)
+        if isNear and beast then
+            if not universal_hiding and not fly_isMoving then
+                universal_lpos = LocalPlayer.Character:GetPivot()
+                universal_hiding = true
+                pcall(function()
+                    if not universal_SafePlatform then
+                        universal_SafePlatform = Instance.new("Part")
+                        universal_SafePlatform.Size = Vector3.new(15, 1, 15)
+                        universal_SafePlatform.Anchored = true
+                        universal_SafePlatform.CanCollide = true
+                        universal_SafePlatform.Transparency = 1
+                        universal_SafePlatform.Name = "NexVoidUniversalPlate"
+                        universal_SafePlatform.Parent = workspace
+                    end
+                    universal_SafePlatform.CFrame = universal_lpos * CFrame_new(0, 75, 0)
+                    LocalPlayer.Character:PivotTo(universal_SafePlatform.CFrame * CFrame_new(0, 3, 0))
+                    
+                    task_spawn(function()
+                        task_wait()
+                        if fly_IsThereChar() then
+                            LocalPlayer.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3_new(0, 0, 0)
+                            LocalPlayer.Character.HumanoidRootPart.AssemblyAngularVelocity = Vector3_new(0, 0, 0)
+                        end
+                    end)
+                end)
+                SendNotification("Beast Warning | Hiding on safe platform.", 3.5)
+            end
+        elseif universal_hiding and beast and not fly_isMoving then
+            local beastPos = beast.Character.HumanoidRootPart.Position
+            local currentGroundPos = universal_lpos and universal_lpos.Position or LocalPlayer.Character.HumanoidRootPart.Position
+            local beastDistanceFromLpos = (beastPos - currentGroundPos).Magnitude
+            if beastDistanceFromLpos > (FlyConfig.HideBeastNearDist + 15) then
+                RemoveUniversalPlatform()
+                if fly_IsThereChar() then
+                    LocalPlayer.Character.HumanoidRootPart.Anchored = false
+                    LocalPlayer.Character:PivotTo(universal_lpos)
+                end
+                universal_hiding = false
+                universal_lpos = nil
+                SendNotification("Beast Away | Resuming farm.", 3)
+            end
+        end
+    end
+
+    -- Loop de controle global da segurança em segundo plano
+    task.spawn(function()
+        while true do
+            local dt = task.wait(0.1)
+            if getgenv().NexVoidLigado or fly_AutoFarmEnabled then
+                pcall(ManageBeastProtection, dt)
+            else
+                if universal_hiding then
+                    universal_hiding = false
+                    RemoveUniversalPlatform()
+                    if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Anchored then
+                        LocalPlayer.Character.HumanoidRootPart.Anchored = false
+                    end
+                end
+            end
+        end
+    end)
+
+    -- =========================================================================
+    -- FUNÇÕES DE SUPORTE DO AUTO FARM FLY
+    -- =========================================================================
     local function fly_IsThereChar(APlr)
         local plr = APlr or LocalPlayer
         local char = plr.Character
@@ -139,37 +244,6 @@ return function(env)
             end
         end
         return true
-    end
-
-    local function fly_GetBeast()
-        if fly_cachedBeast and fly_cachedBeast.Parent == Players and fly_IsThereChar(fly_cachedBeast) then
-            return fly_cachedBeast
-        end
-
-        for _, v in ipairs(Players:GetPlayers()) do
-            local stats = v:FindFirstChild("TempPlayerStatsModule")
-            if stats then
-                local isBeastVal = stats:FindFirstChild("IsBeast")
-                if isBeastVal and isBeastVal.Value then
-                    fly_cachedBeast = v
-                    return v
-                end
-            end
-            
-            local char = v.Character
-            if char and (char:FindFirstChild("BeastHammer") or char:FindFirstChild("Hammer") or char:FindFirstChild("Weapon")) then
-                fly_cachedBeast = v
-                return v
-            end
-            
-            local backpack = v:FindFirstChild("Backpack")
-            if backpack and (backpack:FindFirstChild("BeastHammer") or backpack:FindFirstChild("Hammer") or backpack:FindFirstChild("Weapon")) then
-                fly_cachedBeast = v
-                return v
-            end
-        end
-        fly_cachedBeast = nil
-        return nil
     end
 
     -- =========================================================================
@@ -228,7 +302,7 @@ return function(env)
         end
 
         local function TaskGood()
-            return fly_AutoFarmEnabled and not fly_AmIBeast() and fly_IsMatchActive() and PlayerReady()
+            return fly_AutoFarmEnabled and not fly_AmIBeast() and fly_IsMatchActive() and PlayerReady() and not universal_hiding
         end
 
         local function GetMapObjects()
@@ -320,7 +394,7 @@ return function(env)
 
                         repeat
                             task_wait()
-                        until not TaskGood() or fly_bnhide == false or fly_bnhideelapse >= FlyConfig.CampHackOut
+                        until not TaskGood() or universal_hiding == false
 
                         SendNotification("Moving to computer table", 2.5)
                         GoTween(v)
@@ -337,7 +411,7 @@ return function(env)
                                 break
                             end
 
-                            if TaskGood() and not fly_bnhide and fly_TempPlayerStatsModule.CurrentAnimation.Value ~= "Typing" then
+                            if TaskGood() and not universal_hiding and fly_TempPlayerStatsModule.CurrentAnimation.Value ~= "Typing" then
                                 Tries = Tries + 1
                                 if fly_IsThereChar() then
                                     LocalPlayer.Character:PivotTo(v.CFrame)
@@ -347,7 +421,7 @@ return function(env)
                                 task_wait(0.1)
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", true)
                                 task_wait(0.4)
-                            elseif TaskGood() and not fly_bnhide then
+                            elseif TaskGood() and not universal_hiding then
                                 if CurrentComputer ~= Computer then
                                     SendNotification("Hacking | Successfully started hacking", 3)
                                 end
@@ -359,22 +433,7 @@ return function(env)
                                 end
                             end
 
-                            if fly_bnhideelapse >= FlyConfig.CampHackOut then
-                                ComputerBanList[math_floor(tick() * 1000)] = Computer
-                                fly_RemoveSafePlatform()
-                                fly_bnhide = false
-                                OnComputer = false
-                                CurrentComputer = nil
-                                fly_bnhideelapse = 0
-                                fly_lpos = nil 
-                                if fly_IsThereChar() then
-                                    LocalPlayer.Character.HumanoidRootPart.Anchored = false
-                                end
-                                SendNotification("Fleeing | The Beast is camping. Changing computers.", 3.5)
-                                return
-                            end
-
-                            if Tries >= 15 and TaskGood() and not fly_bnhide then
+                            if Tries >= 15 and TaskGood() and not universal_hiding then
                                 CurrentComputer = nil
                                 OnComputer = false
                                 SendNotification("Error | Failed to start hacking. Re-trying.", 3)
@@ -412,7 +471,7 @@ return function(env)
                         ChosenComputer = nil
                     end
 
-                    local BeastObj = fly_GetBeast()
+                    local BeastObj = GetBeastPlayer()
                     local currentTime = tick() * 1000
 
                     for i = 1, #MapObjects.Computers do
@@ -486,26 +545,24 @@ return function(env)
 
                     repeat
                         task_wait(0.5)
-                    until not TaskGood() or fly_bnhide == false or fly_bnhideelapse >= FlyConfig.CampEscapeOut
+                    until not TaskGood() or universal_hiding == false
 
                     if v:FindFirstChild("ExitDoorTrigger") then
                         GoTween(v.ExitDoorTrigger)
                         repeat
                             task_wait()
-                            if v:FindFirstChild("ExitDoorTrigger") and v.ExitDoorTrigger.ActionSign.Value ~= 0 and not fly_bnhide and fly_IsThereChar() then
+                            if v:FindFirstChild("ExitDoorTrigger") and v.ExitDoorTrigger.ActionSign.Value ~= 0 and not universal_hiding and fly_IsThereChar() then
                                 LocalPlayer.Character:PivotTo(v.ExitDoorTrigger.CFrame * CFrame_new(0, v.ExitDoorTrigger.Size.Y / 2, 0))
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Trigger", true, v.ExitDoorTrigger.Event)
                                 ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", true)
                                 task_wait(0.5)
                             end
-                        until not TaskGood() or not v:FindFirstChild("ExitDoorTrigger") or fly_bnhideelapse >= FlyConfig.CampEscapeOut
+                        until not TaskGood() or not v:FindFirstChild("ExitDoorTrigger")
 
-                        if fly_bnhideelapse >= FlyConfig.CampEscapeOut and fly_IsThereChar() then
-                            fly_RemoveSafePlatform()
+                        if universal_hiding and fly_IsThereChar() then
+                            RemoveUniversalPlatform()
                             LocalPlayer.Character.HumanoidRootPart.Anchored = false
-                            fly_bnhide = false
-                            fly_bnhideelapse = 0
-                            fly_lpos = nil
+                            universal_lpos = nil
                             continue
                         end
                     end
@@ -549,7 +606,7 @@ return function(env)
                 local dt = task_wait(0.1)
                 
                 if not fly_IsThereChar() then
-                    fly_RemoveSafePlatform()
+                    RemoveUniversalPlatform()
                 end
 
                 -- Se for a Besta, apenas pausa o Survivor Farm sem desativar a toggle
@@ -561,7 +618,7 @@ return function(env)
                         fly_farmtasks[i] = nil
                     end
                     fly_onsurvivorfarm = false
-                    fly_RemoveSafePlatform()
+                    RemoveUniversalPlatform()
                     if fly_IsThereChar() then
                         LocalPlayer.Character.HumanoidRootPart.Anchored = false
                     end
@@ -578,9 +635,8 @@ return function(env)
                     if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Anchored then
                         LocalPlayer.Character.HumanoidRootPart.Anchored = false
                     end
-                    fly_RemoveSafePlatform()
+                    RemoveUniversalPlatform()
                     fly_onsurvivorfarm = false
-                    fly_bnhide = false
                     fly_Comp = 0 
                     
                     if fly_AutoFarmEnabled then
@@ -597,92 +653,6 @@ return function(env)
                 end
 
                 fly_TempPlayerStatsModule = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
-                fly_Beast = fly_GetBeast()
-
-                -- Proteção com Plataforma Estática
-                if FlyConfig.HideBeastNear and fly_IsThereChar() and fly_TempPlayerStatsModule and not fly_TempPlayerStatsModule.IsBeast.Value then
-                    if (fly_Beast == nil or not fly_IsThereChar(fly_Beast)) then
-                        if fly_bnhide then
-                            fly_bnhide = false
-                            fly_bnhideelapse = 0
-                            fly_RemoveSafePlatform()
-                            if fly_IsThereChar() then
-                                LocalPlayer.Character.HumanoidRootPart.Anchored = false
-                                if fly_lpos then
-                                    LocalPlayer.Character:PivotTo(fly_lpos)
-                                end
-                            end
-                            fly_lpos = nil
-                            SendNotification("Beast Gone | Resuming.", 3)
-                        end
-                    else
-                        local playerPos = LocalPlayer.Character.HumanoidRootPart.Position
-                        local beastPos = fly_Beast.Character.HumanoidRootPart.Position
-                        local currentGroundPos = fly_lpos and fly_lpos.Position or playerPos
-                        local distance = (beastPos - currentGroundPos).Magnitude
-                        
-                        if not fly_isMoving then
-                            if not fly_bnhide and distance < FlyConfig.HideBeastNearDist then
-                                fly_lpos = LocalPlayer.Character:GetPivot() 
-                                fly_bnhide = true
-                                fly_bnhideelapse = 0
-                                
-                                pcall(function()
-                                    if not fly_safePlatform then
-                                        fly_safePlatform = Instance.new("Part")
-                                        fly_safePlatform.Size = Vector3_new(15, 1, 15)
-                                        fly_safePlatform.Anchored = true
-                                        fly_safePlatform.CanCollide = true
-                                        fly_safePlatform.Transparency = 1
-                                        fly_safePlatform.Name = "NexVoidSafePlate"
-                                        fly_safePlatform.Parent = workspace
-                                    end
-                                    fly_safePlatform.CFrame = fly_lpos * CFrame_new(0, 75, 0)
-                                    LocalPlayer.Character:PivotTo(fly_safePlatform.CFrame * CFrame_new(0, 3, 0))
-                                    
-                                    task_spawn(function()
-                                        task_wait()
-                                        if fly_IsThereChar() then
-                                            LocalPlayer.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3_new(0, 0, 0)
-                                            LocalPlayer.Character.HumanoidRootPart.AssemblyAngularVelocity = Vector3_new(0, 0, 0)
-                                        end
-                                    end)
-                                end)
-                                SendNotification("Beast Warning | Standing on safe platform.", 3.5)
-                            end
-                        end
-
-                        if fly_bnhide and fly_lpos and not fly_isMoving then
-                            local targetHover = (fly_lpos * CFrame_new(0, 75, 0)).Position
-                            if (LocalPlayer.Character.HumanoidRootPart.Position - targetHover).Magnitude > 8 then
-                                LocalPlayer.Character:PivotTo(fly_lpos * CFrame_new(0, 75, 0) * CFrame_new(0, 3, 0))
-                            end
-
-                            local beastDistanceFromLpos = (beastPos - fly_lpos.Position).Magnitude
-                            if beastDistanceFromLpos > (FlyConfig.HideBeastNearDist + 15) and fly_TempPlayerStatsModule.Ragdoll.Value == false then
-                                fly_RemoveSafePlatform()
-                                if fly_IsThereChar() then
-                                    LocalPlayer.Character.HumanoidRootPart.Anchored = false
-                                    LocalPlayer.Character:PivotTo(fly_lpos)
-                                end
-                                fly_bnhide = false
-                                fly_bnhideelapse = 0
-                                fly_lpos = nil
-                                SendNotification("Beast Away | Returning to ground.", 3)
-                            end
-                        end
-                    end
-                end
-
-                if fly_bnhide then
-                    fly_bnhideelapse = fly_bnhideelapse + dt
-                    fly_noelepse = 0
-                else
-                    fly_noelepse = fly_noelepse + dt
-                    if fly_noelepse > FlyConfig.TriggerUnCampOut then
-                        fly_bnhideelapse = 0
-                    end
-                end
 
                 if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Position.Y < -2000 then
                     fly_TPPlayerSpawn()
@@ -710,7 +680,6 @@ return function(env)
                             end
                         else
                             fly_onsurvivorfarm = false
-                            fly_Beast = nil
                         end
                         fly_Comp = GotComputers
                     end
@@ -731,6 +700,8 @@ return function(env)
         MasterAutoFarmState = state
         if state then
             if AntiAfkToggleObj then AntiAfkToggleObj.Set(true) end
+            -- Ativa a segurança contra Beast automaticamente
+            if BeastProtectionToggleObj then BeastProtectionToggleObj.Set(true) end
         else
             if AutoWinSurvivorToggleObj then AutoWinSurvivorToggleObj.Set(false) end
             if AutoWinSurvivorFlyToggleObj then AutoWinSurvivorFlyToggleObj.Set(false) end
@@ -807,7 +778,7 @@ return function(env)
             end
 
             fly_onsurvivorfarm = false
-            fly_RemoveSafePlatform()
+            RemoveUniversalPlatform()
             if fly_IsThereChar() then
                 LocalPlayer.Character.HumanoidRootPart.Anchored = false
             end
@@ -999,6 +970,19 @@ return function(env)
         end
     end)
 
+    -- NOVA TOGGLE: Proteção contra Beast (Survivor)
+    BeastProtectionToggleObj = Library:CreateToggle(Page, "Beast Protection (Survivors)", false, function(state)
+        getgenv().BeastProtectionEnabled = state
+        if state then
+            SendNotification("Beast Protection Ativado", 3)
+        end
+    end)
+
+    -- NOVO SLIDER: Velocidade do Fly Survivor
+    Library:CreateSlider(Page, "Survivor Fly Speed", 16, 30, 22, function(val)
+        FlyConfig.FarmTweenSpeed = val
+    end)
+
 
     -- =========================================================================
     -- DETECTORES DO AUTO FARM TELEPORT CLASSIC E OUTROS LOOPS DE SUPORTE
@@ -1020,17 +1004,16 @@ return function(env)
         end)
     end)
 
-    -- [[ NOVO: AUTO-EQUIP DA MARRETA EM SEGUNDO PLANO ]] --
+    -- [[ AUTO-EQUIP DA MARRETA EM SEGUNDO PLANO ]] --
     task.spawn(function()
         while true do
-            task.wait(0.5) -- Loop leve executado a cada 0.5 segundos
+            task.wait(0.5) 
             if getgenv().AutoWinBeast and IsGameActive.Value then
                 pcall(function()
                     local char = LocalPlayer.Character
                     local backpack = LocalPlayer:FindFirstChild("Backpack")
                     if char and backpack then
                         for _, tool in ipairs(backpack:GetChildren()) do
-                            -- Localiza qualquer marreta ou ferramenta com o evento de ataque
                             if tool:IsA("Tool") and (tool.Name:match("Hammer") or tool.Name:match("Mallet") or tool:FindFirstChild("HammerEvent")) then
                                 local hum = char:FindFirstChildOfClass("Humanoid")
                                 if hum then
@@ -1207,6 +1190,7 @@ return function(env)
         local function PossoAgir()
             if getgenv().EscapouDaPartida then return false end 
             if getgenv().SouBeastNessaRodada then return false end
+            if universal_hiding then return false end -- Pausa o teleport se estiver escondido da Besta
             
             local char = LocalPlayer.Character
             if not char then return false end
