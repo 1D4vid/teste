@@ -14,6 +14,9 @@ return function(env)
     local RunService = game:GetService("RunService")
     local StarterGui = game:GetService("StarterGui")
 
+    -- Remotes comuns necessários em escopo global
+    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
+
     -- Otimizações de performance (Micro-optimizations)
     local Vector3_new = Vector3.new
     local CFrame_new = CFrame.new
@@ -23,10 +26,6 @@ return function(env)
     local pairs = pairs
     local math_floor = math.floor
     local tick = tick
-
-    -- Referências de eventos
-    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
-    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
 
     local MasterAutoFarmState = false
     local AntiAfkToggleObj
@@ -709,7 +708,7 @@ return function(env)
                         end
                     end
                     if GotComputers ~= fly_Comp then
-                        if GotComputers > 0 then
+                        if GotGotComputers > 0 then
                             task_wait(3)
                             if fly_AutoFarmEnabled and not fly_onsurvivorfarm and not fly_AmIBeast() then
                                 task_spawn(fly_DoSurvivorFarm)
@@ -741,6 +740,7 @@ return function(env)
             if AutoWinSurvivorToggleObj then AutoWinSurvivorToggleObj.Set(false) end
             if AutoWinSurvivorFlyToggleObj then AutoWinSurvivorFlyToggleObj.Set(false) end
             if AutoWinBeastToggleObj then AutoWinBeastToggleObj.Set(false) end
+            if AutoSaveTeleportToggleObj then AutoSaveTeleportToggleObj.Set(false) end
         end
     end)
 
@@ -1010,7 +1010,7 @@ return function(env)
         end
     end)
 
-    -- Fly Speed Slider (Adicionado ao final da categoria)
+    -- Fly Speed Slider (Alinhado em último lugar na categoria de configurações)
     Library:CreateSlider(Page, "Fly Farm Speed", 16, 30, 22, function(val)
         FlyConfig.FarmTweenSpeed = val
     end)
@@ -1019,7 +1019,8 @@ return function(env)
     -- =========================================================================
     -- DETECTORES DO AUTO FARM TELEPORT CLASSIC E OUTROS LOOPS DE SUPORTE
     -- =========================================================================
-    
+    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
+
     -- [[ ANTI AFK LOOP ]] --
     task.spawn(function()
         local VirtualUser = game:GetService("VirtualUser")
@@ -1221,7 +1222,7 @@ return function(env)
         local function PossoAgir()
             if getgenv().EscapouDaPartida then return false end 
             if getgenv().SouBeastNessaRodada then return false end
-            if fly_bnhide then return false end -- Pausa as ações se estiver escondido da Besta
+            if fly_bnhide then return false end -- Pausa as ações se estiver escondido da Beast
             
             local char = LocalPlayer.Character
             if not char then return false end
