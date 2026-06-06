@@ -102,6 +102,15 @@ return function(env)
         end
     end
 
+    -- CORREÇÃO: Verifica se o jogador ainda está fisicamente no Lobby
+    local function IsInLobby()
+        local lobby = workspace:FindFirstChild("LobbySpawnPad")
+        if lobby and fly_IsThereChar() then
+            return (LocalPlayer.Character.HumanoidRootPart.Position - lobby.Position).Magnitude < 150
+        end
+        return false
+    end
+
     local function fly_AmIBeast()
         local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
         if stats then
@@ -231,8 +240,7 @@ return function(env)
         end
 
         local function TaskGood()
-            -- TaskGood agora monitora e cancela as ações dinamicamente se fly_bnhide for verdadeiro
-            return fly_AutoFarmEnabled and not fly_AmIBeast() and fly_IsMatchActive() and PlayerReady() and not fly_bnhide
+            return fly_AutoFarmEnabled and not fly_AmIBeast() and fly_IsMatchActive() and PlayerReady()
         end
 
         local function GetMapObjects()
@@ -252,7 +260,15 @@ return function(env)
             return Result
         end
 
+        -- Aguarda o carregamento físico dos computadores no mapa por até 5 segundos
         local MapObjects = GetMapObjects()
+        local loadAttempts = 0
+        while #MapObjects.Computers == 0 and loadAttempts < 10 do
+            task_wait(0.5)
+            MapObjects = GetMapObjects()
+            loadAttempts = loadAttempts + 1
+        end
+
         local GoTween
 
         GoTween = function(Part)
@@ -326,7 +342,7 @@ return function(env)
                             task_wait()
                         until not TaskGood() or fly_bnhide == false or fly_bnhideelapse >= FlyConfig.CampHackOut
 
-                        SendNotification("Moving to computer table", 2.5)
+                        SendNotification("Objective", "Moving to computer table", 2.5)
                         GoTween(v)
 
                         if Computer.Screen.BrickColor == BrickColor.new("Dark green") then CurrentComputer = nil; OnComputer = false; return end
@@ -337,7 +353,7 @@ return function(env)
                         repeat
                             task_wait()
                             if fly_IsTriggerOccupied(v) then
-                                SendNotification("Keyboard Occupied | Another player took this spot.", 3)
+                                SendNotification("Keyboard Occupied", "Another player took this spot.", 3)
                                 break
                             end
 
@@ -353,7 +369,7 @@ return function(env)
                                 task_wait(0.4)
                             elseif TaskGood() and not fly_bnhide then
                                 if CurrentComputer ~= Computer then
-                                    SendNotification("Hacking | Successfully started hacking", 3)
+                                    SendNotification("Hacking", "Successfully started hacking", 3)
                                 end
                                 CurrentComputer = Computer
                                 Tries = 0
@@ -374,14 +390,14 @@ return function(env)
                                 if fly_IsThereChar() then
                                     LocalPlayer.Character.HumanoidRootPart.Anchored = false
                                 end
-                                SendNotification("Fleeing | The Beast is camping. Changing computers.", 3.5)
+                                SendNotification("Fleeing", "The Beast is camping. Changing computers.", 3.5)
                                 return
                             end
 
                             if Tries >= 15 and TaskGood() and not fly_bnhide then
                                 CurrentComputer = nil
                                 OnComputer = false
-                                SendNotification("Error | Failed to start hacking. Re-trying.", 3)
+                                SendNotification("Error", "Failed to start hacking. Re-trying.", 3)
                                 return
                             end
                         until not TaskGood() or Computer.Screen.BrickColor == BrickColor.new("Dark green") or (ChosenComputer ~= Computer and ChosenComputer ~= nil)
@@ -412,7 +428,7 @@ return function(env)
                     Closest = math.huge
 
                     if ChosenComputer and ChosenComputer.Screen.BrickColor == BrickColor.new("Dark green") then
-                        SendNotification("Completed | Computer fully hacked!", 3)
+                        SendNotification("Completed", "Computer fully hacked!", 3)
                         ChosenComputer = nil
                     end
 
@@ -480,7 +496,7 @@ return function(env)
                 return
             end
 
-            SendNotification("Escape | Heading to exit doors.", 4)
+            SendNotification("Escape", "Heading to exit doors.", 4)
 
             repeat
                 task_wait(0.5)
@@ -517,7 +533,7 @@ return function(env)
                     if TaskGood() then
                         task_wait(0.5)
                         if v:FindFirstChild("ExitArea") then
-                            SendNotification("Escape | Escaping...", 3)
+                            SendNotification("Escape", "Escaping...", 3)
                             GoTween(v.ExitArea)
                         end
                     end
@@ -528,7 +544,7 @@ return function(env)
         local NewFarmTask = coroutine.create(function()
             if PlayerReady() and not fly_onsurvivorfarm then
                 fly_onsurvivorfarm = true
-                SendNotification("Auto Farm | NexVoid Farm initiated successfully.", 3)
+                SendNotification("Auto Farm", "NexVoid Farm initiated successfully.", 3)
                 Run()
                 if not DoNotTeleport then
                     task_wait(1)
@@ -589,7 +605,7 @@ return function(env)
                     
                     if fly_AutoFarmEnabled or getgenv().NexVoidLigado then
                         if not fly_notifiedLobby then
-                            SendNotification("Lobby State | Waiting for the game match to start...", 5)
+                            SendNotification("Lobby State", "Waiting for the game match to start...", 5)
                             fly_notifiedLobby = true
                         end
                     end
@@ -603,7 +619,7 @@ return function(env)
                 fly_TempPlayerStatsModule = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
                 fly_Beast = fly_GetBeast()
 
-                -- Proteção com Plataforma Estática (Fly e Teleport - Correção de bypass dinâmico de trânsito)
+                -- Proteção com Plataforma Estática (Fly e Teleport)
                 if FlyConfig.HideBeastNear and fly_IsThereChar() and fly_TempPlayerStatsModule and not fly_TempPlayerStatsModule.IsBeast.Value then
                     if (fly_Beast == nil or not fly_IsThereChar(fly_Beast)) then
                         if fly_bnhide then
@@ -617,7 +633,7 @@ return function(env)
                                 end
                             end
                             fly_lpos = nil
-                            SendNotification("Beast Gone | Resuming.", 3)
+                            SendNotification("Beast Gone", "Resuming.", 3)
                         end
                     else
                         local playerPos = LocalPlayer.Character.HumanoidRootPart.Position
@@ -625,22 +641,24 @@ return function(env)
                         local currentGroundPos = fly_lpos and fly_lpos.Position or playerPos
                         local distance = (beastPos - currentGroundPos).Magnitude
                         
-                        -- Segurança dinâmica ativa em tempo integral (mesmo em vôo/teleporte)
-                        if not fly_bnhide and distance < FlyConfig.HideBeastNearDist then
-                            fly_lpos = LocalPlayer.Character:GetPivot() 
-                            fly_bnhide = true
-                            fly_bnhideelapse = 0
-                            
-                            pcall(function()
-                                if not fly_safePlatform then
-                                    fly_safePlatform = Instance.new("Part")
-                                    fly_safePlatform.Size = Vector3_new(15, 1, 15)
-                                    fly_safePlatform.Anchored = true
-                                    fly_safePlatform.CanCollide = true
-                                    fly_safePlatform.Transparency = 1
-                                    fly_safePlatform.Name = "NexVoidSafePlate"
-                                    fly_safePlatform.Parent = workspace
-                                end
+                        local isMoving = fly_AutoFarmEnabled and fly_isMoving
+                        
+                        if not isMoving then
+                            if not fly_bnhide and distance < FlyConfig.HideBeastNearDist then
+                                fly_lpos = LocalPlayer.Character:GetPivot() 
+                                fly_bnhide = true
+                                fly_bnhideelapse = 0
+                                
+                                pcall(function()
+                                    if not fly_safePlatform then
+                                        fly_safePlatform = Instance.new("Part")
+                                        fly_safePlatform.Size = Vector3_new(15, 1, 15)
+                                        fly_safePlatform.Anchored = true
+                                        fly_safePlatform.CanCollide = true
+                                        fly_safePlatform.Transparency = 1
+                                        fly_safePlatform.Name = "NexVoidSafePlate"
+                                        fly_safePlatform.Parent = workspace
+                                    end
                                     fly_safePlatform.CFrame = fly_lpos * CFrame_new(0, 75, 0)
                                     LocalPlayer.Character:PivotTo(fly_safePlatform.CFrame * CFrame_new(0, 3, 0))
                                     
@@ -651,11 +669,12 @@ return function(env)
                                             LocalPlayer.Character.HumanoidRootPart.AssemblyAngularVelocity = Vector3_new(0, 0, 0)
                                         end
                                     end)
-                            end)
-                            SendNotification("Beast Warning | Standing on safe platform.", 3.5)
+                                end)
+                                SendNotification("Beast Warning", "Standing on safe platform.", 3.5)
+                            end
                         end
 
-                        if fly_bnhide and fly_lpos then
+                        if fly_bnhide and fly_lpos and not isMoving then
                             local targetHover = (fly_lpos * CFrame_new(0, 75, 0)).Position
                             if (LocalPlayer.Character.HumanoidRootPart.Position - targetHover).Magnitude > 8 then
                                 LocalPlayer.Character:PivotTo(fly_lpos * CFrame_new(0, 75, 0) * CFrame_new(0, 3, 0))
@@ -671,7 +690,7 @@ return function(env)
                                 fly_bnhide = false
                                 fly_bnhideelapse = 0
                                 fly_lpos = nil
-                                SendNotification("Beast Away | Returning to ground.", 3)
+                                SendNotification("Beast Away", "Returning to ground.", 3)
                             end
                         end
                     end
@@ -693,9 +712,17 @@ return function(env)
 
                 -- Retomada Survivor automática quando as condições permitirem
                 if fly_AutoFarmEnabled and not fly_onsurvivorfarm and not fly_AmIBeast() and fly_IsMatchActive() then
-                    task_spawn(fly_DoSurvivorFarm)
+                    task_spawn(function()
+                        while IsInLobby() and fly_IsMatchActive() and fly_AutoFarmEnabled do
+                            task_wait(0.2)
+                        end
+                        if fly_AutoFarmEnabled and not fly_onsurvivorfarm and not IsInLobby() then
+                            task_spawn(fly_DoSurvivorFarm)
+                        end
+                    end)
                 end
 
+                -- Monitora a contagem de computadores, mas respeita a espera do teletransporte caso mude de estado
                 local CurrentMap = ReplicatedStorage.CurrentMap.Value
                 if CurrentMap then
                     local GotComputers = 0
@@ -708,8 +735,15 @@ return function(env)
                     if GotComputers ~= fly_Comp then
                         if GotComputers > 0 then
                             task_wait(3)
-                            if fly_AutoFarmEnabled and not fly_onsurvivorfarm and not fly_AmIBeast() then
-                                task_spawn(fly_DoSurvivorFarm)
+                            if fly_AutoFarmEnabled and not fly_onsurvivorfarm then
+                                task_spawn(function()
+                                    while IsInLobby() and fly_IsMatchActive() and fly_AutoFarmEnabled do
+                                        task_wait(0.2)
+                                    end
+                                    if fly_AutoFarmEnabled and not fly_onsurvivorfarm and not IsInLobby() then
+                                        task_spawn(fly_DoSurvivorFarm)
+                                    end
+                                end)
                             end
                         else
                             fly_onsurvivorfarm = false
@@ -790,9 +824,17 @@ return function(env)
                 fly_MapConnection = ReplicatedStorage.CurrentMap.Changed:Connect(function(newMap)
                     if newMap and fly_AutoFarmEnabled and not fly_onsurvivorfarm then
                         if fly_AmIBeast() then return end
-                        SendNotification("Match | Starting in 3 seconds.", 4)
-                        task_wait(3)
-                        task_spawn(fly_DoSurvivorFarm)
+                        
+                        -- Aguarda enquanto o jogador ainda estiver no Lobby física/visualmente
+                        while IsInLobby() and fly_IsMatchActive() and fly_AutoFarmEnabled do
+                            task_wait(0.2)
+                        end
+                        
+                        -- Se o teletransporte ocorreu com sucesso e não está no lobby
+                        if fly_AutoFarmEnabled and not fly_onsurvivorfarm and not IsInLobby() then
+                            SendNotification("Match", "Teleported! Starting farm instantly.", 3)
+                            task_spawn(fly_DoSurvivorFarm)
+                        end
                     end
                 end)
             end
@@ -800,7 +842,7 @@ return function(env)
             if fly_IsMatchActive() and not fly_AmIBeast() then
                 task_spawn(fly_DoSurvivorFarm)
             else
-                SendNotification("NexVoid | Waiting for the match to start...", 4)
+                SendNotification("NexVoid", "Waiting for the match to start...", 4)
             end
         else
             if fly_MapConnection then
@@ -920,7 +962,7 @@ return function(env)
     -- =========================================================================
     -- SEÇÃO: FARM SETTINGS
     -- =========================================================================
-    Library:CreateSection(Page, "Farm Settings1231")
+    Library:CreateSection(Page, "Farm Settings")
 
     -- Anti AFK
     AntiAfkToggleObj = Library:CreateToggle(Page, "Anti AFK", false, function(state)
@@ -1292,23 +1334,15 @@ return function(env)
                         if not string.find(corTela, "green") and not TemGenteNoPC(teclado.Position) then
                             
                             if hrp then
-                                local distancia = (hrp.Position - teclado.Position).Magnitude
-                                if distancia < menorDistancia then
-                                    menorDistancia = distancia
-                                    pcMaisPerto = {mesa = obj, tela = tela, evento = eventoPC}
-                                end
-                            else
-                                return obj, tela, eventoPC 
+                                table.insert(Result.Computers, v)
+                            elseif v.Name == "ExitDoor" then
+                                table.insert(Result.ExitDoors, v)
                             end
                         end
                     end
                 end
             end
-            
-            if pcMaisPerto then
-                return pcMaisPerto.mesa, pcMaisPerto.tela, pcMaisPerto.evento
-            end
-            return nil, nil, nil
+            return Result
         end
 
         local function IniciarRotinaDeFarm()
