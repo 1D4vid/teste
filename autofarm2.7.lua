@@ -32,7 +32,9 @@ return function(env)
     local AutoSaveTeleportToggleObj
     local AutoRejoinToggleObj
     local ModAlertToggleObj
-    local BeastProtectionToggleObj
+    
+    -- Configuração de Whitelist para o Auto Win Beast
+    local WhitelistedPlayer = "None"
 
     -- Gerenciadores de Conexões Globais
     local RejoinConnection = nil
@@ -738,6 +740,7 @@ return function(env)
             if AutoWinSurvivorToggleObj then AutoWinSurvivorToggleObj.Set(false) end
             if AutoWinSurvivorFlyToggleObj then AutoWinSurvivorFlyToggleObj.Set(false) end
             if AutoWinBeastToggleObj then AutoWinBeastToggleObj.Set(false) end
+            if AutoSaveTeleportToggleObj then AutoSaveTeleportToggleObj.Set(false) end
         end
     end)
 
@@ -753,7 +756,6 @@ return function(env)
                 return
             end
             if AutoWinSurvivorFlyToggleObj then AutoWinSurvivorFlyToggleObj.Set(false) end
-            if BeastProtectionToggleObj then BeastProtectionToggleObj.Set(true) end
             
             -- Ativa o loop de segurança em background para monitorar a Besta no modo Teleport
             fly_StartBackgroundLoop()
@@ -779,7 +781,6 @@ return function(env)
                 return
             end
             if AutoWinSurvivorToggleObj then AutoWinSurvivorToggleObj.Set(false) end
-            if BeastProtectionToggleObj then BeastProtectionToggleObj.Set(true) end
         end
 
         fly_AutoFarmEnabled = state
@@ -835,11 +836,6 @@ return function(env)
             return
         end
         getgenv().AutoWinBeast = state
-    end)
-
-    -- Beast Protection
-    BeastProtectionToggleObj = Library:CreateToggle(Page, "Beast Protection", true, function(state)
-        FlyConfig.HideBeastNear = state
     end)
 
     -- Auto Save (Silent)
@@ -928,6 +924,11 @@ return function(env)
     -- =========================================================================
     Library:CreateSection(Page, "Farm Settings")
 
+    -- Beast Whitelist Player Dropdown
+    Library:CreatePlayerDropdown(Page, "Beast Whitelist Player", "None", function(val)
+        WhitelistedPlayer = val
+    end)
+
     -- Anti AFK
     AntiAfkToggleObj = Library:CreateToggle(Page, "Anti AFK", false, function(state)
         if MasterAutoFarmState and not state then
@@ -1014,7 +1015,7 @@ return function(env)
         end
     end)
 
-    -- Fly Speed Slider (Movido para último lugar)
+    -- Fly Speed Slider (Posicionado no final das configurações)
     Library:CreateSlider(Page, "Fly Farm Speed", 16, 30, 22, function(val)
         FlyConfig.FarmTweenSpeed = val
     end)
@@ -1082,7 +1083,8 @@ return function(env)
                     local RaizAlvo = nil
                     
                     for _, alvo in pairs(Players:GetPlayers()) do
-                        if alvo ~= LocalPlayer and alvo.Character then
+                        -- Ignora jogador na Whitelist
+                        if alvo ~= LocalPlayer and alvo.Name ~= WhitelistedPlayer and alvo.Character then
                             local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
                             if Stats and Stats:FindFirstChild("Captured") and not Stats.Captured.Value then
                                 local tempRaiz = ObterRaiz(alvo.Character)
@@ -1119,7 +1121,8 @@ return function(env)
                     if not MeuEventoMarreta or not MinhaRaiz then return end
                     
                     for _, alvo in pairs(Players:GetPlayers()) do
-                        if alvo ~= LocalPlayer and alvo.Character then
+                        -- Ignora jogador na Whitelist
+                        if alvo ~= LocalPlayer and alvo.Name ~= WhitelistedPlayer and alvo.Character then
                             local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
                             if not Stats then continue end
                             
@@ -1161,7 +1164,8 @@ return function(env)
                     local mapa = ObterMapaAtual()
                     
                     for _, alvo in pairs(Players:GetPlayers()) do
-                        if alvo ~= LocalPlayer and alvo.Character then
+                        -- Ignora jogador na Whitelist
+                        if alvo ~= LocalPlayer and alvo.Name ~= WhitelistedPlayer and alvo.Character then
                             local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
                             if not Stats then continue end
                             
@@ -1450,6 +1454,92 @@ return function(env)
                     end)
                 end
                 task.wait(1) 
+            end
+        end)
+    end
+
+    -- [[ AUTO SAVE (SILENT) BACKEND ]] --
+    do
+        local function GetCurrentMap()
+            local map
+            local ov = ReplicatedStorage:FindFirstChild("CurrentMap")
+            if ov and ov:IsA("ObjectValue") and ov.Value then
+                map = ov.Value
+            end
+            if not map then
+                local comp = workspace:FindFirstChild("ComputerTable", true)
+                if comp and comp.Parent then map = comp.Parent end
+            end
+            if not map then
+                local pod = workspace:FindFirstChild("FreezePod", true)
+                if pod and pod.Parent then map = pod.Parent end
+            end
+            return map
+        end
+
+        local function CapturedFreezePod(cmap)
+            if type(cmap) ~= "table" then return nil end
+            for _, obj in pairs(cmap) do
+                if obj.Name == "FreezePod" then
+                    local PodTrigger = obj:FindFirstChild("PodTrigger", true)
+                    if PodTrigger then
+                        local CapturedTorso = PodTrigger:FindFirstChild("CapturedTorso")
+                        local Event = PodTrigger:FindFirstChild("Event")
+                        
+                        if CapturedTorso and Event and CapturedTorso:IsA("ObjectValue") and CapturedTorso.Value then
+                            return Event
+                        end
+                    end
+                end
+            end
+            return nil
+        end
+
+        task.spawn(function()
+            local map = GetCurrentMap()
+            
+            while true do
+                task.wait(0.05)
+                if not getgenv().AutoHelpSilent then continue end
+                
+                local myStats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+                if not myStats then continue end
+                
+                local myHealth = myStats:FindFirstChild("Health")
+                local myRagdoll = myStats:FindFirstChild("Ragdoll")
+                local myCaptured = myStats:FindFirstChild("Captured")
+                
+                if myHealth and myHealth.Value <= 0 then continue end
+                if myRagdoll and myRagdoll.Value then continue end
+                if myCaptured and myCaptured.Value then continue end
+                
+                if not map then
+                    map = GetCurrentMap()
+                    continue
+                end
+                
+                for _, alvo in pairs(Players:GetPlayers()) do
+                    if alvo == LocalPlayer then continue end
+                    
+                    local alvoStats = alvo:FindFirstChild("TempPlayerStatsModule")
+                    local alvoCaptured = alvoStats and alvoStats:FindFirstChild("Captured")
+                    
+                    if alvoCaptured and alvoCaptured:IsA("BoolValue") and alvoCaptured.Value then
+                        local podEvent = CapturedFreezePod(map:GetChildren())
+                        
+                        if not podEvent then continue end
+                        
+                        repeat
+                            task.wait(0.05)
+                            RemoteEvent:FireServer("Input", "Trigger", true, podEvent)
+                            RemoteEvent:FireServer("Input", "Action", true)
+                            
+                        until not (alvoCaptured.Value and getgenv().AutoHelpSilent) 
+                           or (myRagdoll.Value or myCaptured.Value or myHealth.Value <= 0)
+                           
+                        break 
+                    end
+                end
             end
         end)
     end
