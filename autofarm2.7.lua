@@ -49,6 +49,7 @@ return function(env)
     -- Gerenciadores de Conexões Globais para evitar loops/eventos duplicados
     local RejoinConnection = nil
     local ModAddedConnection = nil
+    local IsGameActiveConnection = nil
 
     -- Estados Isolados do Auto Win Survivor (Fly) - Prefixo fly_
     local fly_AutoFarmEnabled = false
@@ -95,6 +96,8 @@ return function(env)
     -- Limpa de forma absoluta toda e qualquer tarefa (Besta e Survivor) apenas UMA VEZ por transição
     local function GlobalReset()
         fly_SessionId = fly_SessionId + 1 -- Aborta imediatamente qualquer execução de tween ou hacking pendente
+        print("[SESSION RESET] Session ID incremented to:", fly_SessionId)
+
         fly_onsurvivorfarm = false
         fly_bnhide = false
         fly_isMoving = false
@@ -117,6 +120,8 @@ return function(env)
         
         -- Desliga o script externo de Besta de forma limpa
         getgenv().AutoWinBeast = false
+        getgenv().FarmRodando = false
+        getgenv().NexVoidLigado = false
         
         -- Força a liberação da física e ancoragem do personagem
         pcall(function()
@@ -236,46 +241,38 @@ return function(env)
         end
     end
 
-    -- Detecção Otimizada da Besta para Sobreviventes
+    -- Detecção Otimizada da Besta para Sobreviventes (Correção: Exclusão rígida do LocalPlayer)
     local function GetBeast()
-        if fly_cachedBeast and fly_cachedBeast.Parent == Players and IsThereChar(fly_cachedBeast) then
-            local stats = fly_cachedBeast:FindFirstChild("TempPlayerStatsModule")
-            if stats then
-                local isBeastVal = stats:FindFirstChild("IsBeast")
-                if isBeastVal and isBeastVal.Value == true then
-                    return fly_cachedBeast
-                end
-            end
-            local char = fly_cachedBeast.Character
-            if char then
-                local hammer = char:FindFirstChild("BeastHammer") or char:FindFirstChild("Hammer")
-                if hammer and hammer:IsA("Tool") then
-                    return fly_cachedBeast
+        if fly_cachedBeast then
+            if fly_cachedBeast == LocalPlayer or fly_cachedBeast.Parent ~= Players or not IsThereChar(fly_cachedBeast) then
+                fly_cachedBeast = nil
+            else
+                local stats = fly_cachedBeast:FindFirstChild("TempPlayerStatsModule")
+                local isBeastVal = stats and stats:FindFirstChild("IsBeast")
+                local hasHammer = fly_cachedBeast.Character and (fly_cachedBeast.Character:FindFirstChild("BeastHammer") or fly_cachedBeast.Character:FindFirstChild("Hammer"))
+                
+                local stillBeast = (isBeastVal and isBeastVal.Value == true) or (hasHammer and hasHammer:IsA("Tool"))
+                if not stillBeast then
+                    fly_cachedBeast = nil
                 end
             end
         end
 
-        for _, v in ipairs(Players:GetPlayers()) do
-            local stats = v:FindFirstChild("TempPlayerStatsModule")
-            if stats then
-                local isBeastVal = stats:FindFirstChild("IsBeast")
-                if isBeastVal and isBeastVal.Value == true then
-                    fly_cachedBeast = v
-                    return v
-                end
-            end
-            
-            local char = v.Character
-            if char then
-                local hammer = char:FindFirstChild("BeastHammer") or char:FindFirstChild("Hammer")
-                if hammer and hammer:IsA("Tool") then
-                    fly_cachedBeast = v
-                    return v
+        if not fly_cachedBeast then
+            for _, v in ipairs(Players:GetPlayers()) do
+                if v ~= LocalPlayer then
+                    local stats = v:FindFirstChild("TempPlayerStatsModule")
+                    local isBeastVal = stats and stats:FindFirstChild("IsBeast")
+                    local hasHammer = v.Character and (v.Character:FindFirstChild("BeastHammer") or v.Character:FindFirstChild("Hammer"))
+                    
+                    if (isBeastVal and isBeastVal.Value == true) or (hasHammer and hasHammer:IsA("Tool")) then
+                        fly_cachedBeast = v
+                        break
+                    end
                 end
             end
         end
-        fly_cachedBeast = nil
-        return nil
+        return fly_cachedBeast
     end
 
     -- LÓGICA DE AUTO WIN SOBREVIVENTE (FLY)
@@ -284,6 +281,8 @@ return function(env)
         fly_onsurvivorfarm = true
 
         local currentSession = fly_SessionId
+        print("[FLY START] Session:", currentSession, "Traceback:\n", debug.traceback())
+
         local DoNotTeleport = false
         local forceEscape = false
 
@@ -373,6 +372,8 @@ return function(env)
             if IsThereChar() and fly_SessionId == session then
                 Root.Anchored = false
                 Root.CFrame = CFrame_new(Part.Position) * Root.CFrame.Rotation
+                Root.AssemblyLinearVelocity = Vector3_new(0, 0, 0)
+                Root.AssemblyAngularVelocity = Vector3_new(0, 0, 0)
             end
             fly_isMoving = false
         end
@@ -668,7 +669,7 @@ return function(env)
     -- ==========================================
     -- SEÇÃO: MAIN FARMING (BETA)
     -- ==========================================
-    Library:CreateSection(Page, "Main Farming (BETA)")
+    Library:CreateSection(Page, "Main Farming (BETA111)")
 
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
         MasterAutoFarmState = state
@@ -1095,8 +1096,19 @@ return function(env)
 
     -- GERENCIADOR DE TRANSIÇÃO E ESTADOS DE PARTIDA (Survivor Fly)
     ReplicatedStorage.CurrentMap.Changed:Connect(function(newMap)
+        print("[MAP CHANGED]", newMap)
         GlobalReset() -- Limpa e sincroniza todo o estado da rodada de forma instantânea
     end)
+
+    if IsGameActive then
+        IsGameActiveConnection = IsGameActive.Changed:Connect(function(active)
+            print("[ROUND STATE CHANGED] Active:", active)
+            if not active then
+                print("[ROUND ENDED]")
+            end
+            GlobalReset()
+        end)
+    end
 
     -- Loop de Monitoramento em Segundo Plano Único
     task_spawn(function()
@@ -1110,6 +1122,7 @@ return function(env)
             -- Detecta a mudança dinâmica de papel (Beast <-> Survivor) entre rodadas e limpa o ambiente
             local currentIsBeast = AmIBeast()
             if currentIsBeast ~= lastRoleIsBeast then
+                print("[ROLE CHANGED] Old Beast state:", lastRoleIsBeast, "New Beast state:", currentIsBeast)
                 lastRoleIsBeast = currentIsBeast
                 GlobalReset()
             end
@@ -1238,7 +1251,7 @@ return function(env)
                     TPPlayerSpawn()
                 end
 
-                -- Monitora e sincroniza a quantidade de computadores ativos
+                -- Monitora contagem de computadores
                 local CurrentMap = ReplicatedStorage.CurrentMap.Value
                 if CurrentMap then
                     local GotComputers = 0
@@ -1360,7 +1373,7 @@ return function(env)
                             if hrp then
                                 local distancia = (hrp.Position - teclado.Position).Magnitude
                                 if distancia < menorDistancia then
-                                    menorDistancia = distancia
+                                    menorDistancia = distance
                                     pcMaisPerto = {mesa = obj, tela = tela, evento = eventoPC}
                                 end
                             else
