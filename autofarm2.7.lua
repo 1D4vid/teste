@@ -41,7 +41,7 @@ return function(env)
     -- CONFIGURAÇÕES E ESTADOS INTERNOS DO AUTO FARM FLY (ENGINE)
     -- =========================================================================
     local FlyConfig = {
-        FarmTweenSpeed = 22,        -- Ajustável via Slider nas configurações
+        FarmTweenSpeed = 22,        
         WaitTweenFast = 8,          
         TriggerPrioritization = 1,  
         CampHackOut = 15,           
@@ -73,7 +73,7 @@ return function(env)
     local fly_BackgroundLoopActive = false
 
     -- =========================================================================
-    -- FUNÇÕES DE SUPORTE DO AUTO FARM FLY E TELEPORT UNIFICADOS
+    -- FUNÇÕES DE SUPORTE DO AUTO FARM FLY
     -- =========================================================================
     local function fly_RemoveSafePlatform()
         if fly_safePlatform then
@@ -538,22 +538,22 @@ return function(env)
     end
 
     -- =========================================================================
-    -- LOOP DE MONITORAMENTO EM SEGUNDO PLANO UNIFICADO (SEGURANÇA FLY & TELEPORT)
+    -- LOOP DE MONITORAMENTO EM SEGUNDO PLANO (AUTO FARM FLY)
     -- =========================================================================
-    local function StartSafetyBackgroundLoop()
+    local function fly_StartBackgroundLoop()
         if fly_BackgroundLoopActive then return end
         fly_BackgroundLoopActive = true
         
         task_spawn(function()
-            while fly_AutoFarmEnabled or getgenv().NexVoidLigado do
+            while fly_AutoFarmEnabled do
                 local dt = task_wait(0.1)
                 
                 if not fly_IsThereChar() then
                     fly_RemoveSafePlatform()
                 end
 
-                -- Se for a Besta, apenas pausa o Survivor Farm sem desativar as toggles
-                if fly_AmIBeast() then
+                -- Se for a Besta, apenas pausa o Survivor Farm sem desativar a toggle
+                if fly_AutoFarmEnabled and fly_AmIBeast() then
                     for i, v in pairs(fly_farmtasks) do
                         pcall(function()
                             coroutine.close(v)
@@ -574,7 +574,7 @@ return function(env)
                     continue 
                 end
 
-                if not (fly_AutoFarmEnabled or getgenv().NexVoidLigado) or not fly_IsMatchActive() then
+                if not fly_AutoFarmEnabled or not fly_IsMatchActive() then
                     if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Anchored then
                         LocalPlayer.Character.HumanoidRootPart.Anchored = false
                     end
@@ -583,7 +583,7 @@ return function(env)
                     fly_bnhide = false
                     fly_Comp = 0 
                     
-                    if fly_AutoFarmEnabled or getgenv().NexVoidLigado then
+                    if fly_AutoFarmEnabled then
                         if not fly_notifiedLobby then
                             SendNotification("Lobby State | Waiting for the game match to start...", 5)
                             fly_notifiedLobby = true
@@ -599,7 +599,7 @@ return function(env)
                 fly_TempPlayerStatsModule = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
                 fly_Beast = fly_GetBeast()
 
-                -- Proteção com Plataforma Estática para Fly e Teleport
+                -- Proteção com Plataforma Estática
                 if FlyConfig.HideBeastNear and fly_IsThereChar() and fly_TempPlayerStatsModule and not fly_TempPlayerStatsModule.IsBeast.Value then
                     if (fly_Beast == nil or not fly_IsThereChar(fly_Beast)) then
                         if fly_bnhide then
@@ -688,7 +688,7 @@ return function(env)
                     fly_TPPlayerSpawn()
                 end
 
-                -- Retomada Survivor Fly automática quando as condições permitirem
+                -- Retomada Survivor automática quando as condições permitirem
                 if fly_AutoFarmEnabled and not fly_onsurvivorfarm and not fly_AmIBeast() and fly_IsMatchActive() then
                     task_spawn(fly_DoSurvivorFarm)
                 end
@@ -755,9 +755,6 @@ return function(env)
         getgenv().NexVoidLigado = state
         if not state then
             getgenv().FarmRodando = false
-            fly_RemoveSafePlatform()
-        else
-            StartSafetyBackgroundLoop()
         end
     end)
 
@@ -778,7 +775,7 @@ return function(env)
         fly_AutoFarmEnabled = state
 
         if state then
-            StartSafetyBackgroundLoop()
+            fly_StartBackgroundLoop()
             
             if not fly_MapConnection then
                 fly_MapConnection = ReplicatedStorage.CurrentMap.Changed:Connect(function(newMap)
@@ -838,27 +835,20 @@ return function(env)
         end
     end)
 
-    -- Auto Save (Teleport) [CORRIGIDO INTEGRALMENTE CONFORME SCRIPT ORIGINAL]
+    -- Auto Save (Teleport)
     AutoSaveTeleportToggleObj = Library:CreateToggle(Page, "Auto Save (Teleport)", false, function(state)
         getgenv().AutoHelpTeleport = state
         if state then
-            -- Função interna para achar o tronco do personagem
-            local function getRoot(character)
-                if not character then return nil end
-                return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-            end
-
-            -- Notificação conforme o script original
-            StarterGui:SetCore("SendNotification", {
-                Title = "Auto Help Ativado",
-                Text = "Você salvará jogadores no tubo automaticamente.",
-                Duration = 5
-            })
-
-            -- Loop principal do Auto Help Teleport
+            SendNotification("Auto Help (Teleport) | Ativado", 3)
+            
             task.spawn(function()
                 local helping = false
                 local oldCFrame = nil
+
+                local function getRoot(character)
+                    if not character then return nil end
+                    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+                end
 
                 while getgenv().AutoHelpTeleport do
                     task.wait(0.05)
@@ -873,7 +863,6 @@ return function(env)
                     local myRagdoll = myStats:FindFirstChild("Ragdoll")
                     local myCaptured = myStats:FindFirstChild("Captured")
 
-                    -- Se você estiver morto, nocauteado ou capturado, o script não tenta salvar
                     if myHealth and myHealth.Value <= 0 then continue end
                     if myRagdoll and myRagdoll.Value then continue end
                     if myCaptured and myCaptured.Value then continue end
@@ -884,39 +873,32 @@ return function(env)
                         local alvoStats = alvo:FindFirstChild("TempPlayerStatsModule")
                         local alvoCaptured = alvoStats and alvoStats:FindFirstChild("Captured")
 
-                        -- Verifica se o jogador está preso no tubo
                         if alvoCaptured and alvoCaptured:IsA("BoolValue") and alvoCaptured.Value then
                             local alvoChar = alvo.Character
                             local alvoRoot = getRoot(alvoChar)
 
                             if alvoRoot then
                                 helping = true
-                                
-                                -- Salva sua posição atual para não ser descoberto
                                 oldCFrame = meRoot.CFrame
 
-                                -- Fica teletransportando você para baixo do tubo e enviando o comando de salvar (Action)
                                 repeat
                                     task.wait(0.05)
                                     local atualRoot = getRoot(LocalPlayer.Character)
                                     if atualRoot then
-                                        -- Fica -4.5 studs abaixo do tubo para ficar escondido no chão
                                         atualRoot.CFrame = alvoRoot.CFrame * CFrame.new(0, -4.5, 0) * CFrame.Angles(math.rad(90), 0, 0)
                                     end
-                                    -- Simula você apertando a tecla para salvar
                                     RemoteEvent:FireServer("Input", "Action", true)
                                     
                                 until not (alvoCaptured.Value and getgenv().AutoHelpTeleport) 
                                    or (myRagdoll.Value or myCaptured.Value or myHealth.Value <= 0)
 
-                                -- Quando salvar o jogador, você é teletransportado de volta para onde estava
                                 if oldCFrame and LocalPlayer.Character then
                                     LocalPlayer.Character:PivotTo(oldCFrame)
                                 end
 
                                 oldCFrame = nil
                                 helping = false
-                                break -- Quebra o loop para esperar o próximo alvo
+                                break
                             end
                         end
                     end
@@ -942,11 +924,6 @@ return function(env)
             return
         end
         _G.AntiAfkEnabled = state
-    end)
-
-    -- NOVO: Slider de Controle de Velocidade do Fly Survivor (Ajustável de 16 a 30)
-    Library:CreateSlider(Page, "Survivor Fly Speed", 16, 30, 22, function(val)
-        FlyConfig.FarmTweenSpeed = val
     end)
 
     -- Auto Rejoin (Disconnection)
@@ -1043,16 +1020,17 @@ return function(env)
         end)
     end)
 
-    -- [[ AUTO-EQUIP DA MARRETA EM SEGUNDO PLANO ]] --
+    -- [[ NOVO: AUTO-EQUIP DA MARRETA EM SEGUNDO PLANO ]] --
     task.spawn(function()
         while true do
-            task.wait(0.5) 
+            task.wait(0.5) -- Loop leve executado a cada 0.5 segundos
             if getgenv().AutoWinBeast and IsGameActive.Value then
                 pcall(function()
                     local char = LocalPlayer.Character
                     local backpack = LocalPlayer:FindFirstChild("Backpack")
                     if char and backpack then
                         for _, tool in ipairs(backpack:GetChildren()) do
+                            -- Localiza qualquer marreta ou ferramenta com o evento de ataque
                             if tool:IsA("Tool") and (tool.Name:match("Hammer") or tool.Name:match("Mallet") or tool:FindFirstChild("HammerEvent")) then
                                 local hum = char:FindFirstChildOfClass("Humanoid")
                                 if hum then
@@ -1202,9 +1180,6 @@ return function(env)
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if not hrp then return false end
 
-            -- Se a Besta estiver perto e estiver escondido na Safe Plate, bloqueia o TP
-            if fly_bnhide then return false end
-
             local distancia = (hrp.Position - destinoCFrame.Position).Magnitude
             local tempoDeEspera = distancia / VELOCIDADE_ANTI_CHUTE
 
@@ -1213,9 +1188,6 @@ return function(env)
                 hrp.Velocity = Vector3.new(0,0,0)
                 task.wait(tempoDeEspera)
             end
-
-            -- Re-verifica o estado de segurança antes do teletransporte físico
-            if fly_bnhide then return false end
 
             hrp.CFrame = destinoCFrame
             hrp.Velocity = Vector3.new(0, 0, 0)
@@ -1235,8 +1207,7 @@ return function(env)
         local function PossoAgir()
             if getgenv().EscapouDaPartida then return false end 
             if getgenv().SouBeastNessaRodada then return false end
-            if fly_bnhide then return false end -- Pausa ações se estiver escondido na Safe Plate
-
+            
             local char = LocalPlayer.Character
             if not char then return false end
             
@@ -1326,7 +1297,7 @@ return function(env)
                     task.wait(0.2) 
                     
                     if getgenv().EscapouDaPartida then break end
-                    if not PossoAgir() or fly_bnhide then continue end
+                    if not PossoAgir() then continue end
 
                     local mesaPC, tela, eventoPC = ObterPCParaHackear()
                     
@@ -1344,7 +1315,7 @@ return function(env)
                             
                             if sucesso then
                                 while getgenv().FarmRodando and not getgenv().EscapouDaPartida do
-                                    if not PossoAgir() or fly_bnhide then break end
+                                    if not PossoAgir() then break end
                                     local corAtual = string.lower(tostring(tela.BrickColor))
                                     if string.find(corAtual, "green") then break end
                                     
@@ -1377,7 +1348,7 @@ return function(env)
                                     if sucesso then
                                         
                                         while getgenv().FarmRodando and not getgenv().EscapouDaPartida do
-                                            if not PossoAgir() or fly_bnhide then break end
+                                            if not PossoAgir() then break end
                                             
                                             local corLuz = string.lower(tostring(painel.BrickColor))
                                             if string.find(corLuz, "green") then break end
