@@ -7,6 +7,10 @@ return function(env)
     local ReplicatedStorage = env.ReplicatedStorage
     local SendNotification = env.SendNotification
 
+    -- Serviços adicionais necessários
+    local GuiService = game:GetService("GuiService")
+    local TeleportService = game:GetService("TeleportService")
+
     local MasterAutoFarmState = false
     local AntiAfkToggleObj
     local AutoWinSurvivorToggleObj
@@ -16,16 +20,14 @@ return function(env)
     local AutoRejoinToggleObj
     local ModAlertToggleObj
 
-    -- Variáveis e conexões globais para controle de eventos
-    local reconnectConn = nil
-    local modConn = nil
-    local GuiService = game:GetService("GuiService")
-    local TeleportService = game:GetService("TeleportService")
+    -- Gerenciadores de Conexões Globais para evitar loops/eventos duplicados
+    local RejoinConnection = nil
+    local ModAddedConnection = nil
 
     -- ==========================================
     -- SEÇÃO: MAIN FARMING (BETA)
     -- ==========================================
-    Library:CreateSection(Page, "Main Farming (BETA1212)")
+    Library:CreateSection(Page, "Main Farming (BETA)")
 
     Library:CreateToggle(Page, "Enable Auto Farm", false, function(state)
         MasterAutoFarmState = state
@@ -54,7 +56,7 @@ return function(env)
         end
     end)
 
-    -- Auto Win Survivor (Fly)
+    -- Toggle: Auto Win Survivor (Fly) [Vazia por enquanto]
     AutoWinSurvivorFlyToggleObj = Library:CreateToggle(Page, "Auto win survivor (fly)", false, function(state)
         if state and not MasterAutoFarmState then
             task.spawn(function()
@@ -64,12 +66,9 @@ return function(env)
             end)
             return
         end
-        getgenv().AutoWinSurvivorFly = state
-        if not state then
-            if GlobalFlyReset then GlobalFlyReset() end
-        end
     end)
 
+    -- Auto Win Beast
     AutoWinBeastToggleObj = Library:CreateToggle(Page, "Auto Win Beast", false, function(state)
         if state and not MasterAutoFarmState then
             task.spawn(function()
@@ -90,11 +89,75 @@ return function(env)
         end
     end)
 
-    -- Auto Save (Teleport)
+    -- Auto Save (Teleport) [Integrado]
     AutoSaveTeleportToggleObj = Library:CreateToggle(Page, "Auto Save (Teleport)", false, function(state)
         getgenv().AutoHelpTeleport = state
         if state then
-            SendNotification("Auto Save (Teleport) | You will teleport to save players.", 5)
+            SendNotification("Auto Help (Teleport) | Ativado", 3)
+            
+            task.spawn(function()
+                local helping = false
+                local oldCFrame = nil
+
+                local function getRoot(character)
+                    if not character then return nil end
+                    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+                end
+
+                while getgenv().AutoHelpTeleport do
+                    task.wait(0.05)
+
+                    local meChar = LocalPlayer.Character
+                    local meRoot = getRoot(meChar)
+                    local myStats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+                    
+                    if not meChar or not meRoot or not myStats then continue end
+
+                    local myHealth = myStats:FindFirstChild("Health")
+                    local myRagdoll = myStats:FindFirstChild("Ragdoll")
+                    local myCaptured = myStats:FindFirstChild("Captured")
+
+                    if myHealth and myHealth.Value <= 0 then continue end
+                    if myRagdoll and myRagdoll.Value then continue end
+                    if myCaptured and myCaptured.Value then continue end
+
+                    for _, alvo in pairs(Players:GetPlayers()) do
+                        if alvo == LocalPlayer or helping then continue end
+
+                        local alvoStats = alvo:FindFirstChild("TempPlayerStatsModule")
+                        local alvoCaptured = alvoStats and alvoStats:FindFirstChild("Captured")
+
+                        if alvoCaptured and alvoCaptured:IsA("BoolValue") and alvoCaptured.Value then
+                            local alvoChar = alvo.Character
+                            local alvoRoot = getRoot(alvoChar)
+
+                            if alvoRoot then
+                                helping = true
+                                oldCFrame = meRoot.CFrame
+
+                                repeat
+                                    task.wait(0.05)
+                                    local atualRoot = getRoot(LocalPlayer.Character)
+                                    if atualRoot then
+                                        atualRoot.CFrame = alvoRoot.CFrame * CFrame.new(0, -4.5, 0) * CFrame.Angles(math.rad(90), 0, 0)
+                                    end
+                                    RemoteEvent:FireServer("Input", "Action", true)
+                                    
+                                until not (alvoCaptured.Value and getgenv().AutoHelpTeleport) 
+                                   or (myRagdoll.Value or myCaptured.Value or myHealth.Value <= 0)
+
+                                if oldCFrame and LocalPlayer.Character then
+                                    LocalPlayer.Character:PivotTo(oldCFrame)
+                                end
+
+                                oldCFrame = nil
+                                helping = false
+                                break
+                            end
+                        end
+                    end
+                end
+            end)
         end
     end)
 
@@ -104,6 +167,7 @@ return function(env)
     -- ==========================================
     Library:CreateSection(Page, "Farm Settings")
 
+    -- Anti AFK
     AntiAfkToggleObj = Library:CreateToggle(Page, "Anti AFK", false, function(state)
         if MasterAutoFarmState and not state then
             task.spawn(function()
@@ -116,15 +180,16 @@ return function(env)
         _G.AntiAfkEnabled = state
     end)
 
-    -- Auto Rejoin (Disconnection)
+    -- Auto Rejoin (Disconnection) [Integrado]
     AutoRejoinToggleObj = Library:CreateToggle(Page, "Auto Rejoin (Disconnection)", false, function(state)
         getgenv().AutoRejoinEnabled = state
         if state then
-            if not reconnectConn then
-                reconnectConn = GuiService.ErrorMessageChanged:Connect(function(errorMessage)
+            SendNotification("Auto Rejoin Ativado", 3)
+            if not RejoinConnection then
+                RejoinConnection = GuiService.ErrorMessageChanged:Connect(function(errorMessage)
                     if getgenv().AutoRejoinEnabled and errorMessage and errorMessage ~= "" then
                         print("[AutoRejoin] Erro detectado: " .. errorMessage .. ". Tentando reconectar...")
-                        task.wait(3)
+                        task.wait(3) -- Delay antes da reconexão
                         pcall(function()
                             TeleportService:Teleport(game.PlaceId, LocalPlayer)
                         end)
@@ -132,50 +197,60 @@ return function(env)
                 end)
             end
         else
-            if reconnectConn then
-                reconnectConn:Disconnect()
-                reconnectConn = nil
+            if RejoinConnection then
+                RejoinConnection:Disconnect()
+                RejoinConnection = nil
             end
         end
     end)
 
-    -- Moderator Alert/Kick
-    local GAME_GROUP_ID = 3195655
-    local MINIMUM_MOD_RANK = 200
-
-    local function checkPlayer(player)
-        if player == LocalPlayer then return end
-        local isMod = false
-        if GAME_GROUP_ID > 0 then
-            pcall(function()
-                local rank = player:GetRankInGroup(GAME_GROUP_ID)
-                if rank >= MINIMUM_MOD_RANK then
-                    isMod = true
-                end
-            end)
-        end
-        if isMod then
-            LocalPlayer:Kick("[Segurança] Um moderador (" .. player.Name .. ") entrou no servidor. Você foi desconectado para evitar punições.")
-        end
-    end
-
+    -- Moderator Alert/Kick [Integrado]
     ModAlertToggleObj = Library:CreateToggle(Page, "Moderator Alert/Kick", false, function(state)
-        getgenv().ModAlertEnabled = state
-        if state then
-            for _, player in ipairs(Players:GetPlayers()) do
-                task.spawn(checkPlayer, player)
-            end
-            if not modConn then
-                modConn = Players.PlayerAdded:Connect(function(player)
-                    if getgenv().ModAlertEnabled then
-                        checkPlayer(player)
+        getgenv().ModAlertKickEnabled = state
+        
+        local GAME_GROUP_ID = 3195655 
+        local MINIMUM_MOD_RANK = 200  
+        local MOD_ACTION = "KICK"     -- Altere para "ALERT" se desejar apenas avisar no console
+
+        local function checkPlayer(player)
+            if player == LocalPlayer then return end
+            local isMod = false
+
+            if GAME_GROUP_ID > 0 then
+                pcall(function()
+                    local rank = player:GetRankInGroup(GAME_GROUP_ID)
+                    if rank >= MINIMUM_MOD_RANK then
+                        isMod = true
                     end
                 end)
             end
+
+            if isMod and getgenv().ModAlertKickEnabled then
+                if MOD_ACTION == "KICK" then
+                    LocalPlayer:Kick("[Segurança] Um moderador (" .. player.Name .. ") entrou no servidor. Você foi desconectado para evitar punições.")
+                elseif MOD_ACTION == "ALERT" then
+                    warn("[AVISO DE SEGURANÇA] Moderador detectado no servidor: " .. player.Name)
+                    SendNotification("[PERIGO] Moderador detectado: " .. player.Name, 10)
+                end
+            end
+        end
+
+        if state then
+            SendNotification("Moderator Alert/Kick Ativado", 3)
+            -- Verifica quem já está na partida
+            for _, player in ipairs(Players:GetPlayers()) do
+                task.spawn(checkPlayer, player)
+            end
+            -- Conecta para novos jogadores
+            if not ModAddedConnection then
+                ModAddedConnection = Players.PlayerAdded:Connect(function(player)
+                    checkPlayer(player)
+                end)
+            end
         else
-            if modConn then
-                modConn:Disconnect()
-                modConn = nil
+            if ModAddedConnection then
+                ModAddedConnection:Disconnect()
+                ModAddedConnection = nil
             end
         end
     end)
@@ -349,7 +424,7 @@ return function(env)
         end)
     end
 
-    -- [[ AUTO WIN SURVIVOR (TELEPORT) ]] --
+    -- [[ AUTO WIN SURVIVOR ]] --
     do
         local VELOCIDADE_ANTI_CHUTE = 25 
         getgenv().FarmRodando = false
@@ -619,754 +694,89 @@ return function(env)
         end)
     end
 
-    -- [[ AUTO WIN SURVIVOR (FLY) ]] --
+    -- [[ AUTO SAVE (SILENT) ]] --
     do
-        local FlyConfig = {
-            FarmTweenSpeed = 22,        
-            WaitTweenFast = 8,          
-            TriggerPrioritization = 1,  
-            CampHackOut = 15,           
-            CampEscapeOut = 20,         
-            CampTweenAnimOut = 30,      
-            HideBeastNearDist = 35,     
-            TriggerUnCampOut = 5,       
-            ExitCancel = false,         
-            AntiPCError = true,         
-            HideBeastNear = true        
-        }
-
-        local fly_onsurvivorfarm = false
-        local fly_bnhide = false
-        local fly_isMoving = false          
-        local fly_bnhideelapse = 0
-        local fly_noelepse = 0
-        local fly_lpos = nil
-        local fly_clpos = false
-        local fly_Beast = nil
-        local fly_cachedBeast = nil         
-        local fly_safePlatform = nil        
-        local fly_farmtasks = {}
-        local fly_Comp = 0
-        local fly_CurrentComputer = nil
-        local fly_ChosenComputer = nil
-        local fly_OnComputer = false
-
-        local function IsThereChar(APlr)
-            local plr = APlr or LocalPlayer
-            local char = plr.Character
-            return char and char:FindFirstChild("Humanoid") and char:FindFirstChild("HumanoidRootPart")
-        end
-
-        local function RemoveSafePlatform()
-            if fly_safePlatform then
-                pcall(function()
-                    fly_safePlatform:Destroy()
-                end)
-                fly_safePlatform = nil
+        local function GetCurrentMap()
+            local map
+            local ov = ReplicatedStorage:FindFirstChild("CurrentMap")
+            if ov and ov:IsA("ObjectValue") and ov.Value then
+                map = ov.Value
             end
-        end
-
-        local function IsInLobby()
-            local lobby = workspace:FindFirstChild("LobbySpawnPad")
-            if not lobby then return false end
-            if not IsThereChar() then return true end
-            local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if not hrp then return true end
-            return (hrp.Position - lobby.Position).Magnitude < 150
-        end
-
-        local function AmIBeast()
-            local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
-            if stats then
-                local isBeastVal = stats:FindFirstChild("IsBeast")
-                if isBeastVal and isBeastVal.Value == true then
-                    return true
-                end
+            if not map then
+                local comp = workspace:FindFirstChild("ComputerTable", true)
+                if comp and comp.Parent then map = comp.Parent end
             end
-            local char = LocalPlayer.Character
-            if char then
-                local hammer = char:FindFirstChild("BeastHammer") or char:FindFirstChild("Hammer")
-                if hammer and hammer:IsA("Tool") then
-                    return true
-                end
+            if not map then
+                local pod = workspace:FindFirstChild("FreezePod", true)
+                if pod and pod.Parent then map = pod.Parent end
             end
-            return false
+            return map
         end
 
-        local function IsTriggerOccupied(trigger)
-            local triggerPos = trigger.Position
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p ~= LocalPlayer and IsThereChar(p) then
-                    if (p.Character.HumanoidRootPart.Position - triggerPos).Magnitude < 3.5 then
-                        return true
+        local function CapturedFreezePod(cmap)
+            if type(cmap) ~= "table" then return nil end
+            for _, obj in pairs(cmap) do
+                if obj.Name == "FreezePod" then
+                    local PodTrigger = obj:FindFirstChild("PodTrigger", true)
+                    if PodTrigger then
+                        local CapturedTorso = PodTrigger:FindFirstChild("CapturedTorso")
+                        local Event = PodTrigger:FindFirstChild("Event")
+                        
+                        if CapturedTorso and Event and CapturedTorso:IsA("ObjectValue") and CapturedTorso.Value then
+                            return Event
+                        end
                     end
                 end
             end
-            return false
-        end
-
-        local function IsMatchActive()
-            local currentMap = ReplicatedStorage:FindFirstChild("CurrentMap")
-            if not currentMap or not currentMap.Value then
-                return false
-            end
-            local status = ReplicatedStorage:FindFirstChild("GameStatus")
-            if status then
-                local statusText = string.lower(status.Value)
-                if string.find(statusText, "intermission") or string.find(statusText, "game over") or string.find(statusText, "lobby") then
-                    return false
-                end
-            end
-            return true
-        end
-
-        local function IsComputerCompleted(computer)
-            if not computer then return true end
-            local t1 = computer:FindFirstChild("ComputerTrigger1")
-            local t2 = computer:FindFirstChild("ComputerTrigger2")
-            local t3 = computer:FindFirstChild("ComputerTrigger3")
-            if not t1 and not t2 and not t3 then return true end
-            
-            local screen = computer:FindFirstChild("Screen")
-            if screen then
-                local color = screen.BrickColor
-                if color == BrickColor.new("Dark green") or color == BrickColor.new("Lime green") or color == BrickColor.new("Bright green") then
-                    return true
-                end
-                local billboard = screen:FindFirstChildOfClass("BillboardGui") or computer:FindFirstChildOfClass("BillboardGui")
-                if billboard then
-                    local textLabel = billboard:FindFirstChildOfClass("TextLabel")
-                    if textLabel and string.find(string.upper(textLabel.Text), "COMPLETED") then
-                        return true
-                    end
-                end
-            end
-            return false
-        end
-
-        local function GetBeast()
-            if fly_cachedBeast and fly_cachedBeast.Parent == Players and IsThereChar(fly_cachedBeast) then
-                local stats = fly_cachedBeast:FindFirstChild("TempPlayerStatsModule")
-                if stats then
-                    local isBeastVal = stats:FindFirstChild("IsBeast")
-                    if isBeastVal and isBeastVal.Value == true then return fly_cachedBeast end
-                end
-                local char = fly_cachedBeast.Character
-                if char then
-                    local hammer = char:FindFirstChild("BeastHammer") or char:FindFirstChild("Hammer")
-                    if hammer and hammer:IsA("Tool") then return fly_cachedBeast end
-                end
-            end
-
-            for _, v in ipairs(Players:GetPlayers()) do
-                local stats = v:FindFirstChild("TempPlayerStatsModule")
-                if stats then
-                    local isBeastVal = stats:FindFirstChild("IsBeast")
-                    if isBeastVal and isBeastVal.Value == true then
-                        fly_cachedBeast = v
-                        return v
-                    end
-                end
-                local char = v.Character
-                if char then
-                    local hammer = char:FindFirstChild("BeastHammer") or char:FindFirstChild("Hammer")
-                    if hammer and hammer:IsA("Tool") then
-                        fly_cachedBeast = v
-                        return v
-                    end
-                end
-            end
-            fly_cachedBeast = nil
             return nil
         end
 
-        function GlobalFlyReset()
-            fly_onsurvivorfarm = false
-            fly_bnhide = false
-            fly_isMoving = false
-            fly_bnhideelapse = 0
-            fly_noelepse = 0
-            fly_lpos = nil
-            fly_clpos = false
-            fly_Beast = nil
-            fly_cachedBeast = nil
-            fly_CurrentComputer = nil
-            fly_ChosenComputer = nil
-            fly_OnComputer = false
-            fly_Comp = 0
-            RemoveSafePlatform()
-            
-            for i, v in pairs(fly_farmtasks) do
-                pcall(function() coroutine.close(v) end)
-                fly_farmtasks[i] = nil
-            end
-            
-            pcall(function()
-                if IsThereChar() then
-                    local hrp = LocalPlayer.Character.HumanoidRootPart
-                    hrp.Anchored = false
-                    hrp.Velocity = Vector3.new(0, 0, 0)
-                end
-            end)
-        end
-
-        local function DoSurvivorFlyFarm()
-            local DoNotTeleport = false
-            local forceEscape = false
-            local TempStats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
-
-            local function PlayerReady()
-                if TempStats then
-                    local ragdoll = TempStats:FindFirstChild("Ragdoll")
-                    if ragdoll and ragdoll.Value then
-                        DoNotTeleport = true
-                        return false
-                    end
-                    local health = TempStats:FindFirstChild("Health")
-                    if (health and health.Value <= 0) or TempStats.IsBeast.Value then
-                        return false
-                    end
-                end
-                return IsThereChar()
-            end
-
-            local function TaskGood()
-                return getgenv().AutoWinSurvivorFly and not AmIBeast() and IsMatchActive() and PlayerReady()
-            end
-
-            local function GetMapObjects()
-                local Result = {Computers = {}, ExitDoors = {}}
-                local currentMapVal = ReplicatedStorage.CurrentMap.Value
-                if currentMapVal then
-                    local children = currentMapVal:GetChildren()
-                    for i = 1, #children do
-                        local v = children[i]
-                        if v.Name == "ComputerTable" then
-                            table.insert(Result.Computers, v)
-                        elseif v.Name == "ExitDoor" then
-                            table.insert(Result.ExitDoors, v)
-                        end
-                    end
-                end
-                return Result
-            end
-
-            local MapObjects = GetMapObjects()
-            local loadAttempts = 0
-            while #MapObjects.Computers == 0 and loadAttempts < 10 do
-                task.wait(0.5)
-                MapObjects = GetMapObjects()
-                loadAttempts = loadAttempts + 1
-            end
-
-            local function GoTween(Part)
-                if not IsThereChar() then return end
-                fly_isMoving = true 
-                local Root = LocalPlayer.Character.HumanoidRootPart
-                Root.Anchored = true
-                
-                while IsThereChar() and TaskGood() do
-                    local currentPos = Root.Position
-                    local targetPos = Part.Position
-                    local distanceVector = targetPos - currentPos
-                    local distance = distanceVector.Magnitude
-                    
-                    if distance < 1.5 then break end
-                    
-                    local dt = RunService.Heartbeat:Wait()
-                    local speed = FlyConfig.FarmTweenSpeed
-                    local step = speed * dt
-                    
-                    if step > distance then step = distance end
-                    local direction = distanceVector.Unit
-                    local nextPosition = currentPos + (direction * step)
-                    Root.CFrame = CFrame.new(nextPosition) * Root.CFrame.Rotation
-                end
-
-                if IsThereChar() then
-                    Root.Anchored = false
-                    Root.CFrame = CFrame.new(Part.Position) * Root.CFrame.Rotation
-                end
-                fly_isMoving = false
-            end
-
-            local ComputerBanList = {}
-
-            local function GetComputer(Computer)
-                if TaskGood() and not IsComputerCompleted(Computer) and not fly_OnComputer then
-                    fly_OnComputer = true
-                    local Triggers = {}
-                    local Prioritize = FlyConfig.TriggerPrioritization
-
-                    if Prioritize == 1 then
-                        Triggers = { Computer:FindFirstChild("ComputerTrigger1"), Computer:FindFirstChild("ComputerTrigger2"), Computer:FindFirstChild("ComputerTrigger3") }
-                    elseif Prioritize == 2 then
-                        Triggers = { Computer:FindFirstChild("ComputerTrigger2"), Computer:FindFirstChild("ComputerTrigger3"), Computer:FindFirstChild("ComputerTrigger1") }
-                    else
-                        Triggers = { Computer:FindFirstChild("ComputerTrigger3"), Computer:FindFirstChild("ComputerTrigger1"), Computer:FindFirstChild("ComputerTrigger2") }
-                    end
-
-                    for i = 1, #Triggers do
-                        if forceEscape then break end
-                        local v = Triggers[i]
-                        if v and TaskGood() and v.ActionSign.Value == 20 and not IsTriggerOccupied(v) and not IsComputerCompleted(Computer) and fly_ChosenComputer == Computer then
-                            local Distance = (LocalPlayer.Character.HumanoidRootPart.Position - v.Position).Magnitude
-
-                            if Distance / FlyConfig.FarmTweenSpeed < FlyConfig.WaitTweenFast then
-                                local Time = Distance / FlyConfig.FarmTweenSpeed
-                                task.wait(FlyConfig.WaitTweenFast - Time)
-                            end
-
-                            repeat task.wait() until not TaskGood() or forceEscape or fly_bnhide == false or fly_bnhideelapse >= FlyConfig.CampHackOut
-
-                            SendNotification("Objective | Moving to computer table", 2.5)
-                            GoTween(v)
-
-                            if IsComputerCompleted(Computer) then fly_CurrentComputer = nil; fly_OnComputer = false; return end
-                            if not TaskGood() or forceEscape then fly_CurrentComputer = nil; fly_OnComputer = false; return end
-                            if v.ActionSign.Value ~= 20 or (fly_ChosenComputer ~= Computer and fly_ChosenComputer ~= nil) then continue end
-
-                            local Tries = 0
-                            repeat
-                                task.wait()
-                                if forceEscape then break end
-                                
-                                if fly_CurrentComputer ~= Computer and IsTriggerOccupied(v) then
-                                    SendNotification("Keyboard Occupied | Another player took this spot.", 3)
-                                    break
-                                end
-
-                                if TaskGood() and not fly_bnhide and TempStats.CurrentAnimation.Value ~= "Typing" then
-                                    Tries = Tries + 1
-                                    if IsThereChar() then LocalPlayer.Character:PivotTo(v.CFrame) end
-                                    ReplicatedStorage.RemoteEvent:FireServer("Input", "Trigger", true, v.Event)
-                                    task.wait(0.1)
-                                    ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", true)
-                                    task.wait(0.4)
-                                elseif TaskGood() and not fly_bnhide then
-                                    if fly_CurrentComputer ~= Computer then
-                                        SendNotification("Hacking | Successfully started hacking", 3)
-                                    end
-                                    fly_CurrentComputer = Computer
-                                    Tries = 0
-                                    if FlyConfig.AntiPCError then
-                                        ReplicatedStorage.RemoteEvent:FireServer("SetPlayerMinigameResult", true)
-                                    end
-                                end
-
-                                if fly_bnhideelapse >= FlyConfig.CampHackOut then
-                                    ComputerBanList[math.floor(tick() * 1000)] = Computer
-                                    RemoveSafePlatform()
-                                    fly_bnhide = false
-                                    fly_OnComputer = false
-                                    fly_CurrentComputer = nil
-                                    fly_bnhideelapse = 0
-                                    fly_lpos = nil 
-                                    if IsThereChar() then LocalPlayer.Character.HumanoidRootPart.Anchored = false end
-
-                                    local reqLeftVal = ReplicatedStorage:FindFirstChild("ComputersLeft")
-                                    if reqLeftVal and reqLeftVal.Value <= 0 then
-                                        forceEscape = true
-                                        SendNotification("Fleeing Extra PC | Heading to exit doors!", 4)
-                                    else
-                                        SendNotification("Fleeing | The Beast is camping. Changing computers.", 3.5)
-                                    end
-                                    return
-                                end
-
-                                if Tries >= 15 and TaskGood() and not fly_bnhide then
-                                    fly_CurrentComputer = nil
-                                    fly_OnComputer = false
-                                    SendNotification("Error | Failed to start hacking.", 3)
-                                    return
-                                end
-                            until not TaskGood() or forceEscape or IsComputerCompleted(Computer) or (fly_ChosenComputer ~= Computer and fly_ChosenComputer ~= nil)
-                        end
-                    end
-                    fly_CurrentComputer = nil
-                    fly_OnComputer = false
-                end
-            end
-
-            local function Run()
-                local CancelComputers = false
-                local LeastTriggers = 4
-                local Closest = math.huge
-                local ComputersLeft = 0
-
-                coroutine.wrap(function()
-                    while TaskGood() do
-                        task.wait(0.2)
-                        if fly_CurrentComputer then
-                            fly_ChosenComputer = fly_CurrentComputer
-                            continue
-                        end
-
-                        ComputersLeft = 0
-                        LeastTriggers = 4
-                        Closest = math.huge
-
-                        if fly_ChosenComputer and IsComputerCompleted(fly_ChosenComputer) then
-                            SendNotification("Completed | Computer fully hacked!", 3)
-                            fly_ChosenComputer = nil
-                        end
-
-                        local BeastObj = GetBeast()
-                        local currentTime = tick() * 1000
-
-                        for i = 1, #MapObjects.Computers do
-                            local v = MapObjects.Computers[i]
-                            local UseTrigger = v:FindFirstChild("ComputerTrigger3")
-                            local FoundV = nil
-
-                            for i2, v2 in pairs(ComputerBanList) do
-                                if UseTrigger and BeastObj and IsThereChar(BeastObj) and v2 == v and currentTime - i2 > 5000 and (UseTrigger.Position - BeastObj.Character.HumanoidRootPart.Position).Magnitude > FlyConfig.HideBeastNearDist + 10 then
-                                    ComputerBanList[i2] = nil
-                                elseif v2 == v then
-                                    FoundV = v2
-                                end
-                            end
-
-                            if not IsComputerCompleted(v) then ComputersLeft = ComputersLeft + 1 end
-
-                            if not IsComputerCompleted(v) and not FoundV and IsThereChar() then
-                                local Triggers = { v:FindFirstChild("ComputerTrigger3"), v:FindFirstChild("ComputerTrigger2"), v:FindFirstChild("ComputerTrigger1") }
-                                local Distance = Triggers[1] and (Triggers[1].Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude or math.huge
-                                local AmtTriggers = 3
-
-                                for i3 = 1, #Triggers do
-                                    local v2 = Triggers[i3]
-                                    if v2 and v2.ActionSign.Value ~= 20 then
-                                        AmtTriggers = AmtTriggers - 1
-                                    elseif not v2 then
-                                        AmtTriggers = AmtTriggers - 1
-                                    end
-                                end
-
-                                if v == fly_CurrentComputer and AmtTriggers >= 1 then
-                                    AmtTriggers = AmtTriggers + 1
-                                elseif AmtTriggers < 1 then
-                                    AmtTriggers = -1
-                                end
-
-                                if (AmtTriggers >= 1 and AmtTriggers <= LeastTriggers) then
-                                    if AmtTriggers == LeastTriggers and Distance > Closest then continue end
-                                    fly_ChosenComputer = v
-                                    LeastTriggers = AmtTriggers
-                                    Closest = Distance
-                                end
-                            end
-                        end
-                    end
-                end)()
-
-                repeat
-                    task.wait(0.5)
-                    local reqLeftVal = ReplicatedStorage:FindFirstChild("ComputersLeft")
-                    local requiredDone = reqLeftVal and reqLeftVal.Value <= 0
-
-                    if requiredDone and fly_ChosenComputer then
-                        local BeastObj = GetBeast()
-                        if BeastObj and IsThereChar(BeastObj) then
-                            local trigger = fly_ChosenComputer:FindFirstChild("ComputerTrigger3")
-                            if trigger then
-                                local distanceToBeast = (BeastObj.Character.HumanoidRootPart.Position - trigger.Position).Magnitude
-                                if distanceToBeast < (FlyConfig.HideBeastNearDist + 10) then
-                                    forceEscape = true
-                                    SendNotification("Fleeing Extra PC | Beast near extra PC. Escaping directly!", 4)
-                                end
-                            end
-                        end
-                    end
-
-                    local isFinished = (ComputersLeft < 1) or forceEscape
-                    if isFinished then
-                        CancelComputers = true
-                        RemoveSafePlatform()
-                        fly_bnhide = false
-                        fly_lpos = nil
-                        if IsThereChar() then LocalPlayer.Character.HumanoidRootPart.Anchored = false end
-                    elseif fly_ChosenComputer and not fly_OnComputer then
-                        GetComputer(fly_ChosenComputer)
-                    end
-                until not TaskGood() or CancelComputers
-
-                if not TaskGood() or FlyConfig.ExitCancel then return end
-                SendNotification("Escape | Heading to exit doors.", 4)
-
-                repeat
-                    task.wait(0.5)
-                    for i = 1, #MapObjects.ExitDoors do
-                        local v = MapObjects.ExitDoors[i]
-                        if not TaskGood() then continue end
-
-                        repeat task.wait(0.5) until not TaskGood() or fly_bnhide == false or fly_bnhideelapse >= FlyConfig.CampEscapeOut
-
-                        if v:FindFirstChild("ExitDoorTrigger") then
-                            GoTween(v.ExitDoorTrigger)
-                            repeat
-                                task.wait()
-                                if v:FindFirstChild("ExitDoorTrigger") and v.ExitDoorTrigger.ActionSign.Value ~= 0 and not fly_bnhide and IsThereChar() then
-                                    LocalPlayer.Character:PivotTo(v.ExitDoorTrigger.CFrame * CFrame.new(0, v.ExitDoorTrigger.Size.Y / 2, 0))
-                                    ReplicatedStorage.RemoteEvent:FireServer("Input", "Trigger", true, v.ExitDoorTrigger.Event)
-                                    ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", true)
-                                    task.wait(0.5)
-                                end
-                            until not TaskGood() or not v:FindFirstChild("ExitDoorTrigger") or fly_bnhideelapse >= FlyConfig.CampEscapeOut
-
-                            if fly_bnhideelapse >= FlyConfig.CampEscapeOut and IsThereChar() then
-                                RemoveSafePlatform()
-                                LocalPlayer.Character.HumanoidRootPart.Anchored = false
-                                fly_bnhide = false
-                                fly_bnhideelapse = 0
-                                fly_lpos = nil
-                                continue
-                            end
-                        end
-
-                        if TaskGood() then
-                            task.wait(0.5)
-                            if v:FindFirstChild("ExitArea") then
-                                SendNotification("Escape | Escaping...", 3)
-                                GoTween(v.ExitArea)
-                            end
-                        end
-                    end
-                until not TaskGood()
-            end
-
-            local NewFarmTask = coroutine.create(function()
-                if PlayerReady() and not fly_onsurvivorfarm then
-                    fly_onsurvivorfarm = true
-                    SendNotification("Auto Farm | NexVoid Fly Farm initiated.", 3)
-                    Run()
-                    if not DoNotTeleport then
-                        task.wait(1)
-                        local lobby = workspace:FindFirstChild("LobbySpawnPad")
-                        if lobby and IsThereChar() then
-                            LocalPlayer.Character:PivotTo(lobby.CFrame * CFrame.new(0, 3, 0))
-                        end
-                    end
-                    fly_onsurvivorfarm = false
-                end
-            end)
-            coroutine.resume(NewFarmTask)
-            table.insert(fly_farmtasks, NewFarmTask)
-        end
-
-        -- Monitor de Rotação de Mapa para o Voo (Fly)
-        ReplicatedStorage.CurrentMap.Changed:Connect(function(newMap)
-            if getgenv().AutoWinSurvivorFly then
-                GlobalFlyReset()
-                if newMap and not AmIBeast() then
-                    task.wait(1.5)
-                    while not IsInLobby() and getgenv().AutoWinSurvivorFly and IsMatchActive() do
-                        task.wait(0.5)
-                    end
-                    while IsInLobby() and IsMatchActive() and getgenv().AutoWinSurvivorFly do
-                        task.wait(0.2)
-                    end
-                    if getgenv().AutoWinSurvivorFly and not fly_onsurvivorfarm and not IsInLobby() then
-                        task.spawn(DoSurvivorFlyFarm)
-                    end
-                end
-            end
-        end)
-
-        -- Monitoramento Geral e Sistema de Segurança (Safe Platform)
         task.spawn(function()
+            local map = GetCurrentMap()
+            
             while true do
-                local dt = task.wait(0.1)
-                if getgenv().AutoWinSurvivorFly then
-                    if not IsThereChar() then RemoveSafePlatform() end
-
-                    if not IsMatchActive() or AmIBeast() then
-                        if fly_onsurvivorfarm or fly_bnhide then
-                            GlobalFlyReset()
-                        end
-                        continue
-                    end
-
-                    fly_Beast = GetBeast()
-                    local TempStatsModule = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
-                    if FlyConfig.HideBeastNear and IsThereChar() and TempStatsModule and not TempStatsModule.IsBeast.Value then
-                        if (fly_Beast == nil or not IsThereChar(fly_Beast)) then
-                            if fly_bnhide then
-                                fly_bnhide = false
-                                fly_bnhideelapse = 0
-                                RemoveSafePlatform()
-                                if IsThereChar() then
-                                    LocalPlayer.Character.HumanoidRootPart.Anchored = false
-                                    if fly_lpos then LocalPlayer.Character:PivotTo(fly_lpos) end
-                                end
-                                fly_lpos = nil
-                                SendNotification("Beast Gone | Resuming.", 3)
-                            end
-                        else
-                            local playerPos = LocalPlayer.Character.HumanoidRootPart.Position
-                            local beastPos = fly_Beast.Character.HumanoidRootPart.Position
-                            local currentGroundPos = fly_lpos and fly_lpos.Position or playerPos
-                            local distance = (beastPos - currentGroundPos).Magnitude
+                task.wait(0.05)
+                if not getgenv().AutoHelpSilent then continue end
+                
+                local myStats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+                if not myStats then continue end
+                
+                local myHealth = myStats:FindFirstChild("Health")
+                local myRagdoll = myStats:FindFirstChild("Ragdoll")
+                local myCaptured = myStats:FindFirstChild("Captured")
+                
+                if myHealth and myHealth.Value <= 0 then continue end
+                if myRagdoll and myRagdoll.Value then continue end
+                if myCaptured and myCaptured.Value then continue end
+                
+                if not map then
+                    map = GetCurrentMap()
+                    continue
+                end
+                
+                for _, alvo in pairs(Players:GetPlayers()) do
+                    if alvo == LocalPlayer then continue end
+                    
+                    local alvoStats = alvo:FindFirstChild("TempPlayerStatsModule")
+                    local alvoCaptured = alvoStats and alvoStats:FindFirstChild("Captured")
+                    
+                    if alvoCaptured and alvoCaptured:IsA("BoolValue") and alvoCaptured.Value then
+                        local podEvent = CapturedFreezePod(map:GetChildren())
+                        
+                        if not podEvent then continue end
+                        
+                        repeat
+                            task.wait(0.05)
+                            RemoteEvent:FireServer("Input", "Trigger", true, podEvent)
+                            RemoteEvent:FireServer("Input", "Action", true)
                             
-                            if not fly_isMoving then
-                                if not fly_bnhide and distance < FlyConfig.HideBeastNearDist then
-                                    fly_lpos = LocalPlayer.Character:GetPivot() 
-                                    fly_bnhide = true
-                                    fly_bnhideelapse = 0
-                                    
-                                    pcall(function()
-                                        if not fly_safePlatform then
-                                            fly_safePlatform = Instance.new("Part")
-                                            fly_safePlatform.Size = Vector3.new(15, 1, 15)
-                                            fly_safePlatform.Anchored = true
-                                            fly_safePlatform.CanCollide = true
-                                            fly_safePlatform.Transparency = 1
-                                            fly_safePlatform.Name = "NexVoidSafePlate"
-                                            fly_safePlatform.Parent = workspace
-                                        end
-                                        fly_safePlatform.CFrame = fly_lpos * CFrame.new(0, 75, 0)
-                                        LocalPlayer.Character:PivotTo(fly_safePlatform.CFrame * CFrame.new(0, 3, 0))
-                                        
-                                        task.spawn(function()
-                                            task.wait()
-                                            if IsThereChar() then
-                                                LocalPlayer.Character.HumanoidRootPart.Velocity = Vector3.new(0,0,0)
-                                            end
-                                        end)
-                                    end)
-                                    SendNotification("Beast Warning | Standing on safe platform.", 3.5)
-                                end
-                            end
-
-                            if fly_bnhide and fly_lpos and not fly_isMoving then
-                                local targetHover = (fly_lpos * CFrame.new(0, 75, 0)).Position
-                                if (LocalPlayer.Character.HumanoidRootPart.Position - targetHover).Magnitude > 8 then
-                                    LocalPlayer.Character:PivotTo(fly_lpos * CFrame.new(0, 75, 0) * CFrame.new(0, 3, 0))
-                                end
-
-                                local beastDistanceFromLpos = (beastPos - fly_lpos.Position).Magnitude
-                                if beastDistanceFromLpos > (FlyConfig.HideBeastNearDist + 15) and TempStatsModule.Ragdoll.Value == false then
-                                    RemoveSafePlatform()
-                                    if IsThereChar() then
-                                        LocalPlayer.Character.HumanoidRootPart.Anchored = false
-                                        LocalPlayer.Character:PivotTo(fly_lpos)
-                                    end
-                                    fly_bnhide = false
-                                    fly_bnhideelapse = 0
-                                    fly_lpos = nil
-                                    SendNotification("Beast Away | Returning to ground.", 3)
-                                end
-                            end
-                        end
-                    end
-
-                    if fly_bnhide then
-                        fly_bnhideelapse = fly_bnhideelapse + dt
-                    else
-                        fly_bnhideelapse = 0
-                    end
-
-                    if IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Position.Y < -2000 then
-                        local lobby = workspace:FindFirstChild("LobbySpawnPad")
-                        if lobby then LocalPlayer.Character:PivotTo(lobby.CFrame * CFrame.new(0, 3, 0)) end
-                    end
-
-                    local CurrentMap = ReplicatedStorage.CurrentMap.Value
-                    if CurrentMap then
-                        local GotComputers = 0
-                        local children = CurrentMap:GetChildren()
-                        for i = 1, #children do
-                            local child = children[i]
-                            if child.Name == "ComputerTable" and not IsComputerCompleted(child) then
-                                GotComputers = GotComputers + 1
-                            end
-                        end
-                        if GotComputers ~= fly_Comp then
-                            if GotComputers > 0 then
-                                task.wait(3)
-                                if getgenv().AutoWinSurvivorFly and not fly_onsurvivorfarm then
-                                    task_spawn(function()
-                                        while IsInLobby() and IsMatchActive() and getgenv().AutoWinSurvivorFly do
-                                            task_wait(0.2)
-                                        end
-                                        if getgenv().AutoWinSurvivorFly and not fly_onsurvivorfarm and not IsInLobby() then
-                                            task_spawn(DoSurvivorFlyFarm)
-                                        end
-                                    end)
-                                end
-                            else
-                                fly_onsurvivorfarm = false
-                                fly_Beast = nil
-                            end
-                            fly_Comp = GotComputers
-                        end
+                        until not (alvoCaptured.Value and getgenv().AutoHelpSilent) 
+                           or (myRagdoll.Value or myCaptured.Value or myHealth.Value <= 0)
+                           
+                        break 
                     end
                 end
             end
         end)
     end
-
-    -- [[ AUTO HELP (TELEPORT) ]] --
-    task.spawn(function()
-        local helping = false
-        local oldCFrame = nil
-
-        local function getRoot(character)
-            if not character then return nil end
-            return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-        end
-
-        while true do
-            task.wait(0.05)
-            if getgenv().AutoHelpTeleport then
-                local meChar = LocalPlayer.Character
-                local meRoot = getRoot(meChar)
-                local myStats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
-                
-                if meChar and meRoot and myStats then
-                    local myHealth = myStats:FindFirstChild("Health")
-                    local myRagdoll = myStats:FindFirstChild("Ragdoll")
-                    local myCaptured = myStats:FindFirstChild("Captured")
-
-                    if myHealth and myHealth.Value > 0 and (not myRagdoll or not myRagdoll.Value) and (not myCaptured or not myCaptured.Value) then
-                        for _, alvo in pairs(Players:GetPlayers()) do
-                            if alvo == LocalPlayer or helping then continue end
-
-                            local alvoStats = alvo:FindFirstChild("TempPlayerStatsModule")
-                            local alvoCaptured = alvoStats and alvoStats:FindFirstChild("Captured")
-
-                            if alvoCaptured and alvoCaptured:IsA("BoolValue") and alvoCaptured.Value then
-                                local alvoChar = alvo.Character
-                                local alvoRoot = getRoot(alvoChar)
-
-                                if alvoRoot then
-                                    helping = true
-                                    oldCFrame = meRoot.CFrame
-
-                                    repeat
-                                        task.wait(0.05)
-                                        local atualRoot = getRoot(LocalPlayer.Character)
-                                        if atualRoot then
-                                            atualRoot.CFrame = alvoRoot.CFrame * CFrame.new(0, -4.5, 0) * CFrame.Angles(math.rad(90), 0, 0)
-                                        end
-                                        RemoteEvent:FireServer("Input", "Action", true)
-                                        
-                                    until not (alvoCaptured.Value and getgenv().AutoHelpTeleport) 
-                                       or (myRagdoll.Value or myCaptured.Value or myHealth.Value <= 0)
-
-                                    if oldCFrame and LocalPlayer.Character then
-                                        LocalPlayer.Character:PivotTo(oldCFrame)
-                                    end
-
-                                    oldCFrame = nil
-                                    helping = false
-                                    break 
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end)
 end
