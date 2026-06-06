@@ -29,7 +29,6 @@ return function(env)
     local AutoWinSurvivorToggleObj
     local AutoWinSurvivorFlyToggleObj
     local AutoWinBeastToggleObj
-    local AutoSaveTeleportToggleObj
     local AutoRejoinToggleObj
     local ModAlertToggleObj
 
@@ -461,7 +460,7 @@ return function(env)
                         end
                     end
                 end
-            end)()
+            end)();
 
             repeat
                 task_wait(0.5)
@@ -538,14 +537,14 @@ return function(env)
     end
 
     -- =========================================================================
-    -- LOOP DE MONITORAMENTO EM SEGUNDO PLANO (AUTO FARM FLY)
+    -- LOOP DE MONITORAMENTO EM SEGUNDO PLANO (AUTO FARM FLY / TELEPORT)
     -- =========================================================================
     local function fly_StartBackgroundLoop()
         if fly_BackgroundLoopActive then return end
         fly_BackgroundLoopActive = true
         
         task_spawn(function()
-            while fly_AutoFarmEnabled do
+            while fly_AutoFarmEnabled or getgenv().NexVoidLigado do
                 local dt = task_wait(0.1)
                 
                 if not fly_IsThereChar() then
@@ -553,7 +552,7 @@ return function(env)
                 end
 
                 -- Se for a Besta, apenas pausa o Survivor Farm sem desativar a toggle
-                if fly_AutoFarmEnabled and fly_AmIBeast() then
+                if (fly_AutoFarmEnabled or getgenv().NexVoidLigado) and fly_AmIBeast() then
                     for i, v in pairs(fly_farmtasks) do
                         pcall(function()
                             coroutine.close(v)
@@ -574,7 +573,7 @@ return function(env)
                     continue 
                 end
 
-                if not fly_AutoFarmEnabled or not fly_IsMatchActive() then
+                if not (fly_AutoFarmEnabled or getgenv().NexVoidLigado) or not fly_IsMatchActive() then
                     if fly_IsThereChar() and LocalPlayer.Character.HumanoidRootPart.Anchored then
                         LocalPlayer.Character.HumanoidRootPart.Anchored = false
                     end
@@ -583,7 +582,7 @@ return function(env)
                     fly_bnhide = false
                     fly_Comp = 0 
                     
-                    if fly_AutoFarmEnabled then
+                    if fly_AutoFarmEnabled or getgenv().NexVoidLigado then
                         if not fly_notifiedLobby then
                             SendNotification("Lobby State | Waiting for the game match to start...", 5)
                             fly_notifiedLobby = true
@@ -599,7 +598,7 @@ return function(env)
                 fly_TempPlayerStatsModule = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
                 fly_Beast = fly_GetBeast()
 
-                -- Proteção com Plataforma Estática
+                -- Proteção com Plataforma Estática (Fly e Teleport)
                 if FlyConfig.HideBeastNear and fly_IsThereChar() and fly_TempPlayerStatsModule and not fly_TempPlayerStatsModule.IsBeast.Value then
                     if (fly_Beast == nil or not fly_IsThereChar(fly_Beast)) then
                         if fly_bnhide then
@@ -621,7 +620,9 @@ return function(env)
                         local currentGroundPos = fly_lpos and fly_lpos.Position or playerPos
                         local distance = (beastPos - currentGroundPos).Magnitude
                         
-                        if not fly_isMoving then
+                        local isMoving = fly_AutoFarmEnabled and fly_isMoving
+                        
+                        if not isMoving then
                             if not fly_bnhide and distance < FlyConfig.HideBeastNearDist then
                                 fly_lpos = LocalPlayer.Character:GetPivot() 
                                 fly_bnhide = true
@@ -652,7 +653,7 @@ return function(env)
                             end
                         end
 
-                        if fly_bnhide and fly_lpos and not fly_isMoving then
+                        if fly_bnhide and fly_lpos and not isMoving then
                             local targetHover = (fly_lpos * CFrame_new(0, 75, 0)).Position
                             if (LocalPlayer.Character.HumanoidRootPart.Position - targetHover).Magnitude > 8 then
                                 LocalPlayer.Character:PivotTo(fly_lpos * CFrame_new(0, 75, 0) * CFrame_new(0, 3, 0))
@@ -750,6 +751,11 @@ return function(env)
                 return
             end
             if AutoWinSurvivorFlyToggleObj then AutoWinSurvivorFlyToggleObj.Set(false) end
+            
+            -- Ativa o loop de segurança em background para monitorar a Besta no modo Teleport
+            fly_StartBackgroundLoop()
+        else
+            getgenv().FarmRodando = false
         end
 
         getgenv().NexVoidLigado = state
@@ -835,83 +841,16 @@ return function(env)
         end
     end)
 
-    -- Auto Save (Teleport)
-    AutoSaveTeleportToggleObj = Library:CreateToggle(Page, "Auto Save (Teleport)", false, function(state)
-        getgenv().AutoHelpTeleport = state
-        if state then
-            SendNotification("Auto Help (Teleport) | Ativado", 3)
-            
-            task.spawn(function()
-                local helping = false
-                local oldCFrame = nil
-
-                local function getRoot(character)
-                    if not character then return nil end
-                    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-                end
-
-                while getgenv().AutoHelpTeleport do
-                    task.wait(0.05)
-
-                    local meChar = LocalPlayer.Character
-                    local meRoot = getRoot(meChar)
-                    local myStats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
-                    
-                    if not meChar or not meRoot or not myStats then continue end
-
-                    local myHealth = myStats:FindFirstChild("Health")
-                    local myRagdoll = myStats:FindFirstChild("Ragdoll")
-                    local myCaptured = myStats:FindFirstChild("Captured")
-
-                    if myHealth and myHealth.Value <= 0 then continue end
-                    if myRagdoll and myRagdoll.Value then continue end
-                    if myCaptured and myCaptured.Value then continue end
-
-                    for _, alvo in pairs(Players:GetPlayers()) do
-                        if alvo == LocalPlayer or helping then continue end
-
-                        local alvoStats = alvo:FindFirstChild("TempPlayerStatsModule")
-                        local alvoCaptured = alvoStats and alvoStats:FindFirstChild("Captured")
-
-                        if alvoCaptured and alvoCaptured:IsA("BoolValue") and alvoCaptured.Value then
-                            local alvoChar = alvo.Character
-                            local alvoRoot = getRoot(alvoChar)
-
-                            if alvoRoot then
-                                helping = true
-                                oldCFrame = meRoot.CFrame
-
-                                repeat
-                                    task.wait(0.05)
-                                    local atualRoot = getRoot(LocalPlayer.Character)
-                                    if atualRoot then
-                                        atualRoot.CFrame = alvoRoot.CFrame * CFrame.new(0, -4.5, 0) * CFrame.Angles(math.rad(90), 0, 0)
-                                    end
-                                    RemoteEvent:FireServer("Input", "Action", true)
-                                    
-                                until not (alvoCaptured.Value and getgenv().AutoHelpTeleport) 
-                                   or (myRagdoll.Value or myCaptured.Value or myHealth.Value <= 0)
-
-                                if oldCFrame and LocalPlayer.Character then
-                                    LocalPlayer.Character:PivotTo(oldCFrame)
-                                end
-
-                                oldCFrame = nil
-                                helping = false
-                                break
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-    end)
-
 
     -- =========================================================================
     -- SEÇÃO: FARM SETTINGS
     -- =========================================================================
     Library:CreateSection(Page, "Farm Settings")
+
+    -- Fly Speed Slider
+    Library:CreateSlider(Page, "Fly Farm Speed", 16, 30, 22, function(val)
+        FlyConfig.FarmTweenSpeed = val
+    end)
 
     -- Anti AFK
     AntiAfkToggleObj = Library:CreateToggle(Page, "Anti AFK", false, function(state)
@@ -1020,7 +959,7 @@ return function(env)
         end)
     end)
 
-    -- [[ NOVO: AUTO-EQUIP DA MARRETA EM SEGUNDO PLANO ]] --
+    -- [[ AUTO-EQUIP DA MARRETA EM SEGUNDO PLANO ]] --
     task.spawn(function()
         while true do
             task.wait(0.5) -- Loop leve executado a cada 0.5 segundos
@@ -1207,6 +1146,7 @@ return function(env)
         local function PossoAgir()
             if getgenv().EscapouDaPartida then return false end 
             if getgenv().SouBeastNessaRodada then return false end
+            if fly_bnhide then return false end -- Pausa as ações se estiver escondido da Beast
             
             local char = LocalPlayer.Character
             if not char then return false end
