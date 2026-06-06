@@ -1,4 +1,3 @@
-
 return function(env)
     local Library = env.Library
     local Page = env.Page
@@ -15,9 +14,6 @@ return function(env)
     local RunService = game:GetService("RunService")
     local StarterGui = game:GetService("StarterGui")
 
-    -- Remotes comuns necessários em escopo global
-    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
-
     -- Otimizações de performance (Micro-optimizations)
     local Vector3_new = Vector3.new
     local CFrame_new = CFrame.new
@@ -33,7 +29,6 @@ return function(env)
     local AutoWinSurvivorToggleObj
     local AutoWinSurvivorFlyToggleObj
     local AutoWinBeastToggleObj
-    local AutoSaveTeleportToggleObj
     local AutoRejoinToggleObj
     local ModAlertToggleObj
 
@@ -232,8 +227,7 @@ return function(env)
         end
 
         local function TaskGood()
-            -- TaskGood agora monitora e cancela as ações dinamicamente se fly_bnhide for verdadeiro
-            return fly_AutoFarmEnabled and not fly_AmIBeast() and fly_IsMatchActive() and PlayerReady() and not fly_bnhide
+            return fly_AutoFarmEnabled and not fly_AmIBeast() and fly_IsMatchActive() and PlayerReady()
         end
 
         local function GetMapObjects()
@@ -466,7 +460,7 @@ return function(env)
                         end
                     end
                 end
-            end)()
+            end)();
 
             repeat
                 task_wait(0.5)
@@ -604,7 +598,7 @@ return function(env)
                 fly_TempPlayerStatsModule = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
                 fly_Beast = fly_GetBeast()
 
-                -- Proteção com Plataforma Estática (Fly e Teleport - Correção de bypass dinâmico de trânsito)
+                -- Proteção com Plataforma Estática (Fly e Teleport)
                 if FlyConfig.HideBeastNear and fly_IsThereChar() and fly_TempPlayerStatsModule and not fly_TempPlayerStatsModule.IsBeast.Value then
                     if (fly_Beast == nil or not fly_IsThereChar(fly_Beast)) then
                         if fly_bnhide then
@@ -626,37 +620,40 @@ return function(env)
                         local currentGroundPos = fly_lpos and fly_lpos.Position or playerPos
                         local distance = (beastPos - currentGroundPos).Magnitude
                         
-                        -- Segurança dinâmica ativa em tempo integral (mesmo em vôo/teleporte)
-                        if not fly_bnhide and distance < FlyConfig.HideBeastNearDist then
-                            fly_lpos = LocalPlayer.Character:GetPivot() 
-                            fly_bnhide = true
-                            fly_bnhideelapse = 0
-                            
-                            pcall(function()
-                                if not fly_safePlatform then
-                                    fly_safePlatform = Instance.new("Part")
-                                    fly_safePlatform.Size = Vector3_new(15, 1, 15)
-                                    fly_safePlatform.Anchored = true
-                                    fly_safePlatform.CanCollide = true
-                                    fly_safePlatform.Transparency = 1
-                                    fly_safePlatform.Name = "NexVoidSafePlate"
-                                    fly_safePlatform.Parent = workspace
-                                end
-                                fly_safePlatform.CFrame = fly_lpos * CFrame_new(0, 75, 0)
-                                LocalPlayer.Character:PivotTo(fly_safePlatform.CFrame * CFrame_new(0, 3, 0))
+                        local isMoving = fly_AutoFarmEnabled and fly_isMoving
+                        
+                        if not isMoving then
+                            if not fly_bnhide and distance < FlyConfig.HideBeastNearDist then
+                                fly_lpos = LocalPlayer.Character:GetPivot() 
+                                fly_bnhide = true
+                                fly_bnhideelapse = 0
                                 
-                                task_spawn(function()
-                                    task_wait()
-                                    if fly_IsThereChar() then
-                                        LocalPlayer.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3_new(0, 0, 0)
-                                        LocalPlayer.Character.HumanoidRootPart.AssemblyAngularVelocity = Vector3_new(0, 0, 0)
+                                pcall(function()
+                                    if not fly_safePlatform then
+                                        fly_safePlatform = Instance.new("Part")
+                                        fly_safePlatform.Size = Vector3_new(15, 1, 15)
+                                        fly_safePlatform.Anchored = true
+                                        fly_safePlatform.CanCollide = true
+                                        fly_safePlatform.Transparency = 1
+                                        fly_safePlatform.Name = "NexVoidSafePlate"
+                                        fly_safePlatform.Parent = workspace
                                     end
+                                    fly_safePlatform.CFrame = fly_lpos * CFrame_new(0, 75, 0)
+                                    LocalPlayer.Character:PivotTo(fly_safePlatform.CFrame * CFrame_new(0, 3, 0))
+                                    
+                                    task_spawn(function()
+                                        task_wait()
+                                        if fly_IsThereChar() then
+                                            LocalPlayer.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3_new(0, 0, 0)
+                                            LocalPlayer.Character.HumanoidRootPart.AssemblyAngularVelocity = Vector3_new(0, 0, 0)
+                                        end
+                                    end)
                                 end)
-                            end)
-                            SendNotification("Beast Warning | Standing on safe platform.", 3.5)
+                                SendNotification("Beast Warning | Standing on safe platform.", 3.5)
+                            end
                         end
 
-                        if fly_bnhide and fly_lpos then
+                        if fly_bnhide and fly_lpos and not isMoving then
                             local targetHover = (fly_lpos * CFrame_new(0, 75, 0)).Position
                             if (LocalPlayer.Character.HumanoidRootPart.Position - targetHover).Magnitude > 8 then
                                 LocalPlayer.Character:PivotTo(fly_lpos * CFrame_new(0, 75, 0) * CFrame_new(0, 3, 0))
@@ -739,7 +736,6 @@ return function(env)
             if AutoWinSurvivorToggleObj then AutoWinSurvivorToggleObj.Set(false) end
             if AutoWinSurvivorFlyToggleObj then AutoWinSurvivorFlyToggleObj.Set(false) end
             if AutoWinBeastToggleObj then AutoWinBeastToggleObj.Set(false) end
-            if AutoSaveTeleportToggleObj then AutoSaveTeleportToggleObj.Set(false) end
         end
     end)
 
@@ -845,83 +841,16 @@ return function(env)
         end
     end)
 
-    -- Auto Save (Teleport)
-    AutoSaveTeleportToggleObj = Library:CreateToggle(Page, "Auto Save (Teleport)", false, function(state)
-        getgenv().AutoHelpTeleport = state
-        if state then
-            SendNotification("Auto Help (Teleport) | Ativado", 3)
-            
-            task.spawn(function()
-                local helping = false
-                local oldCFrame = nil
-
-                local function getRoot(character)
-                    if not character then return nil end
-                    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-                end
-
-                while getgenv().AutoHelpTeleport do
-                    task.wait(0.05)
-
-                    local meChar = LocalPlayer.Character
-                    local meRoot = getRoot(meChar)
-                    local myStats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
-                    
-                    if not meChar or not meRoot or not myStats then continue end
-
-                    local myHealth = myStats:FindFirstChild("Health")
-                    local myRagdoll = myStats:FindFirstChild("Ragdoll")
-                    local myCaptured = myStats:FindFirstChild("Captured")
-
-                    if myHealth and myHealth.Value <= 0 then continue end
-                    if myRagdoll and myRagdoll.Value then continue end
-                    if myCaptured and myCaptured.Value then continue end
-
-                    for _, alvo in pairs(Players:GetPlayers()) do
-                        if alvo == LocalPlayer or helping then continue end
-
-                        local alvoStats = alvo:FindFirstChild("TempPlayerStatsModule")
-                        local alvoCaptured = alvoStats and alvoStats:FindFirstChild("Captured")
-
-                        if alvoCaptured and alvoCaptured:IsA("BoolValue") and alvoCaptured.Value then
-                            local alvoChar = alvo.Character
-                            local alvoRoot = getRoot(alvoChar)
-
-                            if alvoRoot then
-                                helping = true
-                                oldCFrame = meRoot.CFrame
-
-                                repeat
-                                    task.wait(0.05)
-                                    local atualRoot = getRoot(LocalPlayer.Character)
-                                    if atualRoot then
-                                        atualRoot.CFrame = alvoRoot.CFrame * CFrame.new(0, -4.5, 0) * CFrame.Angles(math.rad(90), 0, 0)
-                                    end
-                                    RemoteEvent:FireServer("Input", "Action", true)
-                                    
-                                until not (alvoCaptured.Value and getgenv().AutoHelpTeleport) 
-                                   or (myRagdoll.Value or myCaptured.Value or myHealth.Value <= 0)
-
-                                if oldCFrame and LocalPlayer.Character then
-                                    LocalPlayer.Character:PivotTo(oldCFrame)
-                                end
-
-                                oldCFrame = nil
-                                helping = false
-                                break
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-    end)
-
 
     -- =========================================================================
     -- SEÇÃO: FARM SETTINGS
     -- =========================================================================
     Library:CreateSection(Page, "Farm Settings")
+
+    -- Fly Speed Slider
+    Library:CreateSlider(Page, "Fly Farm Speed", 16, 30, 22, function(val)
+        FlyConfig.FarmTweenSpeed = val
+    end)
 
     -- Anti AFK
     AntiAfkToggleObj = Library:CreateToggle(Page, "Anti AFK", false, function(state)
@@ -1009,15 +938,11 @@ return function(env)
         end
     end)
 
-    -- Fly Speed Slider (Alinhado em último lugar na categoria de configurações)
-    Library:CreateSlider(Page, "Fly Farm Speed", 16, 30, 22, function(val)
-        FlyConfig.FarmTweenSpeed = val
-    end)
-
 
     -- =========================================================================
     -- DETECTORES DO AUTO FARM TELEPORT CLASSIC E OUTROS LOOPS DE SUPORTE
     -- =========================================================================
+    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
     local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
 
     -- [[ ANTI AFK LOOP ]] --
@@ -1200,30 +1125,12 @@ return function(env)
             if tempoDeEspera > 0.5 then
                 Alertar("Anti-Cheat Bypass", "Calculating jump... Waiting " .. string.format("%.1f", tempoDeEspera) .. "s", tempoDeEspera)
                 hrp.Velocity = Vector3.new(0,0,0)
-                
-                -- Aguarda de forma segura e interrompível se a Besta se aproximar
-                local elapsed = 0
-                while elapsed < tempoDeEspera do
-                    task_wait(0.1)
-                    elapsed = elapsed + 0.1
-                    if not PossoAgir() then return false end
-                end
+                task.wait(tempoDeEspera)
             end
-
-            -- Verifica a segurança imediata antes de realizar o teleporte
-            if not PossoAgir() then return false end
 
             hrp.CFrame = destinoCFrame
             hrp.Velocity = Vector3.new(0, 0, 0)
-            
-            -- Tempo de espera pós-teleporte interrompível de segurança
-            local elapsed2 = 0
-            while elapsed2 < 1.2 do
-                task_wait(0.1)
-                elapsed2 = elapsed2 + 0.1
-                if not PossoAgir() then return false end
-            end
-
+            task.wait(1.2)
             return true
         end
 
@@ -1239,7 +1146,7 @@ return function(env)
         local function PossoAgir()
             if getgenv().EscapouDaPartida then return false end 
             if getgenv().SouBeastNessaRodada then return false end
-            if fly_bnhide then return false end -- Pausa as ações se estiver escondido da Besta
+            if fly_bnhide then return false end -- Pausa as ações se estiver escondido da Beast
             
             local char = LocalPlayer.Character
             if not char then return false end
