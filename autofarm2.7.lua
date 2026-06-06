@@ -920,7 +920,7 @@ return function(env)
     -- =========================================================================
     -- SEÇÃO: FARM SETTINGS
     -- =========================================================================
-    Library:CreateSection(Page, "Farm Settings")
+    Library:CreateSection(Page, "Farm Settings1231")
 
     -- Anti AFK
     AntiAfkToggleObj = Library:CreateToggle(Page, "Anti AFK", false, function(state)
