@@ -701,6 +701,31 @@ return function(env)
         end
     end)
 
+    local function checkNJD(c)
+        if not c then return false end
+        if c:FindFirstChildOfClass("Tool") then return true end
+        if c:FindFirstChild("Hammer") then return true end
+        local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+        if stats and stats:FindFirstChild("IsBeast") and stats.IsBeast.Value == true then
+            return true
+        end
+        if c:FindFirstChild("BeastPowers") then
+            return true
+        end
+        return false
+    end
+
+    local function bindNJDLocal(c)
+        local h = c:WaitForChild("Humanoid", 5)
+        if not h then return end
+        njdBackupSpeed = checkNJD(c) and 16.5 or 16
+        njdConnectionLocal = h:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+            if njdEnabledLocal and h.WalkSpeed < njdBackupSpeed and checkNJD(c) then
+                h.WalkSpeed = njdBackupSpeed
+            end
+        end)
+    end
+
     Library:CreateToggleKeybind(Page, "No Jump Delay", false, "None", function(state) 
         njdEnabledLocal = state
         if state then
@@ -862,46 +887,6 @@ return function(env)
     end)
 
     Library:CreateSection(Page, "Players Pt. 1")
-
-    local emotesTable = {
-        ["Dance 1"] = {R6 = "27789359", R15 = "3333432454"},
-        ["Dance 2"] = {R6 = "30196114", R15 = "4555808220"},
-        ["Dance 3"] = {R6 = "248263260", R15 = "4049037604"},
-        ["Dance 4"] = {R6 = "45834924", R15 = "4555782893"},
-        ["Dance 5"] = {R6 = "33796059", R15 = "10214311282"},
-        ["Dance 6"] = {R6 = "28488254", R15 = "10714010337"},
-        ["Wave"]    = {R6 = "128777973", R15 = "507722262"},
-        ["Cheer"]   = {R6 = "129423030", R15 = "507710771"}
-    }
-    local currentTrack = nil
-    local function stopActiveEmote()
-        if currentTrack then
-            currentTrack:Stop()
-            currentTrack:Destroy()
-            currentTrack = nil
-        end
-    end
-    local function isR15(character)
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        return humanoid and humanoid.RigType == Enum.HumanoidRigType.R15
-    end
-    local function playEmote(id)
-        stopActiveEmote()
-        local character = LocalPlayer.Character
-        if not character then return end
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if not humanoid then return end
-        local animation = Instance.new("Animation")
-        animation.AnimationId = "rbxassetid://" .. id
-        local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid
-        local success, track = pcall(function()
-            return animator:LoadAnimation(animation)
-        end)
-        if success and track then
-            currentTrack = track
-            currentTrack:Play()
-        end
-    end
 
     Library:CreateDropdown(Page, "Emotes", {"None", "Dance 1", "Dance 2", "Dance 3", "Dance 4", "Dance 5", "Dance 6", "Wave", "Cheer"}, "None", function(val)
         if val == "None" then
@@ -1292,14 +1277,14 @@ return function(env)
         end
     end)
 
-    Library:CreateToggle(Page, "ShiftLock", false, function(state)
+    Library:CreateToggleKeybind(Page, "ShiftLock", false, "None", function(state)
         shiftlockEnabled = state
         if state then
             if not slButton then
                 slButton = Instance.new("ImageButton")
                 slButton.Name = "ShiftLockMobileBtn"
                 slButton.Size = UDim2.new(0, 50, 0, 50)
-                slButton.Position = UDim2.new(0.85, -25, 0.35, -25)
+                slButton.Position = UDim2.new(0.8, 0, 0.4, 0)
                 slButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
                 slButton.BackgroundTransparency = 0.5
                 slButton.Image = "rbxassetid://105987953182009"
@@ -1336,8 +1321,7 @@ return function(env)
                     end
                 end)
                 
-                local sg = CoreGui:FindFirstChild("NexVoidHub") or LocalPlayer.PlayerGui:FindFirstChild("NexVoidHub")
-                slButton.Parent = sg
+                slButton.Parent = LocalPlayer:WaitForChild("PlayerGui")
             else
                 slButton.Visible = true
             end
@@ -1354,21 +1338,13 @@ return function(env)
                 local aspect = Instance.new("UIAspectRatioConstraint")
                 aspect.AspectRatio = 1
                 aspect.Parent = ShiftLockCrosshair
-                local sg = CoreGui:FindFirstChild("NexVoidHub") or LocalPlayer.PlayerGui:FindFirstChild("NexVoidHub")
-                ShiftLockCrosshair.Parent = sg 
+                ShiftLockCrosshair.Parent = LocalPlayer:WaitForChild("PlayerGui")
             end
-            
-            controlConn = UserInputService.InputBegan:Connect(function(input, gp)
-                if not gp and shiftlockEnabled and input.KeyCode == Enum.KeyCode.LeftControl then
-                    updateShiftlockState(not shiftlockActive)
-                end
-            end)
             
             updateShiftlockState(true)
         else
             updateShiftlockState(false)
             if slButton then slButton.Visible = false end
-            if controlConn then controlConn:Disconnect() controlConn = nil end
         end
     end)
 
