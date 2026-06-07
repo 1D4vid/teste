@@ -296,11 +296,13 @@ return function(env)
                         if player ~= LocalPlayer and player.Character then
                             local beastPowers = player.Character:FindFirstChild("BeastPowers")
                             if beastPowers then
-                                local powersEvent = player.Character:FindFirstChild("PowersEvent", true)
-                                local staminaValue = beastPowers:FindFirstChildOfClass("NumberValue")
-                                if powersEvent and staminaValue then
-                                    return powersEvent, staminaValue
-                                end
+                                pcall(function()
+                                    local powersEvent = player.Character:FindFirstChild("PowersEvent", true)
+                                    local staminaValue = beastPowers:FindFirstChildOfClass("NumberValue")
+                                    if powersEvent and staminaValue then
+                                        return powersEvent, staminaValue
+                                    end
+                                end)
                             end
                         end
                     end
@@ -519,25 +521,8 @@ return function(env)
         end)
     end)
 
-    local runnerSpeedBoostEnabled = false
-    Library:CreateToggle(Page, "Runner Speed Boost", false, function(state)
-        runnerSpeedBoostEnabled = state
-        if state then
-            task.spawn(function()
-                while runnerSpeedBoostEnabled do
-                    task.wait(0.1)
-                    pcall(function()
-                        local char = LocalPlayer.Character
-                        local hum = char and char:FindFirstChildOfClass("Humanoid")
-                        if char and (char:FindFirstChild("BeastPowers") or char:FindFirstChild("Hammer")) then
-                            if hum and hum.WalkSpeed < 24 then
-                                hum.WalkSpeed = 24
-                            end
-                        end
-                    end)
-                end
-            end)
-        end
+    Library:CreateSlider(Page, "Runner Speed Boost", 16, 150, 24, function(val)
+        -- Implementação futura do Runner Speed Boost
     end)
 
     local autoTieCrosshairEnabled = false
@@ -879,6 +864,10 @@ return function(env)
         end
     end)
     Library:CreateSlider(Page, "Fly Speed", 10, 200, 50, function(val) flySpeed = val end)
+
+    Library:CreateSlider(Page, "Crawl Boost", 16, 150, 16, function(val)
+        -- Implementação futura do Crawl Boost
+    end)
 
     Library:CreateSection(Page, "Players Pt. 2")
 
