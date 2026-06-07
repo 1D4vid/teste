@@ -39,6 +39,101 @@ return function(env)
     local hitAuraRange = 10
     local slowBeastAuraRange = 15 
 
+    -- Variáveis e conexões do Anti Ragdoll V2
+    local arV2Enabled = false
+    local arV2Swimming = false
+    local arV2OldGrav = workspace.Gravity
+    local arV2Swimbeat = nil
+    local arV2LastHealth = 100
+    local arV2CharConn = nil
+    local arV2HpConn = nil
+    local arV2StateConn = nil
+
+    local function arV2Unswim()
+        if not arV2Swimming then return end
+        arV2Swimming = false
+        if arV2Swimbeat then arV2Swimbeat:Disconnect() arV2Swimbeat = nil end
+        workspace.Gravity = arV2OldGrav
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            local enums = Enum.HumanoidStateType:GetEnumItems()
+            for _, s in pairs(enums) do hum:SetStateEnabled(s, true) end
+            hum:ChangeState(Enum.HumanoidStateType.Running)
+        end
+    end
+
+    local function arV2Swim()
+        if arV2Swimming then return end
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not char or not hum or hum.Health <= 0 then return end
+        
+        arV2OldGrav = workspace.Gravity
+        workspace.Gravity = 0
+        arV2Swimming = true
+        
+        if arV2Swimbeat then arV2Swimbeat:Disconnect() end
+        hum:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
+        for _, s in pairs(Enum.HumanoidStateType:GetEnumItems()) do
+            if s ~= Enum.HumanoidStateType.None and s ~= Enum.HumanoidStateType.Swimming then
+                hum:SetStateEnabled(s, false)
+            end
+        end
+        hum:ChangeState(Enum.HumanoidStateType.Swimming)
+        
+        arV2Swimbeat = RunService.Heartbeat:Connect(function()
+            pcall(function()
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if root and hum then
+                    local moving = (hum.MoveDirection ~= Vector3.new() or UserInputService:IsKeyDown(Enum.KeyCode.Space))
+                    if not moving then
+                        root.Velocity = Vector3.new(0, 0, 0)
+                        if pcall(function() return root.AssemblyLinearVelocity end) then
+                            root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                        end
+                    end
+                end
+            end)
+        end)
+        
+        task.delay(5, function()
+            if arV2Swimming and arV2Enabled then arV2Unswim() end
+        end)
+    end
+
+    local function arV2Monitor(char)
+        if not char then return end
+        local hum = char:WaitForChild("Humanoid", 15)
+        local hrp = char:WaitForChild("HumanoidRootPart", 15)
+        if not hum or not hrp then return end
+        
+        arV2LastHealth = hum.Health
+        
+        if arV2HpConn then arV2HpConn:Disconnect() end
+        arV2HpConn = hum.HealthChanged:Connect(function(health)
+            if arV2Enabled and health < arV2LastHealth and health > 0 then
+                if not arV2Swimming then task.spawn(arV2Swim) end
+            end
+            arV2LastHealth = health
+        end)
+        
+        if arV2StateConn then arV2StateConn:Disconnect() end
+        arV2StateConn = RunService.Heartbeat:Connect(function()
+            if not arV2Enabled or not char.Parent or not hum.Parent or not hrp.Parent then
+                if arV2HpConn then arV2HpConn:Disconnect() arV2HpConn = nil end
+                if arV2StateConn then arV2StateConn:Disconnect() arV2StateConn = nil end
+                arV2Unswim()
+                return
+            end
+            local isRagdoll = hum.PlatformStand or hum:GetState() == Enum.HumanoidStateType.Physics
+            local isDead = hum.Health <= 0
+            if isRagdoll and not isDead and not arV2Swimming then
+                task.spawn(arV2Swim)
+            end
+        end)
+    end
+
     local function backupFDJ(c)
         local h = c:FindFirstChild("Humanoid")
         if h then
@@ -145,7 +240,7 @@ return function(env)
         end
     end
 
-    Library:CreateSection(Page, "Survivorasas")
+    Library:CreateSection(Page, "Survivor")
 
     Library:CreateToggle(Page, "Beast Untie Player", false, function(state)
         getgenv().BeastUntieLigado = state
@@ -215,46 +310,16 @@ return function(env)
     end)
 
     Library:CreateToggle(Page, "Anti Ragdoll V2", false, function(state)
-        getgenv().AntiRagdollV2 = state
+        arV2Enabled = state
         if state then
-            task.spawn(function()
-                while getgenv().AntiRagdollV2 do
-                    task.wait()
-                    pcall(function()
-                        local Character = LocalPlayer.Character
-                        local Humanoid = Character and Character:FindFirstChildWhichIsA("Humanoid")
-                        if Humanoid then
-                            Humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
-                            Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-                            Humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
-                            Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-                            
-                            local currentState = Humanoid:GetState()
-                            if currentState == Enum.HumanoidStateType.Ragdoll or currentState == Enum.HumanoidStateType.Physics or currentState == Enum.HumanoidStateType.PlatformStanding then
-                                Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-                            end
-                        end
-                        
-                        local Stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
-                        if Stats then
-                            local Ragdoll = Stats:FindFirstChild("Ragdoll")
-                            if Ragdoll and Ragdoll.Value then
-                                Ragdoll.Value = false
-                            end
-                        end
-                    end)
-                end
-            end)
+            if LocalPlayer.Character then task.spawn(arV2Monitor, LocalPlayer.Character) end
+            arV2CharConn = LocalPlayer.CharacterAdded:Connect(arV2Monitor)
         else
-            pcall(function()
-                local Humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
-                if Humanoid then
-                    Humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
-                    Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-                    Humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, true)
-                    Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-                end
-            end)
+            arV2Enabled = false
+            if arV2CharConn then arV2CharConn:Disconnect() arV2CharConn = nil end
+            if arV2HpConn then arV2HpConn:Disconnect() arV2HpConn = nil end
+            if arV2StateConn then arV2StateConn:Disconnect() arV2StateConn = nil end
+            arV2Unswim()
         end
     end)
 
@@ -451,15 +516,140 @@ return function(env)
     end)
 
     Library:CreateToggle(Page, "Crawl Beast", false, function(state)
-        -- Vazio por enquanto
+        getgenv().AutoCrawlLigado = state
+        if state then
+            task.spawn(function()
+                local function RemoverVentBlocks()
+                    for _, obj in pairs(Workspace:GetDescendants()) do
+                        if obj:IsA("BasePart") and obj.Name == "VentBlock" then
+                            obj.CFrame = CFrame.new(0, -10000, 0)
+                            obj.CanCollide = false
+                            pcall(function() obj:Destroy() end)
+                        end
+                    end
+                end
+                while getgenv().AutoCrawlLigado do
+                    pcall(function()
+                        local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+                        if stats then
+                            local isBeast = stats:FindFirstChild("IsBeast")
+                            local disableCrawl = stats:FindFirstChild("DisableCrawl")
+                            if isBeast and isBeast.Value == true then
+                                if disableCrawl and disableCrawl.Value == true then
+                                    disableCrawl.Value = false
+                                    RemoverVentBlocks()
+                                end
+                            end
+                        end
+                    end)
+                    task.wait(2)
+                end
+            end)
+        end
     end)
+
+    local autoTieCrosshairEnabled = false
+    local lookSensitivity = 0.85
+    local function EstaOlhandoPara(raizAlvo)
+        if not Camera or not raizAlvo then return false end
+        local direcaoParaAlvo = (raizAlvo.Position - Camera.CFrame.Position).Unit
+        local direcaoOlhar = Camera.CFrame.LookVector
+        local dotProduct = direcaoOlhar:Dot(direcaoParaAlvo)
+        return dotProduct >= lookSensitivity
+    end
 
     Library:CreateToggle(Page, "Auto Tie at Crosshair", false, function(state)
-        -- Vazio por enquanto
+        autoTieCrosshairEnabled = state
+        if state then
+            task.spawn(function()
+                local function ObterRaiz(character)
+                    if not character then return nil end
+                    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+                end
+                while autoTieCrosshairEnabled do
+                    task.wait(0.1) 
+                    pcall(function()
+                        local MeuPersonagem = LocalPlayer.Character
+                        if not MeuPersonagem then return end
+                        local MeuEventoMarreta = MeuPersonagem:FindFirstChild("HammerEvent", true)
+                        local MinhaRaiz = ObterRaiz(MeuPersonagem)
+                        if not MeuEventoMarreta or not MinhaRaiz then return end
+
+                        for _, alvo in pairs(Players:GetPlayers()) do
+                            if alvo ~= LocalPlayer and alvo.Character then
+                                local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
+                                if Stats then
+                                    local alvoCaido = Stats:FindFirstChild("Ragdoll")
+                                    local alvoCapturado = Stats:FindFirstChild("Captured")
+                                    if alvoCaido and alvoCapturado then
+                                        if alvoCaido.Value == true and alvoCapturado.Value == false then
+                                            local RaizAlvo = ObterRaiz(alvo.Character)
+                                            if RaizAlvo then
+                                                local distancia = (RaizAlvo.Position - MinhaRaiz.Position).Magnitude
+                                                if distancia <= autoTieDistancia and EstaOlhandoPara(RaizAlvo) then
+                                                    MeuEventoMarreta:FireServer("HammerTieUp", RaizAlvo, RaizAlvo.Position)
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                end
+            end)
+        end
     end)
 
+    local autoTieAfterHit = false
     Library:CreateToggle(Page, "Auto Tie After Hit", false, function(state)
-        -- Vazio por enquanto
+        autoTieAfterHit = state
+        if state then
+            task.spawn(function()
+                local function ObterRaiz(character)
+                    if not character then return nil end
+                    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+                end
+                local JaAmarrados = {}
+                while autoTieAfterHit do
+                    task.wait(0.05)
+                    pcall(function()
+                        local MeuPersonagem = LocalPlayer.Character
+                        local MeuEventoMarreta = MeuPersonagem and MeuPersonagem:FindFirstChild("HammerEvent", true)
+                        local MinhaRaiz = ObterRaiz(MeuPersonagem)
+                        if not MeuEventoMarreta or not MinhaRaiz then return end
+
+                        for _, alvo in pairs(Players:GetPlayers()) do
+                            if alvo ~= LocalPlayer and alvo.Character then
+                                local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
+                                if Stats then
+                                    local alvoCaido = Stats:FindFirstChild("Ragdoll")
+                                    local alvoCapturado = Stats:FindFirstChild("Captured")
+                                    if alvoCaido and alvoCapturado then
+                                        if alvoCaido.Value == true and alvoCapturado.Value == false then
+                                            if not JaAmarrados[alvo.Name] then
+                                                local RaizAlvo = ObterRaiz(alvo.Character)
+                                                if RaizAlvo then
+                                                    local distancia = (RaizAlvo.Position - MinhaRaiz.Position).Magnitude
+                                                    if distancia <= 15 then
+                                                        MeuEventoMarreta:FireServer("HammerTieUp", RaizAlvo, RaizAlvo.Position)
+                                                        JaAmarrados[alvo.Name] = true
+                                                    end
+                                                end
+                                            end
+                                        else
+                                            if alvoCaido.Value == false then
+                                                JaAmarrados[alvo.Name] = false
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                end
+            end)
+        end
     end)
 
     Library:CreateToggle(Page, "No Jump Delay", false, function(state) 
@@ -535,12 +725,43 @@ return function(env)
         autoTieDistancia = val
     end)
 
+    local runnerSpeedBoostEnabled = false
+    local runnerSpeedVal = 26
+    local conexaoRunnerBoost = nil
     Library:CreateToggle(Page, "Runner Speed Boost", false, function(state)
-        -- Vazio por enquanto
+        runnerSpeedBoostEnabled = state
+        if state then
+            local ultimaEnergia = 1
+            if conexaoRunnerBoost then conexaoRunnerBoost:Disconnect() end
+            conexaoRunnerBoost = RunService.Stepped:Connect(function()
+                pcall(function()
+                    local MeuPersonagem = LocalPlayer.Character
+                    if not MeuPersonagem then return end
+                    local beastPowers = MeuPersonagem:FindFirstChild("BeastPowers")
+                    if not beastPowers then return end
+                    local numberValue = beastPowers:FindFirstChildOfClass("NumberValue")
+                    if not numberValue then return end
+                    local energiaAtual = numberValue.Value
+                    
+                    if energiaAtual < ultimaEnergia then
+                        local Humanoid = MeuPersonagem:FindFirstChildWhichIsA("Humanoid")
+                        if Humanoid then
+                            Humanoid.WalkSpeed = runnerSpeedVal
+                        end
+                    end
+                    ultimaEnergia = energiaAtual
+                end)
+            end)
+        else
+            if conexaoRunnerBoost then
+                conexaoRunnerBoost:Disconnect()
+                conexaoRunnerBoost = nil
+            end
+        end
     end)
 
-    Library:CreateSlider(Page, "Runner Speed Boost Val", 16, 150, 24, function(val)
-        -- Vazio por enquanto
+    Library:CreateSlider(Page, "Runner Speed Boost Val", 16, 150, 26, function(val)
+        runnerSpeedVal = val
     end)
 
     Library:CreateToggle(Page, "Hit Aura", false, function(state)
@@ -623,6 +844,64 @@ return function(env)
     end)
 
     Library:CreateSection(Page, "Players Pt. 1")
+
+    local emotesTable = {
+        ["Dance 1"] = {R6 = "27789359", R15 = "3333432454"},
+        ["Dance 2"] = {R6 = "30196114", R15 = "4555808220"},
+        ["Dance 3"] = {R6 = "248263260", R15 = "4049037604"},
+        ["Dance 4"] = {R6 = "45834924", R15 = "4555782893"},
+        ["Dance 5"] = {R6 = "33796059", R15 = "10214311282"},
+        ["Dance 6"] = {R6 = "28488254", R15 = "10714010337"},
+        ["Wave"]    = {R6 = "128777973", R15 = "507722262"},
+        ["Cheer"]   = {R6 = "129423030", R15 = "507710771"}
+    }
+    local currentTrack = nil
+    local function stopActiveEmote()
+        if currentTrack then
+            currentTrack:Stop()
+            currentTrack:Destroy()
+            currentTrack = nil
+        end
+    end
+    local function isR15(character)
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        return humanoid and humanoid.RigType == Enum.HumanoidRigType.R15
+    end
+    local function playEmote(id)
+        stopActiveEmote()
+        local character = LocalPlayer.Character
+        if not character then return end
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return end
+        local animation = Instance.new("Animation")
+        animation.AnimationId = "rbxassetid://" .. id
+        local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid
+        local success, track = pcall(function()
+            return animator:LoadAnimation(animation)
+        end)
+        if success and track then
+            currentTrack = track
+            currentTrack:Play()
+        end
+    end
+
+    Library:CreateDropdown(Page, "Emotes", {"None", "Dance 1", "Dance 2", "Dance 3", "Dance 4", "Dance 5", "Dance 6", "Wave", "Cheer"}, "None", function(val)
+        if val == "None" then
+            stopActiveEmote()
+        else
+            local data = emotesTable[val]
+            if data then
+                local char = LocalPlayer.Character
+                if char then
+                    if isR15(char) then
+                        playEmote(data.R15)
+                    else
+                        playEmote(data.R6)
+                    end
+                end
+            end
+        end
+    end)
 
     local wsCharAdded
     Library:CreateToggleKeybind(Page, "Walkspeed", false, "None", function(state) 
@@ -753,12 +1032,32 @@ return function(env)
 
     Library:CreateSlider(Page, "Fly Speed", 10, 200, 50, function(val) flySpeed = val end)
 
+    local crawlBoostEnabled = false
+    local crawlBoostSpeed = 6
+    local crawlConnection = nil
     Library:CreateToggle(Page, "Crawl Boost", false, function(state)
-        -- Vazio por enquanto
+        crawlBoostEnabled = state
+        if state then
+            if crawlConnection then crawlConnection:Disconnect() end
+            crawlConnection = RunService.RenderStepped:Connect(function()
+                local char = LocalPlayer.Character
+                local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    if humanoid.WalkSpeed > 1 and humanoid.WalkSpeed < 11 then
+                        humanoid.WalkSpeed = crawlBoostSpeed
+                    end
+                end
+            end)
+        else
+            if crawlConnection then
+                crawlConnection:Disconnect()
+                crawlConnection = nil
+            end
+        end
     end)
 
-    Library:CreateSlider(Page, "Crawl Boost Val", 16, 150, 16, function(val)
-        -- Vazio por enquanto
+    Library:CreateSlider(Page, "Crawl Boost Val", 1, 150, 6, function(val)
+        crawlBoostSpeed = val
     end)
 
     Library:CreateSection(Page, "Players Pt. 2")
@@ -1040,9 +1339,5 @@ return function(env)
                 infJumpConnection = nil
             end
         end
-    end)
-
-    Library:CreateDropdown(Page, "Emotes", {"None", "Sit", "Dance", "Wave", "Point"}, "None", function(val)
-        -- Implementação futura do script de emotes
     end)
 end
