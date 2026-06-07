@@ -39,65 +39,6 @@ return function(env)
     local hitAuraRange = 10
     local slowBeastAuraRange = 15 
 
-    -- Variáveis adicionadas para os novos recursos
-    local runnerBoostEnabled = false
-    local runnerBoostVal = 26
-    local runnerBoostConnection = nil
-    
-    local crawlBoostEnabled = false
-    local crawlBoostVal = 6
-    local crawlBoostConnection = nil
-
-    local currentEmoteTrack = nil
-
-    local emoteMap = {
-        ["Dance 1"] = {R6 = "27789359", R15 = "3333432454"},
-        ["Dance 2"] = {R6 = "30196114", R15 = "4555808220"},
-        ["Dance 3"] = {R6 = "248263260", R15 = "4049037604"},
-        ["Dance 4"] = {R6 = "45834924", R15 = "4555782893"},
-        ["Dance 5"] = {R6 = "33796059", R15 = "10214311282"},
-        ["Dance 6"] = {R6 = "28488254", R15 = "10714010337"},
-        ["Wave (Acenar)"] = {R6 = "128777973", R15 = "507722262"},
-        ["Cheer (Torcer)"] = {R6 = "129423030", R15 = "507710771"},
-    }
-
-    local function stopActiveEmote()
-        if currentEmoteTrack then
-            currentEmoteTrack:Stop()
-            currentEmoteTrack:Destroy()
-            currentEmoteTrack = nil
-        end
-    end
-
-    local function isR15(character)
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if humanoid and humanoid.RigType == Enum.HumanoidRigType.R15 then
-            return true
-        end
-        return false
-    end
-
-    local function playEmote(id)
-        stopActiveEmote()
-        local character = LocalPlayer.Character
-        if not character then return end
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if not humanoid then return end
-        
-        local animation = Instance.new("Animation")
-        animation.AnimationId = "rbxassetid://" .. id
-        
-        local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid
-        local success, track = pcall(function()
-            return animator:LoadAnimation(animation)
-        end)
-        
-        if success and track then
-            currentEmoteTrack = track
-            currentEmoteTrack:Play()
-        end
-    end
-
     local function backupFDJ(c)
         local h = c:FindFirstChild("Humanoid")
         if h then
@@ -615,7 +556,25 @@ return function(env)
     end)
 
     Library:CreateToggle(Page, "No Jump Delay", false, function(state) 
-        -- Mantido sem alterações para compatibilidade
+        njdEnabledLocal = state
+        if state then
+            if LocalPlayer.Character then bindNJDLocal(LocalPlayer.Character) end
+            if not njdCharAdded then
+                njdCharAdded = LocalPlayer.CharacterAdded:Connect(function(c) bindNJDLocal(c) end)
+            end
+        else
+            if njdConnectionLocal then 
+                njdConnectionLocal:Disconnect() 
+                njdConnectionLocal = nil 
+            end
+            if njdCharAdded then
+                njdCharAdded:Disconnect()
+                njdCharAdded = nil
+            end
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                LocalPlayer.Character.Humanoid.WalkSpeed = checkNJD(LocalPlayer.Character) and 16.5 or 16
+            end
+        end
     end)
 
     Library:CreateToggle(Page, "Auto Tie Aura", false, function(state)
@@ -669,43 +628,12 @@ return function(env)
         autoTieDistancia = val
     end)
 
-    -- Runner Speed Boost adaptado com a lógica fornecida
     Library:CreateToggle(Page, "Runner Speed Boost", false, function(state)
-        runnerBoostEnabled = state
-        if runnerBoostConnection then
-            runnerBoostConnection:Disconnect()
-            runnerBoostConnection = nil
-        end
-        if state then
-            local ultimaEnergia = 1
-            runnerBoostConnection = RunService.Stepped:Connect(function()
-                pcall(function()
-                    local MeuPersonagem = LocalPlayer.Character
-                    if not MeuPersonagem then return end
-                    
-                    local beastPowers = MeuPersonagem:FindFirstChild("BeastPowers")
-                    if not beastPowers then return end
-                    
-                    local numberValue = beastPowers:FindFirstChildOfClass("NumberValue")
-                    if not numberValue then return end
-                    
-                    local energiaAtual = numberValue.Value
-                    
-                    if energiaAtual < ultimaEnergia then
-                        local Humanoid = MeuPersonagem:FindFirstChildWhichIsA("Humanoid")
-                        if Humanoid then
-                            Humanoid.WalkSpeed = runnerBoostVal
-                        end
-                    end
-                    
-                    ultimaEnergia = energiaAtual
-                end)
-            end)
-        end
+        -- Implementação futura do Runner Speed Boost
     end)
 
-    Library:CreateSlider(Page, "Runner Speed Boost Val", 16, 150, 26, function(val)
-        runnerBoostVal = val
+    Library:CreateSlider(Page, "Runner Speed Boost Val", 16, 150, 24, function(val)
+        -- Implementação futura do valor de Runner Speed
     end)
 
     Library:CreateToggle(Page, "Hit Aura", false, function(state)
@@ -788,25 +716,6 @@ return function(env)
     end)
 
     Library:CreateSection(Page, "Players Pt. 1")
-
-    -- Dropdown de Emotes posicionado como primeiro item da seção Players Pt. 1
-    Library:CreateDropdown(Page, "Emotes", {"None", "Dance 1", "Dance 2", "Dance 3", "Dance 4", "Dance 5", "Dance 6", "Wave (Acenar)", "Cheer (Torcer)"}, "None", function(val)
-        if val == "None" then
-            stopActiveEmote()
-        else
-            local data = emoteMap[val]
-            if data then
-                local character = LocalPlayer.Character
-                if character then
-                    if isR15(character) then
-                        playEmote(data.R15)
-                    else
-                        playEmote(data.R6)
-                    end
-                end
-            end
-        end
-    end)
 
     local wsCharAdded
     Library:CreateToggleKeybind(Page, "Walkspeed", false, "None", function(state) 
@@ -937,29 +846,12 @@ return function(env)
 
     Library:CreateSlider(Page, "Fly Speed", 10, 200, 50, function(val) flySpeed = val end)
 
-    -- Crawl Boost adaptado com valor padrão 6 e sua respectiva lógica
     Library:CreateToggle(Page, "Crawl Boost", false, function(state)
-        crawlBoostEnabled = state
-        if crawlBoostConnection then
-            crawlBoostConnection:Disconnect()
-            crawlBoostConnection = nil
-        end
-        if state then
-            crawlBoostConnection = RunService.RenderStepped:Connect(function()
-                local char = LocalPlayer.Character
-                local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-                
-                if humanoid then
-                    if humanoid.WalkSpeed > 1 and humanoid.WalkSpeed < 11 then
-                        humanoid.WalkSpeed = crawlBoostVal
-                    end
-                end
-            end)
-        end
+        -- Implementação futura do Crawl Boost Toggle
     end)
 
-    Library:CreateSlider(Page, "Crawl Boost Val", 1, 150, 6, function(val)
-        crawlBoostVal = val
+    Library:CreateSlider(Page, "Crawl Boost Val", 16, 150, 16, function(val)
+        -- Implementação futura do Crawl Boost Val
     end)
 
     Library:CreateSection(Page, "Players Pt. 2")
@@ -1241,5 +1133,9 @@ return function(env)
                 infJumpConnection = nil
             end
         end
+    end)
+
+    Library:CreateDropdown(Page, "Emotes", {"None", "Sit", "Dance", "Wave", "Point"}, "None", function(val)
+        -- Implementação futura do script de emotes
     end)
 end
