@@ -754,6 +754,134 @@ return function(env)
 
     Library:CreateSection(Page, "Players Pt. 1")
 
+    local wsCharAdded
+    Library:CreateToggleKeybind(Page, "Walkspeed", false, "None", function(state) 
+        wsEnabled = state 
+        if state then
+            if LocalPlayer.Character then BackupSpeed(LocalPlayer.Character) end
+            if not wsRunConnection then
+                wsRunConnection = RunService.Stepped:Connect(function()
+                    if wsEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                        local hum = LocalPlayer.Character.Humanoid
+                        if not originalWS[LocalPlayer.Character] then BackupSpeed(LocalPlayer.Character) end
+                        hum.WalkSpeed = wsValue
+                    end
+                end)
+            end
+            if not wsCharAdded then
+                wsCharAdded = LocalPlayer.CharacterAdded:Connect(function(char)
+                    char:WaitForChild("Humanoid", 5)
+                    if wsEnabled then BackupSpeed(char) end
+                end)
+            end
+        else
+            if wsRunConnection then wsRunConnection:Disconnect() wsRunConnection = nil end
+            if wsCharAdded then wsCharAdded:Disconnect() wsCharAdded = nil end
+            if LocalPlayer.Character then RestoreSpeed(LocalPlayer.Character) end
+        end
+    end)
+    Library:CreateSlider(Page, "Speed Value", 16, 200, 16, function(val) wsValue = val end)
+
+    local jpCharAdded
+    Library:CreateToggleKeybind(Page, "Jump Power", false, "None", function(state) 
+        jpEnabled = state 
+        if state then
+            if LocalPlayer.Character then BackupJump(LocalPlayer.Character) end
+            if not jpRunConnection then
+                jpRunConnection = RunService.Stepped:Connect(function()
+                    if jpEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                        local hum = LocalPlayer.Character.Humanoid
+                        if not originalJP[LocalPlayer.Character] then BackupJump(LocalPlayer.Character) end
+                        hum.UseJumpPower = true
+                        hum.JumpPower = jpVal
+                        hum.JumpHeight = jpVal / 2
+                    end
+                end)
+            end
+            if not jpCharAdded then
+                jpCharAdded = LocalPlayer.CharacterAdded:Connect(function(char)
+                    char:WaitForChild("Humanoid", 5)
+                    if jpEnabled then BackupJump(char) end
+                end)
+            end
+        else
+            if jpRunConnection then jpRunConnection:Disconnect() jpRunConnection = nil end
+            if jpCharAdded then jpCharAdded:Disconnect() jpCharAdded = nil end
+            if LocalPlayer.Character then RestoreJump(LocalPlayer.Character) end
+        end
+    end)
+    Library:CreateSlider(Page, "Jump Power Val", 50, 300, 120, function(val) jpVal = val end)
+
+    local flyConnection
+    local flyCharAdded
+    Library:CreateToggleKeybind(Page, "Fly", false, "None", function(state) 
+        flyEnabled = state
+        
+        local function setupFly(char)
+            if not char then return end
+            local hrp = char:WaitForChild("HumanoidRootPart", 5)
+            local hum = char:WaitForChild("Humanoid", 5)
+            if not hrp or not hum then return end
+            
+            if flyEnabled then
+                hum.PlatformStand = true
+                if flyBg then flyBg:Destroy() end
+                if flyBv then flyBv:Destroy() end
+                
+                flyBg = Instance.new("BodyGyro", hrp)
+                flyBg.P = 9e4
+                flyBg.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+                flyBg.CFrame = hrp.CFrame
+                flyBv = Instance.new("BodyVelocity", hrp)
+                flyBv.Velocity = Vector3.new(0, 0, 0)
+                flyBv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+            end
+        end
+
+        if state then
+            setupFly(LocalPlayer.Character)
+            if not flyCharAdded then
+                flyCharAdded = LocalPlayer.CharacterAdded:Connect(setupFly)
+            end
+            if not flyConnection then
+                flyConnection = RunService.RenderStepped:Connect(function()
+                    if flyEnabled and flyBg and flyBv and LocalPlayer.Character then
+                        local charHrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        local charHum = LocalPlayer.Character:FindFirstChild("Humanoid")
+                        if charHrp and charHum then
+                            charHum.PlatformStand = true
+                            flyBg.CFrame = CFrame.new(charHrp.Position, charHrp.Position + Camera.CFrame.LookVector)
+                            local moveDir = charHum.MoveDirection
+                            if moveDir.Magnitude > 0 then
+                                local camLook = Camera.CFrame.LookVector
+                                local camRight = Camera.CFrame.RightVector
+                                local flatLook = Vector3.new(camLook.X, 0, camLook.Z).Unit
+                                local flatRight = Vector3.new(camRight.X, 0, camRight.Z).Unit
+                                local forwardInput = moveDir:Dot(flatLook)
+                                local rightInput = moveDir:Dot(flatRight)
+                                local flyVelocity = (Camera.CFrame.LookVector * forwardInput) + (Camera.CFrame.RightVector * rightInput)
+                                flyBv.Velocity = flyVelocity.Unit * flySpeed
+                            else
+                                flyBv.Velocity = Vector3.new(0, 0, 0)
+                            end
+                        end
+                    end
+                end)
+            end
+        else
+            if flyConnection then flyConnection:Disconnect() flyConnection = nil end
+            if flyCharAdded then flyCharAdded:Disconnect() flyCharAdded = nil end
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then 
+                LocalPlayer.Character.Humanoid.PlatformStand = false 
+            end
+            if flyBg then flyBg:Destroy() flyBg = nil end
+            if flyBv then flyBv:Destroy() flyBv = nil end
+        end
+    end)
+    Library:CreateSlider(Page, "Fly Speed", 10, 200, 50, function(val) flySpeed = val end)
+
+    Library:CreateSection(Page, "Players Pt. 2")
+
     local fdjConnection = nil
     Library:CreateToggle(Page, "Fast Double Jump", false, function(state)
         local P = game:GetService("Players")
@@ -1036,132 +1164,4 @@ return function(env)
             end
         end
     end)
-
-    Library:CreateSection(Page, "Players Pt. 2")
-    
-    local wsCharAdded
-    Library:CreateToggleKeybind(Page, "Walkspeed", false, "None", function(state) 
-        wsEnabled = state 
-        if state then
-            if LocalPlayer.Character then BackupSpeed(LocalPlayer.Character) end
-            if not wsRunConnection then
-                wsRunConnection = RunService.Stepped:Connect(function()
-                    if wsEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                        local hum = LocalPlayer.Character.Humanoid
-                        if not originalWS[LocalPlayer.Character] then BackupSpeed(LocalPlayer.Character) end
-                        hum.WalkSpeed = wsValue
-                    end
-                end)
-            end
-            if not wsCharAdded then
-                wsCharAdded = LocalPlayer.CharacterAdded:Connect(function(char)
-                    char:WaitForChild("Humanoid", 5)
-                    if wsEnabled then BackupSpeed(char) end
-                end)
-            end
-        else
-            if wsRunConnection then wsRunConnection:Disconnect() wsRunConnection = nil end
-            if wsCharAdded then wsCharAdded:Disconnect() wsCharAdded = nil end
-            if LocalPlayer.Character then RestoreSpeed(LocalPlayer.Character) end
-        end
-    end)
-    Library:CreateSlider(Page, "Speed Value", 16, 200, 16, function(val) wsValue = val end)
-
-    local jpCharAdded
-    Library:CreateToggleKeybind(Page, "Jump Power", false, "None", function(state) 
-        jpEnabled = state 
-        if state then
-            if LocalPlayer.Character then BackupJump(LocalPlayer.Character) end
-            if not jpRunConnection then
-                jpRunConnection = RunService.Stepped:Connect(function()
-                    if jpEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                        local hum = LocalPlayer.Character.Humanoid
-                        if not originalJP[LocalPlayer.Character] then BackupJump(LocalPlayer.Character) end
-                        hum.UseJumpPower = true
-                        hum.JumpPower = jpVal
-                        hum.JumpHeight = jpVal / 2
-                    end
-                end)
-            end
-            if not jpCharAdded then
-                jpCharAdded = LocalPlayer.CharacterAdded:Connect(function(char)
-                    char:WaitForChild("Humanoid", 5)
-                    if jpEnabled then BackupJump(char) end
-                end)
-            end
-        else
-            if jpRunConnection then jpRunConnection:Disconnect() jpRunConnection = nil end
-            if jpCharAdded then jpCharAdded:Disconnect() jpCharAdded = nil end
-            if LocalPlayer.Character then RestoreJump(LocalPlayer.Character) end
-        end
-    end)
-    Library:CreateSlider(Page, "Jump Power Val", 50, 300, 120, function(val) jpVal = val end)
-
-    local flyConnection
-    local flyCharAdded
-    Library:CreateToggleKeybind(Page, "Fly", false, "None", function(state) 
-        flyEnabled = state
-        
-        local function setupFly(char)
-            if not char then return end
-            local hrp = char:WaitForChild("HumanoidRootPart", 5)
-            local hum = char:WaitForChild("Humanoid", 5)
-            if not hrp or not hum then return end
-            
-            if flyEnabled then
-                hum.PlatformStand = true
-                if flyBg then flyBg:Destroy() end
-                if flyBv then flyBv:Destroy() end
-                
-                flyBg = Instance.new("BodyGyro", hrp)
-                flyBg.P = 9e4
-                flyBg.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-                flyBg.CFrame = hrp.CFrame
-                flyBv = Instance.new("BodyVelocity", hrp)
-                flyBv.Velocity = Vector3.new(0, 0, 0)
-                flyBv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-            end
-        end
-
-        if state then
-            setupFly(LocalPlayer.Character)
-            if not flyCharAdded then
-                flyCharAdded = LocalPlayer.CharacterAdded:Connect(setupFly)
-            end
-            if not flyConnection then
-                flyConnection = RunService.RenderStepped:Connect(function()
-                    if flyEnabled and flyBg and flyBv and LocalPlayer.Character then
-                        local charHrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        local charHum = LocalPlayer.Character:FindFirstChild("Humanoid")
-                        if charHrp and charHum then
-                            charHum.PlatformStand = true
-                            flyBg.CFrame = CFrame.new(charHrp.Position, charHrp.Position + Camera.CFrame.LookVector)
-                            local moveDir = charHum.MoveDirection
-                            if moveDir.Magnitude > 0 then
-                                local camLook = Camera.CFrame.LookVector
-                                local camRight = Camera.CFrame.RightVector
-                                local flatLook = Vector3.new(camLook.X, 0, camLook.Z).Unit
-                                local flatRight = Vector3.new(camRight.X, 0, camRight.Z).Unit
-                                local forwardInput = moveDir:Dot(flatLook)
-                                local rightInput = moveDir:Dot(flatRight)
-                                local flyVelocity = (Camera.CFrame.LookVector * forwardInput) + (Camera.CFrame.RightVector * rightInput)
-                                flyBv.Velocity = flyVelocity.Unit * flySpeed
-                            else
-                                flyBv.Velocity = Vector3.new(0, 0, 0)
-                            end
-                        end
-                    end
-                end)
-            end
-        else
-            if flyConnection then flyConnection:Disconnect() flyConnection = nil end
-            if flyCharAdded then flyCharAdded:Disconnect() flyCharAdded = nil end
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then 
-                LocalPlayer.Character.Humanoid.PlatformStand = false 
-            end
-            if flyBg then flyBg:Destroy() flyBg = nil end
-            if flyBv then flyBv:Destroy() flyBv = nil end
-        end
-    end)
-    Library:CreateSlider(Page, "Fly Speed", 10, 200, 50, function(val) flySpeed = val end)
 end
