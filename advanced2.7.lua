@@ -755,6 +755,28 @@ return function(env)
     Library:CreateSection(Page, "Players Pt. 1")
 
     local fdjConnection = nil
+    local disabledScripts = {}
+
+    local function disableOriginalDoubleJump(c)
+        for _, scr in ipairs(c:GetDescendants()) do
+            if scr:IsA("LocalScript") and (scr.Name == "DoubleJump" or scr.Name:lower():find("doublejump")) then
+                scr.Disabled = true
+                disabledScripts[scr] = true
+            end
+        end
+    end
+
+    local function restoreOriginalDoubleJump()
+        for scr, _ in pairs(disabledScripts) do
+            pcall(function()
+                if scr and scr.Parent then
+                    scr.Disabled = false
+                end
+            end)
+        end
+        table.clear(disabledScripts)
+    end
+
     Library:CreateToggle(Page, "Fast Double Jump", false, function(state)
         local P = game:GetService("Players")
         local U = game:GetService("UserInputService")
@@ -860,8 +882,9 @@ return function(env)
 
             local function start(c)
                 task.spawn(function()
-                    task.wait(1)
+                    task.wait(0.5)
                     killJump(c)
+                    disableOriginalDoubleJump(c)
                 end)
 
                 local h=c:WaitForChild("Humanoid",5)
@@ -941,7 +964,13 @@ return function(env)
                 for _,x in pairs(getgenv().PulosOriginais)do pcall(function()x:Enable()end) end
             end
             getgenv().PulosOriginais={}
+
+            restoreOriginalDoubleJump()
         end
+    end)
+
+    Library:CreateDropdown(Page, "Emotes", {"None", "Sit", "Dance", "Wave", "Point"}, "None", function(val)
+        -- Implementação futura do script de emotes
     end)
     
     local wsCharAdded
@@ -1091,6 +1120,20 @@ return function(env)
                 noclipConnection:Disconnect()
                 noclipConnection = nil
             end
+            task.spawn(function()
+                for i = 1, 5 do
+                    pcall(function()
+                        if LocalPlayer.Character then
+                            for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+                                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                                    part.CanCollide = true
+                                end
+                            end
+                        end
+                    end)
+                    RunService.Stepped:Wait()
+                end
+            end)
         end
     end)
 
