@@ -27,16 +27,9 @@ return function(env)
     local hbLoop = nil
     local infJumpEnabled = false
     local infJumpConnection = nil
-    
-    -- Configuração do ShiftLock customizado
     local shiftlockEnabled = false
-    local shiftlockActive = false
     local ShiftLockCrosshair = nil
-    local slButton = nil
-    local controlConn = nil
     local userGameSettings = nil
-    local slCharAdded = nil
-
     local fastDoubleJumpConns = {}
     local disabledJumpConns = {}
     local fdjBackupState = {}
@@ -243,29 +236,6 @@ return function(env)
                 local targetTrans = hbShowVisual and 0.6 or 1
                 if hrp.Transparency ~= targetTrans then hrp.Transparency = targetTrans end
                 hrp.CanCollide = false
-            end
-        end
-    end
-
-    local function updateShiftlockState(active)
-        shiftlockActive = active
-        if active then
-            if ShiftLockCrosshair then ShiftLockCrosshair.Visible = true end
-            RunService:BindToRenderStep("FinalNailSync", Enum.RenderPriority.Camera.Value + 1, enforceOfficialSync)
-            if slButton then
-                slButton.ImageColor3 = Color3.fromRGB(0, 255, 150)
-            end
-        else
-            if ShiftLockCrosshair then ShiftLockCrosshair.Visible = false end
-            RunService:UnbindFromRenderStep("FinalNailSync")
-            pcall(function()
-                if userGameSettings then
-                    userGameSettings.RotationType = Enum.RotationType.MovementRelative
-                end
-            end)
-            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-            if slButton then
-                slButton.ImageColor3 = Color3.fromRGB(255, 255, 255)
             end
         end
     end
@@ -511,6 +481,9 @@ return function(env)
 
     Library:CreateSection(Page, "Beast")
 
+    local cameraOriginal = LocalPlayer.CameraMode
+    local beastCamInit = false
+
     Library:CreateToggle(Page, "Beast Camera Mode", false, function(state)
         getgenv().CamDModeEnabled = state
         if not state then
@@ -608,6 +581,16 @@ return function(env)
         end
     end)
 
+    local autoTieCrosshairEnabled = false
+    local lookSensitivity = 0.85
+    local function EstaOlhandoPara(raizAlvo)
+        if not Camera or not raizAlvo then return false end
+        local direcaoParaAlvo = (raizAlvo.Position - Camera.CFrame.Position).Unit
+        local direcaoOlhar = Camera.CFrame.LookVector
+        local dotProduct = direcaoOlhar:Dot(direcaoParaAlvo)
+        return dotProduct >= lookSensitivity
+    end
+
     Library:CreateToggle(Page, "Auto Tie at Crosshair", false, function(state)
         autoTieCrosshairEnabled = state
         if state then
@@ -651,6 +634,7 @@ return function(env)
         end
     end)
 
+    local autoTieAfterHit = false
     Library:CreateToggle(Page, "Auto Tie After Hit", false, function(state)
         autoTieAfterHit = state
         if state then
@@ -701,32 +685,7 @@ return function(env)
         end
     end)
 
-    local function checkNJD(c)
-        if not c then return false end
-        if c:FindFirstChildOfClass("Tool") then return true end
-        if c:FindFirstChild("Hammer") then return true end
-        local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
-        if stats and stats:FindFirstChild("IsBeast") and stats.IsBeast.Value == true then
-            return true
-        end
-        if c:FindFirstChild("BeastPowers") then
-            return true
-        end
-        return false
-    end
-
-    local function bindNJDLocal(c)
-        local h = c:WaitForChild("Humanoid", 5)
-        if not h then return end
-        njdBackupSpeed = checkNJD(c) and 16.5 or 16
-        njdConnectionLocal = h:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-            if njdEnabledLocal and h.WalkSpeed < njdBackupSpeed and checkNJD(c) then
-                h.WalkSpeed = njdBackupSpeed
-            end
-        end)
-    end
-
-    Library:CreateToggleKeybind(Page, "No Jump Delay", false, "None", function(state) 
+    Library:CreateToggle(Page, "No Jump Delay", false, function(state) 
         njdEnabledLocal = state
         if state then
             if LocalPlayer.Character then bindNJDLocal(LocalPlayer.Character) end
@@ -795,8 +754,47 @@ return function(env)
         end
     end)
 
+    Library:CreateSlider(Page, "Auto Tie Range", 5, 30, 15, function(val)
+        autoTieDistancia = val
+    end)
+
+    local runnerSpeedBoostEnabled = false
+    local runnerSpeedVal = 26
+    local conexaoRunnerBoost = nil
     Library:CreateToggle(Page, "Runner Speed Boost", false, function(state)
-        -- Vazio por enquanto
+        runnerSpeedBoostEnabled = state
+        if state then
+            local ultimaEnergia = 1
+            if conexaoRunnerBoost then conexaoRunnerBoost:Disconnect() end
+            conexaoRunnerBoost = RunService.Stepped:Connect(function()
+                pcall(function()
+                    local MeuPersonagem = LocalPlayer.Character
+                    if not MeuPersonagem then return end
+                    local beastPowers = MeuPersonagem:FindFirstChild("BeastPowers")
+                    if not beastPowers then return end
+                    local numberValue = beastPowers:FindFirstChildOfClass("NumberValue")
+                    if not numberValue then return end
+                    local energiaAtual = numberValue.Value
+                    
+                    if energiaAtual < ultimaEnergia then
+                        local Humanoid = MeuPersonagem:FindFirstChildWhichIsA("Humanoid")
+                        if Humanoid then
+                            Humanoid.WalkSpeed = runnerSpeedVal
+                        end
+                    end
+                    ultimaEnergia = energiaAtual
+                end)
+            end)
+        else
+            if conexaoRunnerBoost then
+                conexaoRunnerBoost:Disconnect()
+                conexaoRunnerBoost = nil
+            end
+        end
+    end)
+
+    Library:CreateSlider(Page, "Runner Speed Boost Val", 16, 150, 26, function(val)
+        runnerSpeedVal = val
     end)
 
     Library:CreateToggle(Page, "Hit Aura", false, function(state)
@@ -847,6 +845,10 @@ return function(env)
         end
     end)
 
+    Library:CreateSlider(Page, "Hit Aura Range", 5, 15, 10, function(val)
+        hitAuraRange = val
+    end)
+
     Library:CreateToggle(Page, "Hitbox Extender", false, function(state) 
         hbEnabled = state
         if state then 
@@ -868,25 +870,53 @@ return function(env)
         end 
     end)
 
+    Library:CreateInput(Page, "Hitbox Size", 2, function(val) hbSize = tonumber(val) or 2 end)
+
     Library:CreateToggle(Page, "Show Hitbox", false, function(state)
         hbShowVisual = state
     end)
 
-    Library:CreateSlider(Page, "Auto Tie Range", 5, 30, 15, function(val)
-        autoTieDistancia = val
-    end)
-
-    Library:CreateSlider(Page, "Hit Aura Range", 5, 15, 10, function(val)
-        hitAuraRange = val
-    end)
-
-    Library:CreateInput(Page, "Hitbox Size", 2, function(val) hbSize = tonumber(val) or 2 end)
-
-    Library:CreateSlider(Page, "Runner Speed Boost Val", 16, 150, 26, function(val)
-        -- Vazio por enquanto
-    end)
-
     Library:CreateSection(Page, "Players Pt. 1")
+
+    local emotesTable = {
+        ["Dance 1"] = {R6 = "27789359", R15 = "3333432454"},
+        ["Dance 2"] = {R6 = "30196114", R15 = "4555808220"},
+        ["Dance 3"] = {R6 = "248263260", R15 = "4049037604"},
+        ["Dance 4"] = {R6 = "45834924", R15 = "4555782893"},
+        ["Dance 5"] = {R6 = "33796059", R15 = "10214311282"},
+        ["Dance 6"] = {R6 = "28488254", R15 = "10714010337"},
+        ["Wave"]    = {R6 = "128777973", R15 = "507722262"},
+        ["Cheer"]   = {R6 = "129423030", R15 = "507710771"}
+    }
+    local currentTrack = nil
+    local function stopActiveEmote()
+        if currentTrack then
+            currentTrack:Stop()
+            currentTrack:Destroy()
+            currentTrack = nil
+        end
+    end
+    local function isR15(character)
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        return humanoid and humanoid.RigType == Enum.HumanoidRigType.R15
+    end
+    local function playEmote(id)
+        stopActiveEmote()
+        local character = LocalPlayer.Character
+        if not character then return end
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return end
+        local animation = Instance.new("Animation")
+        animation.AnimationId = "rbxassetid://" .. id
+        local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid
+        local success, track = pcall(function()
+            return animator:LoadAnimation(animation)
+        end)
+        if success and track then
+            currentTrack = track
+            currentTrack:Play()
+        end
+    end
 
     Library:CreateDropdown(Page, "Emotes", {"None", "Dance 1", "Dance 2", "Dance 3", "Dance 4", "Dance 5", "Dance 6", "Wave", "Cheer"}, "None", function(val)
         if val == "None" then
@@ -933,6 +963,8 @@ return function(env)
         end
     end)
 
+    Library:CreateSlider(Page, "Speed Value", 16, 200, 16, function(val) wsValue = val end)
+
     local jpCharAdded
     Library:CreateToggleKeybind(Page, "Jump Power", false, "None", function(state) 
         jpEnabled = state 
@@ -961,6 +993,8 @@ return function(env)
             if LocalPlayer.Character then RestoreJump(LocalPlayer.Character) end
         end
     end)
+
+    Library:CreateSlider(Page, "Jump Power Val", 50, 300, 120, function(val) jpVal = val end)
 
     local flyConnection
     local flyCharAdded
@@ -1029,6 +1063,8 @@ return function(env)
         end
     end)
 
+    Library:CreateSlider(Page, "Fly Speed", 10, 200, 50, function(val) flySpeed = val end)
+
     local crawlBoostEnabled = false
     local crawlBoostSpeed = 6
     local crawlConnection = nil
@@ -1053,13 +1089,7 @@ return function(env)
         end
     end)
 
-    Library:CreateSlider(Page, "Speed Value", 16, 200, 16, function(val) wsValue = val end)
-
-    Library:CreateSlider(Page, "Jump Power Val", 50, 300, 120, function(val) jpVal = val end)
-
-    Library:CreateSlider(Page, "Fly Speed", 10, 200, 50, function(val) flySpeed = val end)
-
-    Library:CreateSlider(Page, "Crawl Boost Val", 1, 50, 6, function(val)
+    Library:CreateSlider(Page, "Crawl Boost Val", 1, 150, 6, function(val)
         crawlBoostSpeed = val
     end)
 
@@ -1277,55 +1307,10 @@ return function(env)
         end
     end)
 
-    Library:CreateToggleKeybind(Page, "ShiftLock", false, "None", function(state)
+    local slCharAdded
+    Library:CreateToggle(Page, "ShiftLock", false, function(state)
         shiftlockEnabled = state
         if state then
-            if not slButton then
-                slButton = Instance.new("ImageButton")
-                slButton.Name = "ShiftLockMobileBtn"
-                slButton.Size = UDim2.new(0, 50, 0, 50)
-                slButton.Position = UDim2.new(0.8, 0, 0.4, 0)
-                slButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-                slButton.BackgroundTransparency = 0.5
-                slButton.Image = "rbxassetid://105987953182009"
-                slButton.ZIndex = 10000
-                Instance.new("UICorner", slButton).CornerRadius = UDim.new(0, 8)
-                
-                local stroke = Instance.new("UIStroke", slButton)
-                stroke.Color = Color3.fromRGB(80, 80, 80)
-                stroke.Thickness = 1.5
-
-                local dragStart, startPos, dragging = nil, nil, false
-                slButton.InputBegan:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                        dragStart = input.Position
-                        startPos = slButton.Position
-                        dragging = true
-                    end
-                end)
-                slButton.InputChanged:Connect(function(input)
-                    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
-                        local delta = input.Position - dragStart
-                        slButton.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-                    end
-                end)
-                slButton.InputEnded:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                        dragging = false
-                    end
-                end)
-                
-                slButton.MouseButton1Click:Connect(function()
-                    if shiftlockEnabled then
-                        updateShiftlockState(not shiftlockActive)
-                    end
-                end)
-                
-                slButton.Parent = LocalPlayer:WaitForChild("PlayerGui")
-            else
-                slButton.Visible = true
-            end
-
             if not ShiftLockCrosshair then
                 ShiftLockCrosshair = Instance.new("ImageLabel")
                 ShiftLockCrosshair.Name = "ShiftLockCrosshair"
@@ -1334,17 +1319,38 @@ return function(env)
                 ShiftLockCrosshair.Size = UDim2.new(0.04, 0, 0.04, 0) 
                 ShiftLockCrosshair.BackgroundTransparency = 1
                 ShiftLockCrosshair.Image = "rbxasset://textures/MouseLockedCursor.png"
+                ShiftLockCrosshair.Visible = true
                 ShiftLockCrosshair.ZIndex = 10
                 local aspect = Instance.new("UIAspectRatioConstraint")
                 aspect.AspectRatio = 1
                 aspect.Parent = ShiftLockCrosshair
-                ShiftLockCrosshair.Parent = LocalPlayer:WaitForChild("PlayerGui")
+                local sg = CoreGui:FindFirstChild("NexVoidHub") or LocalPlayer.PlayerGui:FindFirstChild("NexVoidHub")
+                ShiftLockCrosshair.Parent = sg 
+            else
+                ShiftLockCrosshair.Visible = true
             end
+            RunService:BindToRenderStep("FinalNailSync", Enum.RenderPriority.Camera.Value + 1, enforceOfficialSync)
             
-            updateShiftlockState(true)
+            if not slCharAdded then
+                slCharAdded = LocalPlayer.CharacterAdded:Connect(function(c)
+                    if shiftlockEnabled then
+                        RunService:UnbindFromRenderStep("FinalNailSync")
+                        task.wait(0.000005)
+                        RunService:BindToRenderStep("FinalNailSync", Enum.RenderPriority.Camera.Value + 1, enforceOfficialSync)
+                    end
+                end)
+            end
         else
-            updateShiftlockState(false)
-            if slButton then slButton.Visible = false end
+            if ShiftLockCrosshair then ShiftLockCrosshair.Visible = false end
+            RunService:UnbindFromRenderStep("FinalNailSync")
+            if slCharAdded then slCharAdded:Disconnect() slCharAdded = nil end
+            
+            pcall(function()
+                if userGameSettings then
+                    userGameSettings.RotationType = Enum.RotationType.MovementRelative
+                end
+            end)
+            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
         end
     end)
 
