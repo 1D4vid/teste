@@ -147,75 +147,6 @@ return function(env)
 
     Library:CreateSection(Page, "Survivor")
 
-    Library:CreateToggle(Page, "Auto Save (Teleport)", false, function(state)
-        getgenv().AutoHelpTeleport = state
-        if state then
-            task.spawn(function()
-                local helping = false
-                local oldCFrame = nil
-                local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
-
-                local function getRoot(character)
-                    if not character then return nil end
-                    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-                end
-
-                while getgenv().AutoHelpTeleport do
-                    task.wait(0.05)
-                    local meChar = LocalPlayer.Character
-                    local meRoot = getRoot(meChar)
-                    local myStats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
-                    
-                    if not meChar or not meRoot or not myStats then continue end
-
-                    local myHealth = myStats:FindFirstChild("Health")
-                    local myRagdoll = myStats:FindFirstChild("Ragdoll")
-                    local myCaptured = myStats:FindFirstChild("Captured")
-
-                    if myHealth and myHealth.Value <= 0 then continue end
-                    if myRagdoll and myRagdoll.Value then continue end
-                    if myCaptured and myCaptured.Value then continue end
-
-                    for _, alvo in pairs(Players:GetPlayers()) do
-                        if alvo == LocalPlayer or helping then continue end
-
-                        local alvoStats = alvo:FindFirstChild("TempPlayerStatsModule")
-                        local alvoCaptured = alvoStats and alvoStats:FindFirstChild("Captured")
-
-                        if alvoCaptured and alvoCaptured:IsA("BoolValue") and alvoCaptured.Value then
-                            local alvoChar = alvo.Character
-                            local alvoRoot = getRoot(alvoChar)
-
-                            if alvoRoot then
-                                helping = true
-                                oldCFrame = meRoot.CFrame
-
-                                repeat
-                                    task.wait(0.05)
-                                    local atualRoot = getRoot(LocalPlayer.Character)
-                                    if atualRoot then
-                                        atualRoot.CFrame = alvoRoot.CFrame * CFrame.new(0, -4.5, 0) * CFrame.Angles(math.rad(90), 0, 0)
-                                    end
-                                    RemoteEvent:FireServer("Input", "Action", true)
-                                    
-                                until not (alvoCaptured.Value and getgenv().AutoHelpTeleport) 
-                                   or (myRagdoll.Value or myCaptured.Value or myHealth.Value <= 0)
-
-                                if oldCFrame and LocalPlayer.Character then
-                                    LocalPlayer.Character:PivotTo(oldCFrame)
-                                end
-
-                                oldCFrame = nil
-                                helping = false
-                                break 
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-    end)
-
     Library:CreateToggle(Page, "Beast Untie Player", false, function(state)
         getgenv().BeastUntieLigado = state
         if state then
@@ -283,11 +214,55 @@ return function(env)
         end
     end)
 
+    Library:CreateToggle(Page, "Anti Ragdoll V2", false, function(state)
+        getgenv().AntiRagdollV2 = state
+        if state then
+            task.spawn(function()
+                while getgenv().AntiRagdollV2 do
+                    task.wait()
+                    pcall(function()
+                        local Character = LocalPlayer.Character
+                        local Humanoid = Character and Character:FindFirstChildWhichIsA("Humanoid")
+                        if Humanoid then
+                            Humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+                            Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                            Humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
+                            Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                            
+                            local currentState = Humanoid:GetState()
+                            if currentState == Enum.HumanoidStateType.Ragdoll or currentState == Enum.HumanoidStateType.Physics or currentState == Enum.HumanoidStateType.PlatformStanding then
+                                Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+                            end
+                        end
+                        
+                        local Stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+                        if Stats then
+                            local Ragdoll = Stats:FindFirstChild("Ragdoll")
+                            if Ragdoll and Ragdoll.Value then
+                                Ragdoll.Value = false
+                            end
+                        end
+                    end)
+                end
+            end)
+        else
+            pcall(function()
+                local Humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
+                if Humanoid then
+                    Humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+                    Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+                    Humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, true)
+                    Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+                end
+            end)
+        end
+    end)
+
     Library:CreateToggle(Page, "Slow Beast", false, function(state)
         getgenv().SlowBeastLigado = state
         if state then
             task.spawn(function()
-                local function ObterEventoMarretao()
+                local function ObterEventoMarretaao()
                     for _, player in pairs(Players:GetPlayers()) do
                         if player ~= LocalPlayer and player.Character then
                             if player.Character:FindFirstChild("BeastPowers") then
@@ -299,7 +274,7 @@ return function(env)
                 end
 
                 while getgenv().SlowBeastLigado do
-                    local eventoPoderes = ObterEventoMarretao()
+                    local eventoPoderes = ObterEventoMarretaao()
                     if eventoPoderes and eventoPoderes:IsA("RemoteEvent") then
                         pcall(function()
                             eventoPoderes:FireServer("Jumped")
@@ -476,7 +451,7 @@ return function(env)
         end
     end)
 
-    Library:CreateToggle(Page, "Auto Tie", false, function(state)
+    Library:CreateToggle(Page, "Auto Tie Aura", false, function(state)
         getgenv().AutoTieLigado = state
         if state then
             task.spawn(function()
@@ -522,8 +497,139 @@ return function(env)
             end)
         end
     end)
+
     Library:CreateSlider(Page, "Auto Tie Range", 5, 30, 15, function(val)
         autoTieDistancia = val
+    end)
+
+    local originalHipHeight = nil
+    Library:CreateToggle(Page, "Crawl Beast", false, function(state)
+        getgenv().CrawlBeast = state
+        pcall(function()
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                if state then
+                    originalHipHeight = hum.HipHeight
+                    hum.HipHeight = -1.2
+                else
+                    hum.HipHeight = originalHipHeight or 0
+                end
+            end
+        end)
+    end)
+
+    local runnerSpeedBoostEnabled = false
+    Library:CreateToggle(Page, "Runner Speed Boost", false, function(state)
+        runnerSpeedBoostEnabled = state
+        if state then
+            task.spawn(function()
+                while runnerSpeedBoostEnabled do
+                    task.wait(0.1)
+                    pcall(function()
+                        local char = LocalPlayer.Character
+                        local hum = char and char:FindFirstChildOfClass("Humanoid")
+                        if char and (char:FindFirstChild("BeastPowers") or char:FindFirstChild("Hammer")) then
+                            if hum and hum.WalkSpeed < 24 then
+                                hum.WalkSpeed = 24
+                            end
+                        end
+                    end)
+                end
+            end)
+        end
+    end)
+
+    local autoTieCrosshairEnabled = false
+    Library:CreateToggle(Page, "Auto Tie at Crosshair", false, function(state)
+        autoTieCrosshairEnabled = state
+        if state then
+            task.spawn(function()
+                while autoTieCrosshairEnabled do
+                    task.wait(0.15)
+                    pcall(function()
+                        local char = LocalPlayer.Character
+                        if not char then return end
+                        local hammerEvent = char:FindFirstChild("HammerEvent", true)
+                        local myRoot = char:FindFirstChild("HumanoidRootPart")
+                        if not hammerEvent or not myRoot then return end
+
+                        local cam = Workspace.CurrentCamera
+                        local bestTarget = nil
+                        local minAngle = math.huge
+
+                        for _, target in pairs(Players:GetPlayers()) do
+                            if target ~= LocalPlayer and target.Character then
+                                local stats = target:FindFirstChild("TempPlayerStatsModule")
+                                if stats then
+                                    local ragdoll = stats:FindFirstChild("Ragdoll")
+                                    local captured = stats:FindFirstChild("Captured")
+                                    if ragdoll and captured and ragdoll.Value == true and captured.Value == false then
+                                        local tRoot = target.Character:FindFirstChild("HumanoidRootPart") or target.Character:FindFirstChild("Torso")
+                                        if tRoot then
+                                            local dist = (tRoot.Position - myRoot.Position).Magnitude
+                                            if dist <= autoTieDistancia then
+                                                local screenPos, onScreen = cam:WorldToViewportPoint(tRoot.Position)
+                                                if onScreen then
+                                                    local center = cam.ViewportSize / 2
+                                                    local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                                                    if screenDist < minAngle then
+                                                        minAngle = screenDist
+                                                        bestTarget = tRoot
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+
+                        if bestTarget then
+                            hammerEvent:FireServer("HammerTieUp", bestTarget, bestTarget.Position)
+                        end
+                    end)
+                end
+            end)
+        end
+    end)
+
+    local autoTieAfterHit = false
+    Library:CreateToggle(Page, "Auto Tie After Hit", false, function(state)
+        autoTieAfterHit = state
+        if state then
+            task.spawn(function()
+                while autoTieAfterHit do
+                    RunService.Heartbeat:Wait()
+                    pcall(function()
+                        local char = LocalPlayer.Character
+                        if not char then return end
+                        local hammerEvent = char:FindFirstChild("HammerEvent", true)
+                        local myRoot = char:FindFirstChild("HumanoidRootPart")
+                        if not hammerEvent or not myRoot then return end
+
+                        for _, target in pairs(Players:GetPlayers()) do
+                            if target ~= LocalPlayer and target.Character then
+                                local stats = target:FindFirstChild("TempPlayerStatsModule")
+                                if stats then
+                                    local ragdoll = stats:FindFirstChild("Ragdoll")
+                                    local captured = stats:FindFirstChild("Captured")
+                                    if ragdoll and captured and ragdoll.Value == true and captured.Value == false then
+                                        local tRoot = target.Character:FindFirstChild("HumanoidRootPart") or target.Character:FindFirstChild("Torso")
+                                        if tRoot then
+                                            local dist = (tRoot.Position - myRoot.Position).Magnitude
+                                            if dist <= 8 then
+                                                hammerEvent:FireServer("HammerTieUp", tRoot, tRoot.Position)
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                end
+            end)
+        end
     end)
 
     Library:CreateToggle(Page, "Hit Aura", false, function(state)
@@ -573,6 +679,7 @@ return function(env)
             end)
         end
     end)
+    
     Library:CreateSlider(Page, "Hit Aura Range", 5, 15, 10, function(val)
         hitAuraRange = val
     end)
