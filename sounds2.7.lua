@@ -46,20 +46,24 @@ return function(env)
         {Name = "na na na", ID = "94884255368589"}
     }
 
-    -- Variaveis de controle para o Mute Sounds Beast
-    local MuteBeastEnabled = false
-    local MonitoredBeasts = setmetatable({}, {__mode = "k"})
-    local originalBeastVolumeBackup = setmetatable({}, {__mode = "k"})
-    local beastMuteConns = {}
-    local BeastMuteLoopThread = nil
+    -- Armas conhecidas da Beast no Flee the Facility
+    local BEAST_WEAPONS = {
+        "Hammer", "Gemstone Hammer", "Iron Hammer", "Mallet"
+    }
 
-    local BEAST_WEAPONS = {"Hammer", "Gemstone Hammer", "Iron Hammer", "Mallet"}
+    -- Sons de aviso gerados localmente pela engine do jogo
     local TARGET_WARNING_SOUNDS = {
         ["action"] = true,
         ["warning"] = true,
         ["heartbeat"] = true,
         ["terror"] = true
     }
+
+    -- Variaveis de Controle para a função Mute Sounds Beast
+    local MuteBeastEnabled = false
+    local MuteBeastConns = {}
+    local MuteBeastSignals = setmetatable({}, {__mode = "k"})
+    local MuteBeastOriginalVolumes = setmetatable({}, {__mode = "k"})
 
     -- Função auxiliar de Gradiente idêntica à do Hub Principal
     local function ApplyGradient(instance, color1, color2, rotation)
@@ -211,10 +215,29 @@ return function(env)
     
     local noHitSoundAddedConn = nil
 
-    -- Sincronizador de volume dos passos, pulos e quedas
+    -- Tabelas fracas e caches rápidos de alta performance para os Sliders de Volume
     local ActiveSounds = setmetatable({}, {__mode = "k"})
     local SoundCategories = setmetatable({}, {__mode = "k"})
     local originalVolumeBackup = setmetatable({}, {__mode = "k"})
+
+    -- Referências de volume estático para evitar o bug de travamento em volume 0
+    local BaseVolumes = {
+        Footsteps = 0.65,
+        Jump = 0.5,
+        Fall = 0.5
+    }
+
+    local function getSoundCategory(sound)
+        local name = sound.Name:lower()
+        if name:find("running") or name:find("walk") or name:find("step") then
+            return "Footsteps"
+        elseif name:find("jumping") or name:find("jump") then
+            return "Jump"
+        elseif name:find("landing") or name:find("fall") or name:find("land") then
+            return "Fall"
+        end
+        return nil
+    end
 
     local function registerSound(obj)
         if obj:IsA("Sound") then
@@ -231,6 +254,7 @@ return function(env)
     for _, obj in ipairs(Workspace:GetDescendants()) do registerSound(obj) end
     Workspace.DescendantAdded:Connect(registerSound)
 
+    -- Sincronizador de volumes otimizado utilizando volumes estáticos de referência
     task.spawn(function()
         while task.wait(0.3) do
             local enabled = VolumesEnabled
@@ -275,17 +299,17 @@ return function(env)
         end
     end)
 
-    -- Lógica de suporte para o Mute Sounds Beast
+    -- Lógica da Função Mute Sounds Beast (Rastreamento e silenciamento seguro)
     local function checkIsBeast(player)
-        if player.Team and player.Team.Name == "Beast" then return true end
-        
+        if player.Team and player.Team.Name == "Beast" then
+            return true
+        end
         local character = player.Character
         if character then
             for _, weapon in ipairs(BEAST_WEAPONS) do
                 if character:FindFirstChild(weapon) then return true end
             end
         end
-        
         local backpack = player:FindFirstChild("Backpack")
         if backpack then
             for _, weapon in ipairs(BEAST_WEAPONS) do
@@ -295,94 +319,97 @@ return function(env)
         return false
     end
 
-    local function handleBeastSoundMute(sound)
-        if not sound:IsA("Sound") then return end
-        
-        if MuteBeastEnabled then
-            if not originalBeastVolumeBackup[sound] then
-                originalBeastVolumeBackup[sound] = sound.Volume
+    local function applyAbsoluteMute(sound)
+        if not MuteBeastEnabled then return end
+        if sound:IsA("Sound") then
+            if not MuteBeastSignals[sound] then
+                MuteBeastOriginalVolumes[sound] = sound.Volume
+                sound.Volume = 0
+                
+                local sig
+                sig = sound:GetPropertyChangedSignal("Volume"):Connect(function()
+                    if MuteBeastEnabled and sound.Volume > 0 then
+                        sound.Volume = 0
+                    end
+                end)
+                MuteBeastSignals[sound] = sig
             end
-            sound.Volume = 0
-            
-            -- Listener para impedir que o jogo aumente o volume de volta
-            local con = sound:GetPropertyChangedSignal("Volume"):Connect(function()
-                if MuteBeastEnabled and sound.Volume > 0 then
-                    sound.Volume = 0
-                end
-            end)
-            table.insert(beastMuteConns, con)
         end
     end
 
-    local function checkGeneralSound(sound)
+    local function verifyGeneralSound(sound)
+        if not MuteBeastEnabled then return end
         if sound:IsA("Sound") then
             local nameLower = sound.Name:lower()
             if TARGET_WARNING_SOUNDS[nameLower] then
-                handleBeastSoundMute(sound)
+                applyAbsoluteMute(sound)
             end
         end
     end
 
     local function muteBeastCharacter(character)
-        if not character then return end
+        if not character or not MuteBeastEnabled then return end
         for _, desc in ipairs(character:GetDescendants()) do
-            if desc:IsA("Sound") then handleBeastSoundMute(desc) end
+            applyAbsoluteMute(desc)
         end
-        local con = character.DescendantAdded:Connect(function(desc)
-            if desc:IsA("Sound") then handleBeastSoundMute(desc) end
-        end)
-        table.insert(beastMuteConns, con)
+        local c = character.DescendantAdded:Connect(applyAbsoluteMute)
+        table.insert(MuteBeastConns, c)
     end
 
-    local function startBeastMute()
-        -- Silencia sons de aviso gerais existentes
-        for _, desc in ipairs(Workspace:GetDescendants()) do checkGeneralSound(desc) end
-        for _, desc in ipairs(SoundService:GetDescendants()) do checkGeneralSound(desc) end
-        
-        local c1 = Workspace.DescendantAdded:Connect(checkGeneralSound)
-        local c2 = SoundService.DescendantAdded:Connect(checkGeneralSound)
-        table.insert(beastMuteConns, c1)
-        table.insert(beastMuteConns, c2)
-
-        -- Loop de verificação ativa da Beast
-        BeastMuteLoopThread = task.spawn(function()
-            while MuteBeastEnabled do
-                for _, player in ipairs(Players:GetPlayers()) do
-                    if player.Character and checkIsBeast(player) then
-                        if not MonitoredBeasts[player] then
-                            MonitoredBeasts[player] = true
-                            muteBeastCharacter(player.Character)
-                            
-                            local charAddedConn = player.CharacterAdded:Connect(function(char)
-                                muteBeastCharacter(char)
-                            end)
-                            table.insert(beastMuteConns, charAddedConn)
+    local function toggleMuteBeast(state)
+        MuteBeastEnabled = state
+        if state then
+            for _, desc in ipairs(Workspace:GetDescendants()) do verifyGeneralSound(desc) end
+            for _, desc in ipairs(SoundService:GetDescendants()) do verifyGeneralSound(desc) end
+            
+            local c1 = Workspace.DescendantAdded:Connect(verifyGeneralSound)
+            local c2 = SoundService.DescendantAdded:Connect(verifyGeneralSound)
+            table.insert(MuteBeastConns, c1)
+            table.insert(MuteBeastConns, c2)
+            
+            local loopThread
+            loopThread = task.spawn(function()
+                local monitored = setmetatable({}, {__mode = "k"})
+                while MuteBeastEnabled do
+                    for _, player in ipairs(Players:GetPlayers()) do
+                        if player.Character and checkIsBeast(player) then
+                            if not monitored[player] then
+                                monitored[player] = true
+                                task.spawn(muteBeastCharacter, player.Character)
+                                
+                                local c = player.CharacterAdded:Connect(function(char)
+                                    task.spawn(muteBeastCharacter, char)
+                                end)
+                                table.insert(MuteBeastConns, c)
+                            end
                         end
                     end
+                    task.wait(1)
                 end
-                task.wait(1.5)
+            end)
+            table.insert(MuteBeastConns, loopThread)
+        else
+            for _, c in ipairs(MuteBeastConns) do
+                if typeof(c) == "RBXScriptConnection" then
+                    c:Disconnect()
+                elseif typeof(c) == "thread" then
+                    task.cancel(c)
+                end
             end
-        end)
-    end
-
-    local function stopBeastMute()
-        if BeastMuteLoopThread then
-            task.cancel(BeastMuteLoopThread)
-            BeastMuteLoopThread = nil
-        end
-        for _, conn in ipairs(beastMuteConns) do
-            if conn then conn:Disconnect() end
-        end
-        table.clear(beastMuteConns)
-        
-        -- Restaura volumes originais
-        for sound, origVol in pairs(originalBeastVolumeBackup) do
-            if sound and sound.Parent then
-                sound.Volume = origVol
+            table.clear(MuteBeastConns)
+            
+            for sound, sig in pairs(MuteBeastSignals) do
+                if sig then sig:Disconnect() end
             end
+            table.clear(MuteBeastSignals)
+            
+            for sound, origVol in pairs(MuteBeastOriginalVolumes) do
+                if sound and sound.Parent then
+                    pcall(function() sound.Volume = origVol end)
+                end
+            end
+            table.clear(MuteBeastOriginalVolumes)
         end
-        table.clear(originalBeastVolumeBackup)
-        table.clear(MonitoredBeasts)
     end
 
     -- =========================================================================
@@ -624,7 +651,6 @@ return function(env)
         BtnFrame.Size = UDim2.new(1, 0, 0, 30)
         BtnFrame.BackgroundTransparency = 1
         BtnFrame.Text = ""
-        BtnFrame.ZIndex = parent.ZIndex + 1
         BtnFrame.Parent = parent
         
         local Label = Instance.new("TextLabel")
@@ -653,6 +679,7 @@ return function(env)
     VolHeader.Name = "HeaderContainer"
     VolHeader.Size = UDim2.new(1, 0, 0, 20)
     VolHeader.BackgroundTransparency = 1
+    VolHeader.ZIndex = VolumeBlock.ZIndex + 1
     VolHeader.Parent = VolumeBlock
     
     local VolTitle = Instance.new("TextLabel")
@@ -762,15 +789,9 @@ return function(env)
         end
     end)
 
-    -- Mute Sounds Beast (Nova Opção Integrada)
+    -- Inserindo o novo modificador "Mute Sounds Beast" no bloco direito (Mute Settings)
     CreateCompactToggle(MuteBlock, "Mute Sounds Beast", false, function(state)
-        MuteBeastEnabled = state
-        UserConfigs["Vol_MuteBeastEnabled"] = state
-        if state then
-            startBeastMute()
-        else
-            stopBeastMute()
-        end
+        toggleMuteBeast(state)
     end)
 
     -- =========================================================================
