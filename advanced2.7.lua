@@ -39,43 +39,33 @@ return function(env)
     local hitAuraRange = 10
     local slowBeastAuraRange = 15 
 
-    -- Variáveis do Emote
+    -- Variáveis de controle de Emote integradas
     local currentEmoteTrack = nil
-    local emotesData = {
-        ["None"] = {R6 = "", R15 = ""},
-        ["Dance 1"] = {R6 = "27789359", R15 = "3333432454"},
-        ["Dance 2"] = {R6 = "30196114", R15 = "4555808220"},
-        ["Dance 3"] = {R6 = "248263260", R15 = "4049037604"},
-        ["Dance 4"] = {R6 = "45834924", R15 = "4555782893"},
-        ["Dance 5"] = {R6 = "33796059", R15 = "10214311282"},
-        ["Dance 6"] = {R6 = "28488254", R15 = "10714010337"},
+    local emotesMap = {
+        ["Dance"] = {R6 = "27789359", R15 = "3333432454"},
         ["Wave"] = {R6 = "128777973", R15 = "507722262"},
         ["Cheer"] = {R6 = "129423030", R15 = "507710771"},
+        ["Sit"] = {R6 = "30196114", R15 = "4555808220"},
+        ["Point"] = {R6 = "129423030", R15 = "507710771"}
     }
 
-    -- Variáveis do Auto Swim
-    local autoSwimEnabled = false
-    local autoSwimDisableTime = 5
+    -- Variáveis de controle de Auto Swim integradas no Anti Ragdoll V2
     local swimming = false
     local oldgrav = Workspace.Gravity
     local swimbeat = nil
     local lastHealth = 100
     local swimConnections = {}
 
-    -- Variáveis do Crawl Boost
+    -- Variáveis de controle de Crawl Boost integradas
     local crawlBoostEnabled = false
-    local crawlBoostVal = 22
+    local crawlBoostVal = 6
     local crawlBoostConnection = nil
 
-    -- Variáveis do Runner Speed Boost
+    -- Variáveis do Runner Speed Boost integradas
     local runnerBoostEnabled = false
-    local runnerBoostVal = 26
+    local runnerBoostVal = 24
     local runnerBoostConnection = nil
     local ultimaEnergiaRunner = 1
-
-    -- Variáveis do Auto Tie Facing
-    local autoTieFacingEnabled = false
-    local lookSensitivity = 0.85
 
     local function backupFDJ(c)
         local h = c:FindFirstChild("Humanoid")
@@ -217,7 +207,7 @@ return function(env)
         end
     end
 
-    -- Funções Auxiliares do Auto Swim
+    -- Funções Auxiliares de Natação (Auto Swim)
     local function unswim()
         if not swimming then return end
         swimming = false
@@ -247,7 +237,6 @@ return function(env)
         swimming = true
         
         if swimbeat then swimbeat:Disconnect() end
-        
         Humanoid:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
         for _, state in pairs(Enum.HumanoidStateType:GetEnumItems()) do
             if state ~= Enum.HumanoidStateType.None and state ~= Enum.HumanoidStateType.Swimming then
@@ -271,23 +260,20 @@ return function(env)
             end)
         end)
         
-        if autoSwimDisableTime and autoSwimDisableTime > 0 then
-            task.delay(autoSwimDisableTime, function()
-                if swimming then unswim() end
-            end)
-        end
+        task.delay(5, function()
+            if swimming then unswim() end
+        end)
     end
 
     local function monitorCharacterSwim(char)
         local hum = char:WaitForChild("Humanoid", 15)
         local hrp = char:WaitForChild("HumanoidRootPart", 15)
         if not hum or not hrp then return end
-        
         lastHealth = hum.Health
         
         local hpConnection = hum.HealthChanged:Connect(function(health)
             if health < lastHealth and health > 0 then
-                if not swimming and autoSwimEnabled then
+                if not swimming and getgenv().AntiRagdollV2 then
                     task.spawn(swim)
                 end
             end
@@ -303,21 +289,21 @@ return function(env)
             end
             local isRagdoll = hum.PlatformStand or hum:GetState() == Enum.HumanoidStateType.Physics
             local isDead = hum.Health <= 0
-            if isRagdoll and not isDead and not swimming and autoSwimEnabled then
+            if isRagdoll and not isDead and not swimming and getgenv().AntiRagdollV2 then
                 task.spawn(swim)
             end
         end)
         table.insert(swimConnections, stateConnection)
     end
 
-    -- Função Auxiliar do Auto Tie Facing
+    -- Função Auxiliar de Direção de Câmera
     local function EstaOlhandoPara(raizAlvo)
         local Camera = Workspace.CurrentCamera
         if not Camera or not raizAlvo then return false end
         local direcaoParaAlvo = (raizAlvo.Position - Camera.CFrame.Position).Unit
         local direcaoOlhar = Camera.CFrame.LookVector
         local dotProduct = direcaoOlhar:Dot(direcaoParaAlvo)
-        return dotProduct >= lookSensitivity
+        return dotProduct >= 0.85
     end
 
     Library:CreateSection(Page, "Survivor")
@@ -392,6 +378,15 @@ return function(env)
     Library:CreateToggle(Page, "Anti Ragdoll V2", false, function(state)
         getgenv().AntiRagdollV2 = state
         if state then
+            -- Ativação do Auto Swim atrelado ao monitoramento de Ragdoll
+            for _, conn in ipairs(swimConnections) do pcall(function() conn:Disconnect() end) end
+            table.clear(swimConnections)
+            if LocalPlayer.Character then
+                task.spawn(monitorCharacterSwim, LocalPlayer.Character)
+            end
+            local charConn = LocalPlayer.CharacterAdded:Connect(monitorCharacterSwim)
+            table.insert(swimConnections, charConn)
+
             task.spawn(function()
                 while getgenv().AntiRagdollV2 do
                     task.wait()
@@ -421,6 +416,10 @@ return function(env)
                 end
             end)
         else
+            for _, conn in ipairs(swimConnections) do pcall(function() conn:Disconnect() end) end
+            table.clear(swimConnections)
+            unswim()
+
             pcall(function()
                 local Humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
                 if Humanoid then
@@ -589,27 +588,6 @@ return function(env)
         slowBeastAuraRange = val
     end)
 
-    Library:CreateToggle(Page, "Auto Swim on Hit", false, function(state)
-        autoSwimEnabled = state
-        if state then
-            for _, conn in ipairs(swimConnections) do pcall(function() conn:Disconnect() end) end
-            table.clear(swimConnections)
-            if LocalPlayer.Character then
-                task.spawn(monitorCharacterSwim, LocalPlayer.Character)
-            end
-            local charConn = LocalPlayer.CharacterAdded:Connect(monitorCharacterSwim)
-            table.insert(swimConnections, charConn)
-        else
-            for _, conn in ipairs(swimConnections) do pcall(function() conn:Disconnect() end) end
-            table.clear(swimConnections)
-            unswim()
-        end
-    end)
-
-    Library:CreateSlider(Page, "Swim Auto Disable Time", 1, 20, 5, function(val)
-        autoSwimDisableTime = val
-    end)
-
     Library:CreateSection(Page, "Beast")
 
     Library:CreateToggle(Page, "Beast Camera Mode", false, function(state)
@@ -648,6 +626,8 @@ return function(env)
 
     Library:CreateToggle(Page, "Crawl Beast", false, function(state)
         getgenv().CrawlBeast = state
+        getgenv().AutoCrawlLigado = state
+
         pcall(function()
             local char = LocalPlayer.Character
             local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -660,10 +640,8 @@ return function(env)
                 end
             end
         end)
-    end)
 
-    Library:CreateToggle(Page, "Beast Auto Crawl & Vent Bypass", false, function(state)
-        getgenv().AutoCrawlLigado = state
+        -- Remoção de VentBlocks e remoção da restrição de engatinhar para a Fera
         if state then
             task.spawn(function()
                 local function RemoverVentBlocks()
@@ -723,13 +701,16 @@ return function(env)
                                         if tRoot then
                                             local dist = (tRoot.Position - myRoot.Position).Magnitude
                                             if dist <= autoTieDistancia then
-                                                local screenPos, onScreen = cam:WorldToViewportPoint(tRoot.Position)
-                                                if onScreen then
-                                                    local center = cam.ViewportSize / 2
-                                                    local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
-                                                    if screenDist < minAngle then
-                                                        minAngle = screenDist
-                                                        bestTarget = tRoot
+                                                -- Filtragem direcional baseada na câmera
+                                                if EstaOlhandoPara(tRoot) then
+                                                    local screenPos, onScreen = cam:WorldToViewportPoint(tRoot.Position)
+                                                    if onScreen then
+                                                        local center = cam.ViewportSize / 2
+                                                        local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                                                        if screenDist < minAngle then
+                                                            minAngle = screenDist
+                                                            bestTarget = tRoot
+                                                        end
                                                     end
                                                 end
                                             end
@@ -814,7 +795,7 @@ return function(env)
                     if not character then return nil end
                     return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
                 end
-                
+
                 local JaAmarrados = {}
 
                 while getgenv().AutoTieLigado do
@@ -866,51 +847,6 @@ return function(env)
         autoTieDistancia = val
     end)
 
-    Library:CreateToggle(Page, "Auto Tie (Camera Facing)", false, function(state)
-        autoTieFacingEnabled = state
-        if state then
-            task.spawn(function()
-                local function ObterRaiz(character)
-                    if not character then return nil end
-                    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-                end
-                while autoTieFacingEnabled do
-                    task.wait(0.1)
-                    pcall(function()
-                        local MeuPersonagem = LocalPlayer.Character
-                        if not MeuPersonagem then return end
-                        local MeuEventoMarreta = MeuPersonagem:FindFirstChild("HammerEvent", true)
-                        local MinhaRaiz = ObterRaiz(MeuPersonagem)
-                        if not MeuEventoMarreta or not MinhaRaiz then return end
-
-                        for _, alvo in pairs(Players:GetPlayers()) do
-                            if alvo ~= LocalPlayer and alvo.Character then
-                                local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
-                                if Stats then
-                                    local alvoCaido = Stats:FindFirstChild("Ragdoll")
-                                    local alvoCapturado = Stats:FindFirstChild("Captured")
-                                    if alvoCaido and alvoCapturado and alvoCaido.Value == true and alvoCapturado.Value == false then
-                                        local RaizAlvo = ObterRaiz(alvo.Character)
-                                        if RaizAlvo then
-                                            local distancia = (RaizAlvo.Position - MinhaRaiz.Position).Magnitude
-                                            if distancia <= autoTieDistancia and EstaOlhandoPara(RaizAlvo) then
-                                                MeuEventoMarreta:FireServer("HammerTieUp", RaizAlvo, RaizAlvo.Position)
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end)
-                end
-            end)
-        end
-    end)
-
-    Library:CreateSlider(Page, "Look Sensitivity", 50, 100, 85, function(val)
-        lookSensitivity = val / 100
-    end)
-
     Library:CreateToggle(Page, "Runner Speed Boost", false, function(state)
         runnerBoostEnabled = state
         if state then
@@ -940,7 +876,7 @@ return function(env)
         end
     end)
 
-    Library:CreateSlider(Page, "Runner Speed Boost Val", 16, 150, 26, function(val)
+    Library:CreateSlider(Page, "Runner Speed Boost Val", 16, 150, 24, function(val)
         runnerBoostVal = val
     end)
 
@@ -1025,11 +961,11 @@ return function(env)
 
     Library:CreateSection(Page, "Players Pt. 1")
 
-    Library:CreateDropdown(Page, "Emotes", {"None", "Dance 1", "Dance 2", "Dance 3", "Dance 4", "Dance 5", "Dance 6", "Wave", "Cheer"}, "None", function(val)
+    Library:CreateDropdown(Page, "Emotes", {"None", "Sit", "Dance", "Wave", "Point"}, "None", function(val)
         if val == "None" then
             stopActiveEmote()
         else
-            local animData = emotesData[val]
+            local animData = emotesMap[val]
             if animData then
                 local character = LocalPlayer.Character
                 if character then
@@ -1193,7 +1129,7 @@ return function(env)
         end
     end)
 
-    Library:CreateSlider(Page, "Crawl Boost Val", 16, 150, 22, function(val)
+    Library:CreateSlider(Page, "Crawl Boost Val", 6, 150, 6, function(val)
         crawlBoostVal = val
     end)
 
