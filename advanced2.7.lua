@@ -363,10 +363,6 @@ return function(env)
         end
     end)
 
-    Library:CreateSlider(Page, "Slow Beast Aura Range", 5, 30, 15, function(val)
-        slowBeastAuraRange = val
-    end)
-
     Library:CreateToggle(Page, "Touch Fling", false, function(state)
         getgenv().TouchFlingEnabled = state
         if state then
@@ -414,10 +410,11 @@ return function(env)
         end
     end)
 
-    Library:CreateSection(Page, "Beast")
+    Library:CreateSlider(Page, "Slow Beast Aura Range", 5, 30, 15, function(val)
+        slowBeastAuraRange = val
+    end)
 
-    local cameraOriginal = LocalPlayer.CameraMode
-    local beastCamInit = false
+    Library:CreateSection(Page, "Beast")
 
     Library:CreateToggle(Page, "Beast Camera Mode", false, function(state)
         getgenv().CamDModeEnabled = state
@@ -500,11 +497,6 @@ return function(env)
         end
     end)
 
-    Library:CreateSlider(Page, "Auto Tie Range", 5, 30, 15, function(val)
-        autoTieDistancia = val
-    end)
-
-    local originalHipHeight = nil
     Library:CreateToggle(Page, "Crawl Beast", false, function(state)
         getgenv().CrawlBeast = state
         pcall(function()
@@ -521,11 +513,10 @@ return function(env)
         end)
     end)
 
-    Library:CreateSlider(Page, "Runner Speed Boost", 16, 150, 24, function(val)
-        -- Implementação futura do Runner Speed Boost
+    Library:CreateToggle(Page, "Runner Speed Boost", false, function(state)
+        -- Implementação futura do Runner Speed Boost Toggle
     end)
 
-    local autoTieCrosshairEnabled = false
     Library:CreateToggle(Page, "Auto Tie at Crosshair", false, function(state)
         autoTieCrosshairEnabled = state
         if state then
@@ -579,7 +570,6 @@ return function(env)
         end
     end)
 
-    local autoTieAfterHit = false
     Library:CreateToggle(Page, "Auto Tie After Hit", false, function(state)
         autoTieAfterHit = state
         if state then
@@ -664,10 +654,6 @@ return function(env)
             end)
         end
     end)
-    
-    Library:CreateSlider(Page, "Hit Aura Range", 5, 15, 10, function(val)
-        hitAuraRange = val
-    end)
 
     Library:CreateToggle(Page, "Hitbox Extender", false, function(state) 
         hbEnabled = state
@@ -689,31 +675,10 @@ return function(env)
             end 
         end 
     end)
-    Library:CreateInput(Page, "Hitbox Size", 2, function(val) hbSize = tonumber(val) or 2 end)
+
     Library:CreateToggle(Page, "Show Hitbox", false, function(state)
         hbShowVisual = state
     end)
-
-    local njdEnabledLocal = false
-    local njdConnectionLocal = nil
-    local njdBackupSpeed = 16
-    local njdCharAdded = nil
-    local function checkNJD(c)
-        if not c then return false end
-        if c:FindFirstChildOfClass("Tool") then return true end
-        if c:FindFirstChild("Hammer") then return true end
-        return false
-    end
-    local function bindNJDLocal(c)
-        local h = c:WaitForChild("Humanoid", 5)
-        if not h then return end
-        njdBackupSpeed = checkNJD(c) and 16.5 or 16
-        njdConnectionLocal = h:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-            if njdEnabledLocal and h.WalkSpeed < njdBackupSpeed and checkNJD(c) then
-                h.WalkSpeed = njdBackupSpeed
-            end
-        end)
-    end
 
     Library:CreateToggle(Page, "No Jump Delay", false, function(state) 
         njdEnabledLocal = state
@@ -735,6 +700,20 @@ return function(env)
                 LocalPlayer.Character.Humanoid.WalkSpeed = checkNJD(LocalPlayer.Character) and 16.5 or 16
             end
         end
+    end)
+
+    Library:CreateSlider(Page, "Auto Tie Range", 5, 30, 15, function(val)
+        autoTieDistancia = val
+    end)
+
+    Library:CreateSlider(Page, "Hit Aura Range", 5, 15, 10, function(val)
+        hitAuraRange = val
+    end)
+
+    Library:CreateInput(Page, "Hitbox Size", 2, function(val) hbSize = tonumber(val) or 2 end)
+
+    Library:CreateSlider(Page, "Runner Speed Boost Val", 16, 150, 24, function(val)
+        -- Implementação futura do valor de Runner Speed
     end)
 
     Library:CreateSection(Page, "Players Pt. 1")
@@ -765,7 +744,6 @@ return function(env)
             if LocalPlayer.Character then RestoreSpeed(LocalPlayer.Character) end
         end
     end)
-    Library:CreateSlider(Page, "Speed Value", 16, 200, 16, function(val) wsValue = val end)
 
     local jpCharAdded
     Library:CreateToggleKeybind(Page, "Jump Power", false, "None", function(state) 
@@ -795,7 +773,6 @@ return function(env)
             if LocalPlayer.Character then RestoreJump(LocalPlayer.Character) end
         end
     end)
-    Library:CreateSlider(Page, "Jump Power Val", 50, 300, 120, function(val) jpVal = val end)
 
     local flyConnection
     local flyCharAdded
@@ -863,10 +840,19 @@ return function(env)
             if flyBv then flyBv:Destroy() flyBv = nil end
         end
     end)
+
+    Library:CreateToggle(Page, "Crawl Boost", false, function(state)
+        -- Implementação futura do Crawl Boost Toggle
+    end)
+
+    Library:CreateSlider(Page, "Speed Value", 16, 200, 16, function(val) wsValue = val end)
+
+    Library:CreateSlider(Page, "Jump Power Val", 50, 300, 120, function(val) jpVal = val end)
+
     Library:CreateSlider(Page, "Fly Speed", 10, 200, 50, function(val) flySpeed = val end)
 
-    Library:CreateSlider(Page, "Crawl Boost", 16, 150, 16, function(val)
-        -- Implementação futura do Crawl Boost
+    Library:CreateSlider(Page, "Crawl Boost Val", 16, 150, 16, function(val)
+        -- Implementação futura do Crawl Boost Val
     end)
 
     Library:CreateSection(Page, "Players Pt. 2")
@@ -1061,10 +1047,6 @@ return function(env)
         end
     end)
 
-    Library:CreateDropdown(Page, "Emotes", {"None", "Sit", "Dance", "Wave", "Point"}, "None", function(val)
-        -- Implementação futura do script de emotes
-    end)
-
     local noclipConnection
     Library:CreateToggleKeybind(Page, "Noclip", false, "None", function(state) 
         if state then
@@ -1152,5 +1134,9 @@ return function(env)
                 infJumpConnection = nil
             end
         end
+    end)
+
+    Library:CreateDropdown(Page, "Emotes", {"None", "Sit", "Dance", "Wave", "Point"}, "None", function(val)
+        -- Implementação futura do script de emotes
     end)
 end
