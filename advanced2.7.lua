@@ -42,10 +42,10 @@ return function(env)
     local hitAuraRange = 10
     local slowBeastAuraRange = 15 
 
-    -- Beast Untie Variables
-    local untieMode = "All"
+    -- Beast Untie Variables (Separated Features)
+    local beastUntieAllEnabled = false
+    local beastUntieSpecificEnabled = false
     local untieTargetPlayer = "Select Player"
-    local beastUntieEnabled = false
 
     -- Variáveis e conexões do No Jump Delay (NJD)
     local njdEnabledLocal = false
@@ -289,16 +289,9 @@ return function(env)
 
     Library:CreateSection(Page, "Survivor")
 
-    Library:CreateDropdown(Page, "Untie Mode", {"All", "Specific Player"}, "All", function(val)
-        untieMode = val
-    end)
-
-    Library:CreatePlayerDropdown(Page, "Select Player to Untie", "Select Player", function(val)
-        untieTargetPlayer = val
-    end)
-
+    -- 1. Untie All (Liga-Desliga Geral)
     Library:CreateToggle(Page, "Beast Untie Player", false, function(state)
-        beastUntieEnabled = state
+        beastUntieAllEnabled = state
         if state then
             task.spawn(function()
                 local function ObterEventoMarreta()
@@ -312,24 +305,52 @@ return function(env)
                     return nil
                 end
 
-                while beastUntieEnabled do
+                while beastUntieAllEnabled do
                     local shouldUntie = false
-                    
-                    if untieMode == "All" then
-                        for _, p in ipairs(Players:GetPlayers()) do
-                            if p ~= LocalPlayer and isPlayerTied(p) then
-                                shouldUntie = true
-                                break
-                            end
-                        end
-                    elseif untieMode == "Specific Player" then
-                        local target = Players:FindFirstChild(untieTargetPlayer)
-                        if target and isPlayerTied(target) then
+                    for _, p in ipairs(Players:GetPlayers()) do
+                        if p ~= LocalPlayer and isPlayerTied(p) then
                             shouldUntie = true
+                            break
                         end
                     end
 
                     if shouldUntie then
+                        local eventoMarreta = ObterEventoMarreta()
+                        if eventoMarreta and eventoMarreta:IsA("RemoteEvent") then
+                            pcall(function()
+                                eventoMarreta:FireServer("HammerClick", true)
+                            end)
+                        end
+                    end
+                    task.wait(0.05) 
+                end
+            end)
+        end
+    end)
+
+    -- 2. Untie Specific Player (Dropdown & Toggle Separados)
+    Library:CreatePlayerDropdown(Page, "Select Player to Untie", "Select Player", function(val)
+        untieTargetPlayer = val
+    end)
+
+    Library:CreateToggle(Page, "Untie Specific Player", false, function(state)
+        beastUntieSpecificEnabled = state
+        if state then
+            task.spawn(function()
+                local function ObterEventoMarreta()
+                    for _, player in pairs(Players:GetPlayers()) do
+                        if player ~= LocalPlayer and player.Character then
+                            if player.Character:FindFirstChild("Hammer") then
+                                return player.Character:FindFirstChild("HammerEvent", true)
+                            end
+                        end
+                    end
+                    return nil
+                end
+
+                while beastUntieSpecificEnabled do
+                    local target = Players:FindFirstChild(untieTargetPlayer)
+                    if target and isPlayerTied(target) then
                         local eventoMarreta = ObterEventoMarreta()
                         if eventoMarreta and eventoMarreta:IsA("RemoteEvent") then
                             pcall(function()
@@ -943,15 +964,15 @@ return function(env)
         end 
     end)
 
-    Library:CreateSlider(Page, "Hitbox X", 2, 30, 2, function(val)
+    Library:CreateSlider(Page, "Hitbox X", 2, 10, 2, function(val)
         hbSizeX = val
     end)
 
-    Library:CreateSlider(Page, "Hitbox Y", 2, 30, 2, function(val)
+    Library:CreateSlider(Page, "Hitbox Y", 2, 10, 2, function(val)
         hbSizeY = val
     end)
 
-    Library:CreateSlider(Page, "Hitbox Z", 2, 30, 2, function(val)
+    Library:CreateSlider(Page, "Hitbox Z", 2, 10, 2, function(val)
         hbSizeZ = val
     end)
 
