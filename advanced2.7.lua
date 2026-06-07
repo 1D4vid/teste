@@ -1002,8 +1002,6 @@ return function(env)
     end)
     Library:CreateSlider(Page, "Jump Power Val", 50, 300, 120, function(val) jpVal = val end)
 
-    Library:CreateSection(Page, "Players Pt. 2")
-
     local flyConnection
     local flyCharAdded
     Library:CreateToggleKeybind(Page, "Fly", false, "None", function(state) 
@@ -1071,6 +1069,8 @@ return function(env)
         end
     end)
     Library:CreateSlider(Page, "Fly Speed", 10, 200, 50, function(val) flySpeed = val end)
+
+    Library:CreateSection(Page, "Players Pt. 2")
     
     local noclipConnection
     Library:CreateToggleKeybind(Page, "Noclip", false, "None", function(state) 
