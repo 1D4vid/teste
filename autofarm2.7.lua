@@ -13,8 +13,8 @@ return function(env)
     local RunService = game:GetService("RunService")
     local StarterGui = game:GetService("StarterGui")
 
-    -- Remotes comuns necessários em escopo global
-    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
+    -- Remotes comuns necessários obtidos de forma não-bloqueante (Bypass para outros jogos)
+    local RemoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent", 1)
 
     -- Otimizações de performance (Micro-optimizations)
     local Vector3_new = Vector3.new
@@ -267,7 +267,8 @@ return function(env)
 
         local function GetMapObjects()
             local Result = {Computers = {}, ExitDoors = {}}
-            local currentMapVal = ReplicatedStorage.CurrentMap.Value
+            local currentMapObj = ReplicatedStorage:FindFirstChild("CurrentMap")
+            local currentMapVal = currentMapObj and currentMapObj.Value
             if currentMapVal then
                 local children = currentMapVal:GetChildren()
                 for i = 1, #children do
@@ -480,7 +481,7 @@ return function(env)
                             local AmtTriggers = 3
 
                             for i3 = 1, #Triggers do
-                                RunningVal = Triggers[i3]
+                                local RunningVal = Triggers[i3]
                                 if RunningVal and RunningVal.ActionSign.Value ~= 20 then
                                     AmtTriggers = AmtTriggers - 1
                                 end
@@ -745,7 +746,8 @@ return function(env)
                 end
 
                 -- Monitora a contagem de computadores, mas respeita a espera do teletransporte caso mude de estado
-                local CurrentMap = ReplicatedStorage.CurrentMap.Value
+                local currentMapObj = ReplicatedStorage:FindFirstChild("CurrentMap")
+                local CurrentMap = currentMapObj and currentMapObj.Value
                 if CurrentMap then
                     local GotComputers = 0
                     local children = CurrentMap:GetChildren()
@@ -842,8 +844,9 @@ return function(env)
         if state then
             fly_StartBackgroundLoop()
             
-            if not fly_MapConnection then
-                fly_MapConnection = ReplicatedStorage.CurrentMap.Changed:Connect(function(newMap)
+            local currentMapObj = ReplicatedStorage:FindFirstChild("CurrentMap")
+            if currentMapObj and not fly_MapConnection then
+                fly_MapConnection = currentMapObj.Changed:Connect(function(newMap)
                     if newMap and fly_AutoFarmEnabled and not fly_onsurvivorfarm then
                         if fly_AmIBeast() then return end
                         
@@ -1079,7 +1082,7 @@ return function(env)
     -- =========================================================================
     -- DETECTORES DO AUTO FARM TELEPORT CLASSIC E OUTROS LOOPS DE SUPORTE
     -- =========================================================================
-    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive")
+    local IsGameActive = ReplicatedStorage:WaitForChild("IsGameActive", 1)
 
     -- [[ ANTI AFK LOOP ]] --
     task.spawn(function()
@@ -1099,7 +1102,7 @@ return function(env)
     task.spawn(function()
         while true do
             task.wait(0.5) -- Loop leve executado a cada 0.5 segundos
-            if getgenv().AutoWinBeast and IsGameActive.Value then
+            if getgenv().AutoWinBeast and IsGameActive and IsGameActive.Value then
                 pcall(function()
                     local char = LocalPlayer.Character
                     local backpack = LocalPlayer:FindFirstChild("Backpack")
@@ -1126,7 +1129,7 @@ return function(env)
             task.wait(0.1) 
             if getgenv().AutoWinBeast then
                 pcall(function()
-                    if not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
+                    if not IsGameActive or not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
                     
                     local MeuPersonagem = LocalPlayer.Character
                     local MinhaRaiz = ObterRaiz(MeuPersonagem)
@@ -1165,7 +1168,7 @@ return function(env)
             task.wait(0.1)
             if getgenv().AutoWinBeast then
                 pcall(function()
-                    if not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
+                    if not IsGameActive or not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
 
                     local MeuPersonagem = LocalPlayer.Character
                     local MeuEventoMarreta = MeuPersonagem and MeuPersonagem:FindFirstChild("HammerEvent", true)
@@ -1208,7 +1211,7 @@ return function(env)
             task.wait(0.1)
             if getgenv().AutoWinBeast then
                 pcall(function()
-                    if not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
+                    if not IsGameActive or not IsGameActive.Value or not LocalPlayer:FindFirstChild("TempPlayerStatsModule") then return end
 
                     local MeuPersonagem = LocalPlayer.Character
                     if not MeuPersonagem:FindFirstChild("HammerEvent", true) then return end
@@ -1308,7 +1311,7 @@ return function(env)
             local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
             
             if not stats then 
-                if IsGameActive.Value == true then
+                if IsGameActive and IsGameActive.Value == true then
                     return true 
                 else
                     getgenv().EscapouDaPartida = true
@@ -1500,7 +1503,7 @@ return function(env)
             while true do
                 if getgenv().NexVoidLigado then
                     pcall(function() 
-                        if IsGameActive.Value == true then
+                        if IsGameActive and IsGameActive.Value == true then
                             if not getgenv().FarmRodando and not getgenv().EscapouDaPartida and not getgenv().SouBeastNessaRodada then
                                 getgenv().FarmRodando = true
                                 Alertar("NexVoid System", "Auto Farm initialized. Waiting for round.", 5)
