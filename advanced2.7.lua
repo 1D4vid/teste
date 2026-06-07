@@ -145,7 +145,7 @@ return function(env)
         end
     end
 
-    Library:CreateSection(Page, "Survivor")
+    Library:CreateSection(Page, "Survivorasas")
 
     Library:CreateToggle(Page, "Beast Untie Player", false, function(state)
         getgenv().BeastUntieLigado = state
@@ -451,108 +451,15 @@ return function(env)
     end)
 
     Library:CreateToggle(Page, "Crawl Beast", false, function(state)
-        getgenv().CrawlBeast = state
-        pcall(function()
-            local char = LocalPlayer.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if hum then
-                if state then
-                    originalHipHeight = hum.HipHeight
-                    hum.HipHeight = -1.2
-                else
-                    hum.HipHeight = originalHipHeight or 0
-                end
-            end
-        end)
+        -- Vazio por enquanto
     end)
 
     Library:CreateToggle(Page, "Auto Tie at Crosshair", false, function(state)
-        autoTieCrosshairEnabled = state
-        if state then
-            task.spawn(function()
-                while autoTieCrosshairEnabled do
-                    task.wait(0.15)
-                    pcall(function()
-                        local char = LocalPlayer.Character
-                        if not char then return end
-                        local hammerEvent = char:FindFirstChild("HammerEvent", true)
-                        local myRoot = char:FindFirstChild("HumanoidRootPart")
-                        if not hammerEvent or not myRoot then return end
-
-                        local cam = Workspace.CurrentCamera
-                        local bestTarget = nil
-                        local minAngle = math.huge
-
-                        for _, target in pairs(Players:GetPlayers()) do
-                            if target ~= LocalPlayer and target.Character then
-                                local stats = target:FindFirstChild("TempPlayerStatsModule")
-                                if stats then
-                                    local ragdoll = stats:FindFirstChild("Ragdoll")
-                                    local captured = stats:FindFirstChild("Captured")
-                                    if ragdoll and captured and ragdoll.Value == true and captured.Value == false then
-                                        local tRoot = target.Character:FindFirstChild("HumanoidRootPart") or target.Character:FindFirstChild("Torso")
-                                        if tRoot then
-                                            local dist = (tRoot.Position - myRoot.Position).Magnitude
-                                            if dist <= autoTieDistancia then
-                                                local screenPos, onScreen = cam:WorldToViewportPoint(tRoot.Position)
-                                                if onScreen then
-                                                    local center = cam.ViewportSize / 2
-                                                    local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
-                                                    if screenDist < minAngle then
-                                                        minAngle = screenDist
-                                                        bestTarget = tRoot
-                                                    end
-                                                end
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-
-                        if bestTarget then
-                            hammerEvent:FireServer("HammerTieUp", bestTarget, bestTarget.Position)
-                        end
-                    end)
-                end
-            end)
-        end
+        -- Vazio por enquanto
     end)
 
     Library:CreateToggle(Page, "Auto Tie After Hit", false, function(state)
-        autoTieAfterHit = state
-        if state then
-            task.spawn(function()
-                while autoTieAfterHit do
-                    RunService.Heartbeat:Wait()
-                    pcall(function()
-                        local char = LocalPlayer.Character
-                        if not char then return end
-                        local hammerEvent = char:FindFirstChild("HammerEvent", true)
-                        local myRoot = char:FindFirstChild("HumanoidRootPart")
-                        if not hammerEvent or not myRoot then return end
-
-                        for _, target in pairs(Players:GetPlayers()) do
-                            if target ~= LocalPlayer and target.Character then
-                                local stats = target:FindFirstChild("TempPlayerStatsModule")
-                                if stats then
-                                    local ragdoll = stats:FindFirstChild("Ragdoll")
-                                    if ragdoll.Value == true then
-                                        local tRoot = target.Character:FindFirstChild("HumanoidRootPart") or target.Character:FindFirstChild("Torso")
-                                        if tRoot then
-                                            local dist = (tRoot.Position - myRoot.Position).Magnitude
-                                            if dist <= 8 then
-                                                hammerEvent:FireServer("HammerTieUp", tRoot, tRoot.Position)
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end)
-                end
-            end)
-        end
+        -- Vazio por enquanto
     end)
 
     Library:CreateToggle(Page, "No Jump Delay", false, function(state) 
@@ -629,11 +536,11 @@ return function(env)
     end)
 
     Library:CreateToggle(Page, "Runner Speed Boost", false, function(state)
-        -- Implementação futura do Runner Speed Boost
+        -- Vazio por enquanto
     end)
 
     Library:CreateSlider(Page, "Runner Speed Boost Val", 16, 150, 24, function(val)
-        -- Implementação futura do valor de Runner Speed
+        -- Vazio por enquanto
     end)
 
     Library:CreateToggle(Page, "Hit Aura", false, function(state)
@@ -847,11 +754,11 @@ return function(env)
     Library:CreateSlider(Page, "Fly Speed", 10, 200, 50, function(val) flySpeed = val end)
 
     Library:CreateToggle(Page, "Crawl Boost", false, function(state)
-        -- Implementação futura do Crawl Boost Toggle
+        -- Vazio por enquanto
     end)
 
     Library:CreateSlider(Page, "Crawl Boost Val", 16, 150, 16, function(val)
-        -- Implementação futura do Crawl Boost Val
+        -- Vazio por enquanto
     end)
 
     Library:CreateSection(Page, "Players Pt. 2")
