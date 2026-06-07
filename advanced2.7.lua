@@ -333,7 +333,7 @@ return function(env)
         return dotProduct >= 0.85
     end
 
-    Library:CreateSection(Page, "Survivor")
+    Library:CreateSection(Page, "Survivor23")
 
     Library:CreateToggle(Page, "Beast Untie Player", false, function(state)
         getgenv().BeastUntieLigado = state
