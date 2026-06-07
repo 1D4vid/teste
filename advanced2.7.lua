@@ -21,10 +21,13 @@ return function(env)
     local wsValue = 16
     local originalWS = {}
     local wsRunConnection
+    
+    -- Hitbox Extender Variables
     local hbEnabled = false
     local hbShowVisual = false
-    local hbSize = 2
+    local hbSizeX, hbSizeY, hbSizeZ = 2, 2, 2
     local hbLoop = nil
+    
     local infJumpEnabled = false
     local infJumpConnection = nil
     local shiftlockEnabled = false
@@ -38,6 +41,11 @@ return function(env)
     local autoTieDistancia = 15
     local hitAuraRange = 10
     local slowBeastAuraRange = 15 
+
+    -- Beast Untie Variables
+    local untieMode = "All"
+    local untieTargetPlayer = "Select Player"
+    local beastUntieEnabled = false
 
     -- Variáveis e conexões do No Jump Delay (NJD)
     local njdEnabledLocal = false
@@ -253,12 +261,24 @@ return function(env)
         local hum = char:FindFirstChild("Humanoid")
         if hum and originalWS[char] then hum.WalkSpeed = originalWS[char] end
     end
+
+    local function isPlayerTied(player)
+        if not player then return false end
+        local stats = player:FindFirstChild("TempPlayerStatsModule")
+        if stats then
+            local captured = stats:FindFirstChild("Captured")
+            if captured and captured:IsA("BoolValue") and captured.Value == true then
+                return true
+            end
+        end
+        return false
+    end
     
     local function updateHitboxes()
         for _, v in pairs(Players:GetPlayers()) do
             if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
                 local hrp = v.Character.HumanoidRootPart
-                local targetSize = Vector3.new(hbSize, hbSize, hbSize)
+                local targetSize = Vector3.new(hbSizeX, hbSizeY, hbSizeZ)
                 if hrp.Size ~= targetSize then hrp.Size = targetSize end
                 local targetTrans = hbShowVisual and 0.6 or 1
                 if hrp.Transparency ~= targetTrans then hrp.Transparency = targetTrans end
@@ -269,8 +289,16 @@ return function(env)
 
     Library:CreateSection(Page, "Survivor")
 
+    Library:CreateDropdown(Page, "Untie Mode", {"All", "Specific Player"}, "All", function(val)
+        untieMode = val
+    end)
+
+    Library:CreatePlayerDropdown(Page, "Select Player to Untie", "Select Player", function(val)
+        untieTargetPlayer = val
+    end)
+
     Library:CreateToggle(Page, "Beast Untie Player", false, function(state)
-        getgenv().BeastUntieLigado = state
+        beastUntieEnabled = state
         if state then
             task.spawn(function()
                 local function ObterEventoMarreta()
@@ -284,12 +312,30 @@ return function(env)
                     return nil
                 end
 
-                while getgenv().BeastUntieLigado do
-                    local eventoMarreta = ObterEventoMarreta()
-                    if eventoMarreta and eventoMarreta:IsA("RemoteEvent") then
-                        pcall(function()
-                            eventoMarreta:FireServer("HammerClick", true)
-                        end)
+                while beastUntieEnabled do
+                    local shouldUntie = false
+                    
+                    if untieMode == "All" then
+                        for _, p in ipairs(Players:GetPlayers()) do
+                            if p ~= LocalPlayer and isPlayerTied(p) then
+                                shouldUntie = true
+                                break
+                            end
+                        end
+                    elseif untieMode == "Specific Player" then
+                        local target = Players:FindFirstChild(untieTargetPlayer)
+                        if target and isPlayerTied(target) then
+                            shouldUntie = true
+                        end
+                    end
+
+                    if shouldUntie then
+                        local eventoMarreta = ObterEventoMarreta()
+                        if eventoMarreta and eventoMarreta:IsA("RemoteEvent") then
+                            pcall(function()
+                                eventoMarreta:FireServer("HammerClick", true)
+                            end)
+                        end
                     end
                     task.wait(0.05) 
                 end
@@ -897,7 +943,17 @@ return function(env)
         end 
     end)
 
-    Library:CreateInput(Page, "Hitbox Size", 2, function(val) hbSize = tonumber(val) or 2 end)
+    Library:CreateSlider(Page, "Hitbox X", 2, 30, 2, function(val)
+        hbSizeX = val
+    end)
+
+    Library:CreateSlider(Page, "Hitbox Y", 2, 30, 2, function(val)
+        hbSizeY = val
+    end)
+
+    Library:CreateSlider(Page, "Hitbox Z", 2, 30, 2, function(val)
+        hbSizeZ = val
+    end)
 
     Library:CreateToggle(Page, "Show Hitbox", false, function(state)
         hbShowVisual = state
