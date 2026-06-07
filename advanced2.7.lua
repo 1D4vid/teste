@@ -39,6 +39,11 @@ return function(env)
     local hitAuraRange = 10
     local slowBeastAuraRange = 15 
 
+    -- Variáveis e conexões do No Jump Delay (NJD)
+    local njdEnabledLocal = false
+    local njdConnectionLocal = nil
+    local njdCharAdded = nil
+
     -- Variáveis e conexões do Anti Ragdoll V2
     local arV2Enabled = false
     local arV2Swimming = false
@@ -48,6 +53,29 @@ return function(env)
     local arV2CharConn = nil
     local arV2HpConn = nil
     local arV2StateConn = nil
+
+    local function checkNJD(char)
+        if not char then return false end
+        return char:FindFirstChild("BeastPowers") or char:FindFirstChild("Hammer") or (LocalPlayer.Team and LocalPlayer.Team.Name == "Beast")
+    end
+
+    local function bindNJDLocal(char)
+        if njdConnectionLocal then 
+            njdConnectionLocal:Disconnect() 
+            njdConnectionLocal = nil 
+        end
+        local hum = char:WaitForChild("Humanoid", 10)
+        if not hum then return end
+        
+        njdConnectionLocal = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+            if njdEnabledLocal and checkNJD(char) then
+                -- Quando a fera pula, a velocidade cai para valores baixos. Se cair abaixo de 16, retornamos para 16.5
+                if hum.WalkSpeed < 16 then
+                    hum.WalkSpeed = 16.5
+                end
+            end
+        end)
+    end
 
     local function arV2Unswim()
         if not arV2Swimming then return end
@@ -685,7 +713,7 @@ return function(env)
         end
     end)
 
-    Library:CreateToggle(Page, "No Jump Delay", false, function(state) 
+    Library:CreateToggleKeybind(Page, "No Jump Delay", false, "None", function(state) 
         njdEnabledLocal = state
         if state then
             if LocalPlayer.Character then bindNJDLocal(LocalPlayer.Character) end
@@ -1089,7 +1117,7 @@ return function(env)
         end
     end)
 
-    Library:CreateSlider(Page, "Crawl Boost Val", 1, 150, 6, function(val)
+    Library:CreateSlider(Page, "Crawl Boost Val", 1, 50, 6, function(val)
         crawlBoostSpeed = val
     end)
 
@@ -1308,7 +1336,7 @@ return function(env)
     end)
 
     local slCharAdded
-    Library:CreateToggle(Page, "ShiftLock", false, function(state)
+    Library:CreateToggleKeybind(Page, "ShiftLock", false, "None", function(state)
         shiftlockEnabled = state
         if state then
             if not ShiftLockCrosshair then
