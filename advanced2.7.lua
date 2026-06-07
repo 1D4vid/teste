@@ -327,42 +327,6 @@ return function(env)
         end
     end)
 
-    Library:CreateToggle(Page, "Slow Beast Aura", false, function(state) 
-        getgenv().AuraSlowBeastLigado = state
-        if state then
-            task.spawn(function()
-                local function ObterDadosDaFera()
-                    for _, player in ipairs(Players:GetPlayers()) do
-                        if player ~= LocalPlayer and player.Character then
-                            if player.Character:FindFirstChild("BeastPowers") then
-                                local powersEvent = player.Character:FindFirstChild("PowersEvent", true)
-                                local feraHRP = player.Character:FindFirstChild("HumanoidRootPart")
-                                if powersEvent and feraHRP then
-                                    return powersEvent, feraHRP
-                                end
-                            end
-                        end
-                    end
-                    return nil, nil
-                end
-                while getgenv().AuraSlowBeastLigado do
-                    local meuPersonagem = LocalPlayer.Character
-                    local meuHRP = meuPersonagem and meuPersonagem:FindFirstChild("HumanoidRootPart")
-                    local eventoPoderes, feraHRP = ObterDadosDaFera()
-                    if eventoPoderes and feraHRP and meuHRP then
-                        local distancia = (meuHRP.Position - feraHRP.Position).Magnitude
-                        if distancia <= slowBeastAuraRange then
-                            pcall(function()
-                                eventoPoderes:FireServer("Jumped")
-                            end)
-                        end
-                    end
-                    task.wait(0.05) 
-                end
-            end)
-        end
-    end)
-
     Library:CreateToggle(Page, "Touch Fling", false, function(state)
         getgenv().TouchFlingEnabled = state
         if state then
@@ -410,6 +374,42 @@ return function(env)
         end
     end)
 
+    Library:CreateToggle(Page, "Slow Beast Aura", false, function(state) 
+        getgenv().AuraSlowBeastLigado = state
+        if state then
+            task.spawn(function()
+                local function ObterDadosDaFera()
+                    for _, player in ipairs(Players:GetPlayers()) do
+                        if player ~= LocalPlayer and player.Character then
+                            if player.Character:FindFirstChild("BeastPowers") then
+                                local powersEvent = player.Character:FindFirstChild("PowersEvent", true)
+                                local feraHRP = player.Character:FindFirstChild("HumanoidRootPart")
+                                if powersEvent and feraHRP then
+                                    return powersEvent, feraHRP
+                                end
+                            end
+                        end
+                    end
+                    return nil, nil
+                end
+                while getgenv().AuraSlowBeastLigado do
+                    local meuPersonagem = LocalPlayer.Character
+                    local meuHRP = meuPersonagem and meuPersonagem:FindFirstChild("HumanoidRootPart")
+                    local eventoPoderes, feraHRP = ObterDadosDaFera()
+                    if eventoPoderes and feraHRP and meuHRP then
+                        local distancia = (meuHRP.Position - feraHRP.Position).Magnitude
+                        if distancia <= slowBeastAuraRange then
+                            pcall(function()
+                                eventoPoderes:FireServer("Jumped")
+                            end)
+                        end
+                    end
+                    task.wait(0.05) 
+                end
+            end)
+        end
+    end)
+
     Library:CreateSlider(Page, "Slow Beast Aura Range", 5, 30, 15, function(val)
         slowBeastAuraRange = val
     end)
@@ -450,53 +450,6 @@ return function(env)
         end
     end)
 
-    Library:CreateToggle(Page, "Auto Tie Aura", false, function(state)
-        getgenv().AutoTieLigado = state
-        if state then
-            task.spawn(function()
-                local function ObterRaiz(character)
-                    if not character then return nil end
-                    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-                end
-
-                while getgenv().AutoTieLigado do
-                    task.wait(0.15) 
-                    pcall(function()
-                        local MeuPersonagem = LocalPlayer.Character
-                        if not MeuPersonagem then return end
-                        
-                        local MeuEventoMarreta = MeuPersonagem:FindFirstChild("HammerEvent", true)
-                        local MinhaRaiz = ObterRaiz(MeuPersonagem)
-                        
-                        if not MeuEventoMarreta or not MinhaRaiz then return end
-
-                        for _, alvo in pairs(Players:GetPlayers()) do
-                            if alvo ~= LocalPlayer and alvo.Character then
-                                local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
-                                if Stats then
-                                    local alvoCaido = Stats:FindFirstChild("Ragdoll")
-                                    local alvoCapturado = Stats:FindFirstChild("Captured")
-                                    
-                                    if alvoCaido and alvoCapturado then
-                                        if alvoCaido.Value == true and alvoCapturado.Value == false then
-                                            local RaizAlvo = ObterRaiz(alvo.Character)
-                                            if RaizAlvo then
-                                                local distancia = (RaizAlvo.Position - MinhaRaiz.Position).Magnitude
-                                                if distancia <= autoTieDistancia then
-                                                    MeuEventoMarreta:FireServer("HammerTieUp", RaizAlvo, RaizAlvo.Position)
-                                                end
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end)
-                end
-            end)
-        end
-    end)
-
     Library:CreateToggle(Page, "Crawl Beast", false, function(state)
         getgenv().CrawlBeast = state
         pcall(function()
@@ -511,10 +464,6 @@ return function(env)
                 end
             end
         end)
-    end)
-
-    Library:CreateToggle(Page, "Runner Speed Boost", false, function(state)
-        -- Implementação futura do Runner Speed Boost Toggle
     end)
 
     Library:CreateToggle(Page, "Auto Tie at Crosshair", false, function(state)
@@ -588,8 +537,7 @@ return function(env)
                                 local stats = target:FindFirstChild("TempPlayerStatsModule")
                                 if stats then
                                     local ragdoll = stats:FindFirstChild("Ragdoll")
-                                    local captured = stats:FindFirstChild("Captured")
-                                    if ragdoll and captured and ragdoll.Value == true and captured.Value == false then
+                                    if ragdoll.Value == true then
                                         local tRoot = target.Character:FindFirstChild("HumanoidRootPart") or target.Character:FindFirstChild("Torso")
                                         if tRoot then
                                             local dist = (tRoot.Position - myRoot.Position).Magnitude
@@ -605,6 +553,87 @@ return function(env)
                 end
             end)
         end
+    end)
+
+    Library:CreateToggle(Page, "No Jump Delay", false, function(state) 
+        njdEnabledLocal = state
+        if state then
+            if LocalPlayer.Character then bindNJDLocal(LocalPlayer.Character) end
+            if not njdCharAdded then
+                njdCharAdded = LocalPlayer.CharacterAdded:Connect(function(c) bindNJDLocal(c) end)
+            end
+        else
+            if njdConnectionLocal then 
+                njdConnectionLocal:Disconnect() 
+                njdConnectionLocal = nil 
+            end
+            if njdCharAdded then
+                njdCharAdded:Disconnect()
+                njdCharAdded = nil
+            end
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                LocalPlayer.Character.Humanoid.WalkSpeed = checkNJD(LocalPlayer.Character) and 16.5 or 16
+            end
+        end
+    end)
+
+    Library:CreateToggle(Page, "Auto Tie Aura", false, function(state)
+        getgenv().AutoTieLigado = state
+        if state then
+            task.spawn(function()
+                local function ObterRaiz(character)
+                    if not character then return nil end
+                    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+                end
+
+                while getgenv().AutoTieLigado do
+                    task.wait(0.15) 
+                    pcall(function()
+                        local MeuPersonagem = LocalPlayer.Character
+                        if not MeuPersonagem then return end
+                        
+                        local MeuEventoMarreta = MeuPersonagem:FindFirstChild("HammerEvent", true)
+                        local MinhaRaiz = ObterRaiz(MeuPersonagem)
+                        
+                        if not MeuEventoMarreta or not MinhaRaiz then return end
+
+                        for _, alvo in pairs(Players:GetPlayers()) do
+                            if alvo ~= LocalPlayer and alvo.Character then
+                                local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
+                                if Stats then
+                                    local alvoCaido = Stats:FindFirstChild("Ragdoll")
+                                    local alvoCapturado = Stats:FindFirstChild("Captured")
+                                    
+                                    if alvoCaido and alvoCapturado then
+                                        if alvoCaido.Value == true and alvoCapturado.Value == false then
+                                            local RaizAlvo = ObterRaiz(alvo.Character)
+                                            if RaizAlvo then
+                                                local distancia = (RaizAlvo.Position - MinhaRaiz.Position).Magnitude
+                                                if distancia <= autoTieDistancia then
+                                                    MeuEventoMarreta:FireServer("HammerTieUp", RaizAlvo, RaizAlvo.Position)
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                end
+            end)
+        end
+    end)
+
+    Library:CreateSlider(Page, "Auto Tie Range", 5, 30, 15, function(val)
+        autoTieDistancia = val
+    end)
+
+    Library:CreateToggle(Page, "Runner Speed Boost", false, function(state)
+        -- Implementação futura do Runner Speed Boost
+    end)
+
+    Library:CreateSlider(Page, "Runner Speed Boost Val", 16, 150, 24, function(val)
+        -- Implementação futura do valor de Runner Speed
     end)
 
     Library:CreateToggle(Page, "Hit Aura", false, function(state)
@@ -655,6 +684,10 @@ return function(env)
         end
     end)
 
+    Library:CreateSlider(Page, "Hit Aura Range", 5, 15, 10, function(val)
+        hitAuraRange = val
+    end)
+
     Library:CreateToggle(Page, "Hitbox Extender", false, function(state) 
         hbEnabled = state
         if state then 
@@ -676,44 +709,10 @@ return function(env)
         end 
     end)
 
-    Library:CreateToggle(Page, "Show Hitbox", false, function(state)
-        hbShowVisual = state
-    end)
-
-    Library:CreateToggle(Page, "No Jump Delay", false, function(state) 
-        njdEnabledLocal = state
-        if state then
-            if LocalPlayer.Character then bindNJDLocal(LocalPlayer.Character) end
-            if not njdCharAdded then
-                njdCharAdded = LocalPlayer.CharacterAdded:Connect(function(c) bindNJDLocal(c) end)
-            end
-        else
-            if njdConnectionLocal then 
-                njdConnectionLocal:Disconnect() 
-                njdConnectionLocal = nil 
-            end
-            if njdCharAdded then
-                njdCharAdded:Disconnect()
-                njdCharAdded = nil
-            end
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                LocalPlayer.Character.Humanoid.WalkSpeed = checkNJD(LocalPlayer.Character) and 16.5 or 16
-            end
-        end
-    end)
-
-    Library:CreateSlider(Page, "Auto Tie Range", 5, 30, 15, function(val)
-        autoTieDistancia = val
-    end)
-
-    Library:CreateSlider(Page, "Hit Aura Range", 5, 15, 10, function(val)
-        hitAuraRange = val
-    end)
-
     Library:CreateInput(Page, "Hitbox Size", 2, function(val) hbSize = tonumber(val) or 2 end)
 
-    Library:CreateSlider(Page, "Runner Speed Boost Val", 16, 150, 24, function(val)
-        -- Implementação futura do valor de Runner Speed
+    Library:CreateToggle(Page, "Show Hitbox", false, function(state)
+        hbShowVisual = state
     end)
 
     Library:CreateSection(Page, "Players Pt. 1")
@@ -745,6 +744,8 @@ return function(env)
         end
     end)
 
+    Library:CreateSlider(Page, "Speed Value", 16, 200, 16, function(val) wsValue = val end)
+
     local jpCharAdded
     Library:CreateToggleKeybind(Page, "Jump Power", false, "None", function(state) 
         jpEnabled = state 
@@ -773,6 +774,8 @@ return function(env)
             if LocalPlayer.Character then RestoreJump(LocalPlayer.Character) end
         end
     end)
+
+    Library:CreateSlider(Page, "Jump Power Val", 50, 300, 120, function(val) jpVal = val end)
 
     local flyConnection
     local flyCharAdded
@@ -841,15 +844,11 @@ return function(env)
         end
     end)
 
+    Library:CreateSlider(Page, "Fly Speed", 10, 200, 50, function(val) flySpeed = val end)
+
     Library:CreateToggle(Page, "Crawl Boost", false, function(state)
         -- Implementação futura do Crawl Boost Toggle
     end)
-
-    Library:CreateSlider(Page, "Speed Value", 16, 200, 16, function(val) wsValue = val end)
-
-    Library:CreateSlider(Page, "Jump Power Val", 50, 300, 120, function(val) jpVal = val end)
-
-    Library:CreateSlider(Page, "Fly Speed", 10, 200, 50, function(val) flySpeed = val end)
 
     Library:CreateSlider(Page, "Crawl Boost Val", 16, 150, 16, function(val)
         -- Implementação futura do Crawl Boost Val
