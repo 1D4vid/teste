@@ -69,7 +69,6 @@ return function(env)
         
         njdConnectionLocal = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
             if njdEnabledLocal and checkNJD(char) then
-                -- Quando a fera pula, a velocidade cai para valores baixos. Se cair abaixo de 16, retornamos para 16.5
                 if hum.WalkSpeed < 16 then
                     hum.WalkSpeed = 16.5
                 end
@@ -389,13 +388,12 @@ return function(env)
                         if player ~= LocalPlayer and player.Character then
                             local beastPowers = player.Character:FindFirstChild("BeastPowers")
                             if beastPowers then
-                                pcall(function()
-                                    local powersEvent = player.Character:FindFirstChild("PowersEvent", true)
-                                    local staminaValue = beastPowers:FindFirstChildOfClass("NumberValue")
-                                    if powersEvent and staminaValue then
-                                        return powersEvent, staminaValue
-                                    end
-                                end)
+                                local powersEvent = player.Character:FindFirstChild("PowersEvent", true)
+                                local staminaValue = beastPowers:FindFirstChildOfClass("NumberValue")
+                                
+                                if powersEvent and staminaValue then
+                                    return powersEvent, staminaValue
+                                end
                             end
                         end
                     end
@@ -503,7 +501,7 @@ return function(env)
         end
     end)
 
-    Library:CreateSlider(Page, "Slow Beast Aura Range", 5, 30, 15, function(val)
+    Library:CreateSlider(Page, "Slow Beast Aura Range", 5, 100, 15, function(val)
         slowBeastAuraRange = val
     end)
 
@@ -757,6 +755,7 @@ return function(env)
 
                         for _, alvo in pairs(Players:GetPlayers()) do
                             if alvo ~= LocalPlayer and alvo.Character then
+                               _G.Stats = alvo:FindFirstChild("TempPlayerStatsModule")
                                 local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
                                 if Stats then
                                     local alvoCaido = Stats:FindFirstChild("Ragdoll")
@@ -821,7 +820,7 @@ return function(env)
         end
     end)
 
-    Library:CreateSlider(Page, "Runner Speed Boost Val", 16, 150, 26, function(val)
+    Library:CreateSlider(Page, "Runner Speed Boost Val", 16, 50, 26, function(val)
         runnerSpeedVal = val
     end)
 
@@ -1389,7 +1388,20 @@ return function(env)
                 infJumpConnection = UserInputService.JumpRequest:Connect(function()
                     if infJumpEnabled then
                         pcall(function()
-                            LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Jumping)
+                            local character = LocalPlayer.Character
+                            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+                            local hrp = character and character:FindFirstChild("HumanoidRootPart")
+                            if humanoid and hrp then
+                                local jumpPowerValue = 50
+                                if humanoid.UseJumpPower then
+                                    jumpPowerValue = humanoid.JumpPower
+                                else
+                                    local grav = Workspace.Gravity
+                                    jumpPowerValue = math.sqrt(2 * grav * humanoid.JumpHeight)
+                                end
+                                local currentVel = hrp.AssemblyLinearVelocity
+                                hrp.AssemblyLinearVelocity = Vector3.new(currentVel.X, jumpPowerValue, currentVel.Z)
+                            end
                         end)
                     end
                 end)
