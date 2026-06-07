@@ -755,28 +755,6 @@ return function(env)
     Library:CreateSection(Page, "Players Pt. 1")
 
     local fdjConnection = nil
-    local disabledScripts = {}
-
-    local function disableOriginalDoubleJump(c)
-        for _, scr in ipairs(c:GetDescendants()) do
-            if scr:IsA("LocalScript") and (scr.Name == "DoubleJump" or scr.Name:lower():find("doublejump")) then
-                scr.Disabled = true
-                disabledScripts[scr] = true
-            end
-        end
-    end
-
-    local function restoreOriginalDoubleJump()
-        for scr, _ in pairs(disabledScripts) do
-            pcall(function()
-                if scr and scr.Parent then
-                    scr.Disabled = false
-                end
-            end)
-        end
-        table.clear(disabledScripts)
-    end
-
     Library:CreateToggle(Page, "Fast Double Jump", false, function(state)
         local P = game:GetService("Players")
         local U = game:GetService("UserInputService")
@@ -882,9 +860,8 @@ return function(env)
 
             local function start(c)
                 task.spawn(function()
-                    task.wait(0.5)
+                    task.wait(1)
                     killJump(c)
-                    disableOriginalDoubleJump(c)
                 end)
 
                 local h=c:WaitForChild("Humanoid",5)
@@ -964,14 +941,103 @@ return function(env)
                 for _,x in pairs(getgenv().PulosOriginais)do pcall(function()x:Enable()end) end
             end
             getgenv().PulosOriginais={}
-
-            restoreOriginalDoubleJump()
         end
     end)
 
     Library:CreateDropdown(Page, "Emotes", {"None", "Sit", "Dance", "Wave", "Point"}, "None", function(val)
         -- Implementação futura do script de emotes
     end)
+
+    local noclipConnection
+    Library:CreateToggleKeybind(Page, "Noclip", false, "None", function(state) 
+        if state then
+            if not noclipConnection then
+                noclipConnection = RunService.Stepped:Connect(function()
+                    if LocalPlayer.Character then
+                        for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+                            if part:IsA("BasePart") and part.CanCollide then
+                                part.CanCollide = false
+                            end
+                        end
+                    end
+                end)
+            end
+        else
+            if noclipConnection then
+                noclipConnection:Disconnect()
+                noclipConnection = nil
+            end
+        end
+    end)
+
+    local slCharAdded
+    Library:CreateToggle(Page, "ShiftLock", false, function(state)
+        shiftlockEnabled = state
+        if state then
+            if not ShiftLockCrosshair then
+                ShiftLockCrosshair = Instance.new("ImageLabel")
+                ShiftLockCrosshair.Name = "ShiftLockCrosshair"
+                ShiftLockCrosshair.AnchorPoint = Vector2.new(0.5, 0.5)
+                ShiftLockCrosshair.Position = UDim2.new(0.5, 0, 0.5, -29)
+                ShiftLockCrosshair.Size = UDim2.new(0.04, 0, 0.04, 0) 
+                ShiftLockCrosshair.BackgroundTransparency = 1
+                ShiftLockCrosshair.Image = "rbxasset://textures/MouseLockedCursor.png"
+                ShiftLockCrosshair.Visible = true
+                ShiftLockCrosshair.ZIndex = 10
+                local aspect = Instance.new("UIAspectRatioConstraint")
+                aspect.AspectRatio = 1
+                aspect.Parent = ShiftLockCrosshair
+                local sg = CoreGui:FindFirstChild("NexVoidHub") or LocalPlayer.PlayerGui:FindFirstChild("NexVoidHub")
+                ShiftLockCrosshair.Parent = sg 
+            else
+                ShiftLockCrosshair.Visible = true
+            end
+            RunService:BindToRenderStep("FinalNailSync", Enum.RenderPriority.Camera.Value + 1, enforceOfficialSync)
+            
+            if not slCharAdded then
+                slCharAdded = LocalPlayer.CharacterAdded:Connect(function(c)
+                    if shiftlockEnabled then
+                        RunService:UnbindFromRenderStep("FinalNailSync")
+                        task.wait(0.000005)
+                        RunService:BindToRenderStep("FinalNailSync", Enum.RenderPriority.Camera.Value + 1, enforceOfficialSync)
+                    end
+                end)
+            end
+        else
+            if ShiftLockCrosshair then ShiftLockCrosshair.Visible = false end
+            RunService:UnbindFromRenderStep("FinalNailSync")
+            if slCharAdded then slCharAdded:Disconnect() slCharAdded = nil end
+            
+            pcall(function()
+                if userGameSettings then
+                    userGameSettings.RotationType = Enum.RotationType.MovementRelative
+                end
+            end)
+            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        end
+    end)
+
+    Library:CreateToggle(Page, "Inf Jump", false, function(state)
+        infJumpEnabled = state
+        if state then
+            if not infJumpConnection then
+                infJumpConnection = UserInputService.JumpRequest:Connect(function()
+                    if infJumpEnabled then
+                        pcall(function()
+                            LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Jumping)
+                        end)
+                    end
+                end)
+            end
+        else
+            if infJumpConnection then
+                infJumpConnection:Disconnect()
+                infJumpConnection = nil
+            end
+        end
+    end)
+
+    Library:CreateSection(Page, "Players Pt. 2")
     
     local wsCharAdded
     Library:CreateToggleKeybind(Page, "Walkspeed", false, "None", function(state) 
@@ -1098,109 +1164,4 @@ return function(env)
         end
     end)
     Library:CreateSlider(Page, "Fly Speed", 10, 200, 50, function(val) flySpeed = val end)
-
-    Library:CreateSection(Page, "Players Pt. 2")
-    
-    local noclipConnection
-    Library:CreateToggleKeybind(Page, "Noclip", false, "None", function(state) 
-        if state then
-            if not noclipConnection then
-                noclipConnection = RunService.Stepped:Connect(function()
-                    if LocalPlayer.Character then
-                        for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
-                            if part:IsA("BasePart") and part.CanCollide then
-                                part.CanCollide = false
-                            end
-                        end
-                    end
-                end)
-            end
-        else
-            if noclipConnection then
-                noclipConnection:Disconnect()
-                noclipConnection = nil
-            end
-            task.spawn(function()
-                for i = 1, 5 do
-                    pcall(function()
-                        if LocalPlayer.Character then
-                            for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
-                                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-                                    part.CanCollide = true
-                                end
-                            end
-                        end
-                    end)
-                    RunService.Stepped:Wait()
-                end
-            end)
-        end
-    end)
-
-    local slCharAdded
-    Library:CreateToggle(Page, "ShiftLock", false, function(state)
-        shiftlockEnabled = state
-        if state then
-            if not ShiftLockCrosshair then
-                ShiftLockCrosshair = Instance.new("ImageLabel")
-                ShiftLockCrosshair.Name = "ShiftLockCrosshair"
-                ShiftLockCrosshair.AnchorPoint = Vector2.new(0.5, 0.5)
-                ShiftLockCrosshair.Position = UDim2.new(0.5, 0, 0.5, -29)
-                ShiftLockCrosshair.Size = UDim2.new(0.04, 0, 0.04, 0) 
-                ShiftLockCrosshair.BackgroundTransparency = 1
-                ShiftLockCrosshair.Image = "rbxasset://textures/MouseLockedCursor.png"
-                ShiftLockCrosshair.Visible = true
-                ShiftLockCrosshair.ZIndex = 10
-                local aspect = Instance.new("UIAspectRatioConstraint")
-                aspect.AspectRatio = 1
-                aspect.Parent = ShiftLockCrosshair
-                local sg = CoreGui:FindFirstChild("NexVoidHub") or LocalPlayer.PlayerGui:FindFirstChild("NexVoidHub")
-                ShiftLockCrosshair.Parent = sg 
-            else
-                ShiftLockCrosshair.Visible = true
-            end
-            RunService:BindToRenderStep("FinalNailSync", Enum.RenderPriority.Camera.Value + 1, enforceOfficialSync)
-            
-            if not slCharAdded then
-                slCharAdded = LocalPlayer.CharacterAdded:Connect(function(c)
-                    if shiftlockEnabled then
-                        RunService:UnbindFromRenderStep("FinalNailSync")
-                        task.wait(0.000005)
-                        RunService:BindToRenderStep("FinalNailSync", Enum.RenderPriority.Camera.Value + 1, enforceOfficialSync)
-                    end
-                end)
-            end
-        else
-            if ShiftLockCrosshair then ShiftLockCrosshair.Visible = false end
-            RunService:UnbindFromRenderStep("FinalNailSync")
-            if slCharAdded then slCharAdded:Disconnect() slCharAdded = nil end
-            
-            pcall(function()
-                if userGameSettings then
-                    userGameSettings.RotationType = Enum.RotationType.MovementRelative
-                end
-            end)
-            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-        end
-    end)
-
-    Library:CreateToggle(Page, "Inf Jump", false, function(state)
-        infJumpEnabled = state
-        if state then
-            if not infJumpConnection then
-                infJumpConnection = UserInputService.JumpRequest:Connect(function()
-                    if infJumpEnabled then
-                        pcall(function()
-                            LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Jumping)
-                        end)
-                    end
-                end)
-            end
-        else
-            if infJumpConnection then
-                infJumpConnection:Disconnect()
-                infJumpConnection = nil
-            end
-        end
-    end)
 end
