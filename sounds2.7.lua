@@ -295,6 +295,7 @@ return function(env)
             local muteJumps = LegitSettings.MuteJumps
             local muteBeast = LegitSettings.MuteBeastSounds
             local localChar = LocalPlayer.Character
+            local localIsBeast = checkIsBeast(LocalPlayer)
 
             for sound in pairs(ActiveSounds) do
                 local category = SoundCategories[sound]
@@ -302,7 +303,13 @@ return function(env)
                     local origVol = originalVolumeBackup[sound] or 0.5
                     local multiplier = 1
 
-                    if category == "BeastSound" or category == "BeastWarning" then
+                    if category == "BeastWarning" then
+                        if localIsBeast or muteBeast then
+                            multiplier = 0
+                        else
+                            multiplier = 1
+                        end
+                    elseif category == "BeastSound" then
                         if muteBeast then
                             multiplier = 0
                         else
