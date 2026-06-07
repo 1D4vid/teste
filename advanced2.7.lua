@@ -481,8 +481,22 @@ return function(env)
 
     Library:CreateSection(Page, "Beast")
 
+    local cameraOriginal = LocalPlayer.CameraMode
+    local beastCamInit = false
+
     Library:CreateToggle(Page, "Beast Camera Mode", false, function(state)
         getgenv().CamDModeEnabled = state
+        if not state then
+            pcall(function()
+                local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+                local isBeast = stats and stats:FindFirstChild("IsBeast")
+                if isBeast and isBeast.Value == true then
+                    LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+                else
+                    LocalPlayer.CameraMode = Enum.CameraMode.Classic
+                end
+            end)
+        end
         
         if not beastCamInit then
             beastCamInit = true
@@ -506,9 +520,15 @@ return function(env)
                             LocalPlayer.CameraMode = Enum.CameraMode.Classic
                         end
                     else
-                        if LocalPlayer.CameraMode ~= cameraOriginal then
-                            LocalPlayer.CameraMode = cameraOriginal
-                        end
+                        pcall(function()
+                            local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+                            local isBeast = stats and stats:FindFirstChild("IsBeast")
+                            if isBeast and isBeast.Value == true then
+                                if LocalPlayer.CameraMode ~= Enum.CameraMode.LockFirstPerson then
+                                    LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+                                end
+                            end
+                        end)
                     end
                 end
             end)
@@ -543,6 +563,19 @@ return function(env)
                         end
                     end)
                     task.wait(2)
+                end
+            end)
+        else
+            pcall(function()
+                local stats = LocalPlayer:FindFirstChild("TempPlayerStatsModule")
+                if stats then
+                    local isBeast = stats:FindFirstChild("IsBeast")
+                    local disableCrawl = stats:FindFirstChild("DisableCrawl")
+                    if isBeast and isBeast.Value == true then
+                        if disableCrawl then
+                            disableCrawl.Value = true
+                        end
+                    end
                 end
             end)
         end
