@@ -336,7 +336,7 @@ return function(env)
         end
     end)
 
-    Library:CreateToggle(Page, "Anti Ragdoll", false, function(state)
+    Library:CreateToggle(Page, "Anti Ragdoll4545", false, function(state)
         getgenv().AntiRagdollLigado = state
         if state then
             task.spawn(function()
