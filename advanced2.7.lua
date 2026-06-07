@@ -752,7 +752,7 @@ return function(env)
         end
     end)
 
-    Library:CreateSection(Page, "Players")
+    Library:CreateSection(Page, "Players Pt. 1")
 
     local fdjConnection = nil
     Library:CreateToggle(Page, "Fast Double Jump", false, function(state)
@@ -1001,6 +1001,8 @@ return function(env)
         end
     end)
     Library:CreateSlider(Page, "Jump Power Val", 50, 300, 120, function(val) jpVal = val end)
+
+    Library:CreateSection(Page, "Players Pt. 2")
 
     local flyConnection
     local flyCharAdded
