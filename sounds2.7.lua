@@ -1,5 +1,4 @@
 return function(env)
-    -- Importando as variáveis enviadas pelo script principal
     local Library = env.Library
     local Page = env.Page
     local Players = env.Players
@@ -9,11 +8,77 @@ return function(env)
     local Theme = env.Theme
     local UserConfigs = env.UserConfigs
     local GetParentTarget = env.GetParentTarget
+    local SoundService = game:GetService("SoundService")
 
-    -- Variaveis de Lógica e Backup do Antigo Script
-    local LegitSettings = {MuteSteps = false, MuteJumps = false, MuteHack = false}
+    local LegitSettings = {MuteSteps = false, MuteJumps = false, MuteHack = false, MuteBeastSounds = false}
     local CurrentSoundIDs = {Running = 0, Jumping = 0, Landing = 0}
     local OriginalSoundBackups = setmetatable({}, {__mode = "k"})
+
+    local VolumesEnabled = UserConfigs["Vol_Enabled"]
+    if VolumesEnabled == nil then VolumesEnabled = false end
+
+    local FootstepsVolMultiplier = UserConfigs["Vol_FootstepsMultiplier"] or 1
+    local JumpVolMultiplier = UserConfigs["Vol_JumpMultiplier"] or 1
+    local FallVolMultiplier = UserConfigs["Vol_FallMultiplier"] or 1
+
+    local MuteBeastSoundsEnabled = UserConfigs["Legit_MuteBeastSounds"]
+    if MuteBeastSoundsEnabled == nil then MuteBeastSoundsEnabled = false end
+    LegitSettings.MuteBeastSounds = MuteBeastSoundsEnabled
+
+    local CustomMusicID = ""
+    local MusicSound = Instance.new("Sound")
+    MusicSound.Name = "NexVoid_CustomMusic"
+    MusicSound.Looped = true
+    MusicSound.Volume = 0.5
+    MusicSound.Parent = SoundService
+
+    local SongsList = {
+        ["six seven"] = "139780631670217",
+        ["low cortisol"] = "110919391228823",
+        ["His Love"] = "140684861805080",
+        ["7 years of trying"] = "90964788762820",
+        ["7 years"] = "115598617339786",
+        ["Never Alone"] = "86404842974521",
+        ["ballerina cappucina"] = "140675348569592",
+        ["its you"] = "139010646759693",
+        ["funk brazil"] = "131443412031360",
+        ["na na na"] = "94884255368589"
+    }
+
+    local songNames = {"None", "six seven", "low cortisol", "His Love", "7 years of trying", "7 years", "Never Alone", "ballerina cappucina", "its you", "funk brazil", "na na na"}
+
+    local BEAST_WEAPONS = {
+        ["Hammer"] = true,
+        ["Gemstone Hammer"] = true,
+        ["Iron Hammer"] = true,
+        ["Mallet"] = true
+    }
+
+    local TARGET_WARNING_SOUNDS = {
+        ["action"] = true,
+        ["warning"] = true,
+        ["heartbeat"] = true,
+        ["terror"] = true
+    }
+
+    local function checkIsBeast(player)
+        if player.Team and player.Team.Name == "Beast" then
+            return true
+        end
+        local character = player.Character
+        if character then
+            for weapon in pairs(BEAST_WEAPONS) do
+                if character:FindFirstChild(weapon) then return true end
+            end
+        end
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then
+            for weapon in pairs(BEAST_WEAPONS) do
+                if backpack:FindFirstChild(weapon) then return true end
+            end
+        end
+        return false
+    end
 
     local function formatID(id)
         if type(id) == "number" and id > 0 then return "rbxassetid://" .. id
@@ -156,18 +221,136 @@ return function(env)
     
     local noHitSoundAddedConn = nil
 
-    -- ==========================================
-    -- Criação da Interface
-    -- ==========================================
+    local ActiveSounds = setmetatable({}, {__mode = "k"})
+    local SoundCategories = setmetatable({}, {__mode = "k"})
+
+    local BaseVolumes = {
+        Footsteps = 0.65,
+        Jump = 0.5,
+        Fall = 0.5
+    }
+
+    local function getSoundCategory(sound)
+        local name = sound.Name:lower()
+        if TARGET_WARNING_SOUNDS[name] then
+            return "BeastWarning"
+        end
+
+        for _, player in ipairs(Players:GetPlayers()) do
+            local char = player.Character
+            if char and sound:IsDescendantOf(char) then
+                if checkIsBeast(player) then
+                    return "BeastSound"
+                else
+                    if name:find("running") or name:find("walk") or name:find("step") then
+                        return "Footsteps"
+                    elseif name:find("jumping") or name:find("jump") then
+                        return "Jump"
+                    elseif name:find("landing") or name:find("fall") or name:find("land") then
+                        return "Fall"
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
+    local function registerSound(obj)
+        if obj:IsA("Sound") then
+            ActiveSounds[obj] = true
+            if not originalVolumeBackup[obj] then
+                originalVolumeBackup[obj] = obj.Volume
+            end
+            if not SoundCategories[obj] then
+                SoundCategories[obj] = getSoundCategory(obj)
+            end
+        end
+    end
+    
+    for _, obj in ipairs(Workspace:GetDescendants()) do registerSound(obj) end
+    Workspace.DescendantAdded:Connect(registerSound)
+
+    local lastCacheClear = os.clock()
+    task.spawn(function()
+        while task.wait(0.3) do
+            if os.clock() - lastCacheClear > 4 then
+                lastCacheClear = os.clock()
+                table.clear(SoundCategories)
+                for s in pairs(ActiveSounds) do
+                    SoundCategories[s] = getSoundCategory(s)
+                end
+            end
+
+            local enabled = VolumesEnabled
+            local stepMult = FootstepsVolMultiplier
+            local jumpMult = JumpVolMultiplier
+            local fallMult = FallVolMultiplier
+            local muteSteps = LegitSettings.MuteSteps
+            local muteJumps = LegitSettings.MuteJumps
+            local muteBeast = LegitSettings.MuteBeastSounds
+            local localChar = LocalPlayer.Character
+            local localIsBeast = checkIsBeast(LocalPlayer)
+
+            for sound in pairs(ActiveSounds) do
+                local category = SoundCategories[sound]
+                if category then
+                    local origVol = originalVolumeBackup[sound] or 0.5
+                    local multiplier = 1
+
+                    if category == "BeastWarning" then
+                        if localIsBeast or muteBeast then
+                            multiplier = 0
+                        else
+                            multiplier = 1
+                        end
+                    elseif category == "BeastSound" then
+                        if muteBeast then
+                            multiplier = 0
+                        else
+                            multiplier = 1
+                        end
+                    else
+                        if enabled then
+                            if category == "Footsteps" then
+                                multiplier = stepMult
+                            elseif category == "Jump" then
+                                multiplier = jumpMult
+                            elseif category == "Fall" then
+                                multiplier = fallMult
+                            end
+                        end
+
+                        if localChar and sound:IsDescendantOf(localChar) then
+                            if category == "Footsteps" and muteSteps then
+                                multiplier = 0
+                            elseif (category == "Jump" or category == "Fall") and muteJumps then
+                                multiplier = 0
+                            end
+                        end
+                    end
+
+                    local targetVol = BaseVolumes[category] or 0.5
+                    targetVol = targetVol * multiplier
+                    if sound.Volume ~= targetVol then
+                        pcall(function() sound.Volume = targetVol end)
+                    end
+                end
+            end
+        end
+    end)
+
     Library:CreateSection(Page, "Mute Sounds")
+
     Library:CreateToggle(Page, "Remove Your Steps", false, function(state) 
         LegitSettings.MuteSteps = state
         if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
     end)
+
     Library:CreateToggle(Page, "Remove Your Jumps", false, function(state) 
         LegitSettings.MuteJumps = state
         if LocalPlayer.Character then ProcessCharacter(LocalPlayer.Character) end 
     end)
+
     Library:CreateToggle(Page, "Remove Pc Hack Sounds", false, function(state) 
         if state then 
             for _, obj in ipairs(Workspace:GetDescendants()) do 
@@ -187,6 +370,7 @@ return function(env)
             hackSignals = {} 
         end 
     end)
+
     Library:CreateToggle(Page, "No hit sound", false, function(state)
         noHitSoundEnabled = state
         if state then
@@ -213,52 +397,77 @@ return function(env)
             noHitSoundSignals = {}
         end
     end)
-    
-    Library:CreateSection(Page, "General")
-    
-    local VolumeBoostVal = 1
-    local ActiveSounds = setmetatable({}, {__mode = "k"})
-    
-    local function registerSound(obj)
-        if obj:IsA("Sound") then
-            ActiveSounds[obj] = true
-            if not originalVolumeBackup[obj] then
-                originalVolumeBackup[obj] = obj.Volume
-            end
-        end
-    end
-    
-    for _, obj in pairs(Workspace:GetDescendants()) do registerSound(obj) end
-    Workspace.DescendantAdded:Connect(registerSound)
 
-    task.spawn(function()
-        while task.wait(0.5) do
-            for sound in pairs(ActiveSounds) do
-                if sound and sound.Parent then
-                    local origVol = originalVolumeBackup[sound] or 0.5
-                    local targetVol = origVol * VolumeBoostVal
-                    
-                    if sound.Volume ~= 0 and math.abs(sound.Volume - targetVol) > 0.01 then
-                        pcall(function() sound.Volume = targetVol end)
-                    end
-                end
+    Library:CreateToggle(Page, "Mute Beast Sounds", LegitSettings.MuteBeastSounds, function(state)
+        LegitSettings.MuteBeastSounds = state
+        UserConfigs["Legit_MuteBeastSounds"] = state
+    end)
+
+    Library:CreateSection(Page, "Volume Settings")
+
+    local VolToggle = Library:CreateToggle(Page, "Enable Volume Modifier", VolumesEnabled, function(state)
+        VolumesEnabled = state
+        UserConfigs["Vol_Enabled"] = state
+    end)
+
+    local FootstepsSlider = Library:CreateSlider(Page, "FootSteps Volume", 0, 10, FootstepsVolMultiplier, function(val)
+        FootstepsVolMultiplier = val
+        UserConfigs["Vol_FootstepsMultiplier"] = val
+    end)
+
+    local JumpSlider = Library:CreateSlider(Page, "Jump Volume", 0, 10, JumpVolMultiplier, function(val)
+        JumpVolMultiplier = val
+        UserConfigs["Vol_JumpMultiplier"] = val
+    end)
+
+    local FallSlider = Library:CreateSlider(Page, "Fall Volume", 0, 10, FallVolMultiplier, function(val)
+        FallVolMultiplier = val
+        UserConfigs["Vol_FallMultiplier"] = val
+    end)
+
+    Library:CreateButton(Page, "Reset Volumes", function()
+        VolToggle.Set(false)
+        FootstepsSlider.Set(1)
+        JumpSlider.Set(1)
+        FallSlider.Set(1)
+    end)
+
+    Library:CreateSection(Page, "Music Player")
+
+    Library:CreateDropdown(Page, "Select Song", songNames, "None", function(selectedName)
+        if selectedName == "None" then
+            MusicSound:Stop()
+        else
+            local id = SongsList[selectedName]
+            if id then
+                MusicSound:Stop()
+                MusicSound.SoundId = "rbxassetid://" .. id
+                MusicSound:Play()
             end
         end
     end)
 
-    Library:CreateSlider(Page, "Volume Boost", 0, 10, 1, function(val) 
-        VolumeBoostVal = val
-        for sound in pairs(ActiveSounds) do 
-            if sound and sound.Parent then 
-                local origVol = originalVolumeBackup[sound] or 0.5
-                local targetVol = origVol * val
-                if math.abs(sound.Volume - targetVol) > 0.01 then
-                    pcall(function() sound.Volume = targetVol end)
-                end
-            end 
-        end 
+    Library:CreateInput(Page, "Custom ID", "", function(val)
+        CustomMusicID = val
     end)
-    
+
+    Library:CreateButton(Page, "Play Custom ID", function()
+        local cleanId = CustomMusicID:match("%d+")
+        if cleanId then
+            MusicSound:Stop()
+            MusicSound.SoundId = "rbxassetid://" .. cleanId
+            MusicSound:Play()
+        end
+    end)
+
+    Library:CreateButton(Page, "Stop Music", function()
+        MusicSound:Stop()
+    end)
+
+    Library:CreateSlider(Page, "Music Volume", 0, 100, 50, function(val)
+        MusicSound.Volume = val / 100
+    end)
+
     Library:CreateSection(Page, "Custom Sound Packs")
     local targetParentSounds = GetParentTarget(Page)
     
@@ -342,33 +551,34 @@ return function(env)
             btnStroke.Color = Color3.fromRGB(40, 40, 40)
             btnStroke.Thickness = 1
 
-            if act.Type == "Walk" then WalkButtons[act.ID] = {Btn = btn, Stroke = btnStroke}
-            elseif act.Type == "Jump" then JumpButtons[act.ID] = {Btn = btn, Stroke = btnStroke}
-            elseif act.Type == "Fall" then FallButtons[act.ID] = {Btn = btn, Stroke = btnStroke} end
+            local actTypeLower = string.lower(act.Type)
+            if actTypeLower == "walk" then WalkButtons[act.ID] = {Btn = btn, Stroke = btnStroke}
+            elseif actTypeLower == "jump" then JumpButtons[act.ID] = {Btn = btn, Stroke = btnStroke}
+            elseif actTypeLower == "fall" then FallButtons[act.ID] = {Btn = btn, Stroke = btnStroke} end
 
             btn.MouseEnter:Connect(function()
-                local activeId = (act.Type == "Walk" and CurrentSoundIDs.Running) or (act.Type == "Jump" and CurrentSoundIDs.Jumping) or CurrentSoundIDs.Landing
+                local activeId = (actTypeLower == "walk" and CurrentSoundIDs.Running) or (actTypeLower == "jump" and CurrentSoundIDs.Jumping) or CurrentSoundIDs.Landing
                 if activeId ~= act.ID then
                     TweenService:Create(btnStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
                 end
             end)
             btn.MouseLeave:Connect(function()
-                local activeId = (act.Type == "Walk" and CurrentSoundIDs.Running) or (act.Type == "Jump" and CurrentSoundIDs.Jumping) or CurrentSoundIDs.Landing
+                local activeId = (actTypeLower == "walk" and CurrentSoundIDs.Running) or (actTypeLower == "jump" and CurrentSoundIDs.Jumping) or CurrentSoundIDs.Landing
                 if activeId ~= act.ID then
                     TweenService:Create(btnStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play()
                 end
             end)
 
             btn.MouseButton1Click:Connect(function()
-                if act.Type == "Walk" then
+                if actTypeLower == "walk" then
                     CurrentSoundIDs.Running = act.ID
                     UserConfigs["CustomSound_Walk"] = act.ID
                     updateButtonVisuals(WalkButtons, act.ID)
-                elseif act.Type == "Jump" then
+                elseif actTypeLower == "jump" then
                     CurrentSoundIDs.Jumping = act.ID
                     UserConfigs["CustomSound_Jump"] = act.ID
                     updateButtonVisuals(JumpButtons, act.ID)
-                elseif act.Type == "Fall" then
+                elseif actTypeLower == "fall" then
                     CurrentSoundIDs.Landing = act.ID
                     UserConfigs["CustomSound_Fall"] = act.ID
                     updateButtonVisuals(FallButtons, act.ID)
@@ -384,16 +594,24 @@ return function(env)
     ResetBtnFrame.BackgroundColor3 = Color3.new(0, 0, 0)
     ResetBtnFrame.BackgroundTransparency = 0.45
     ResetBtnFrame.Text = "Default Sounds (Reset All)"
-    ResetBtnFrame.TextColor3 = Theme.CloseRed
+    ResetBtnFrame.TextColor3 = Color3.fromRGB(150, 150, 150)
     ResetBtnFrame.Font = Enum.Font.GothamBold
     ResetBtnFrame.TextSize = 11
     ResetBtnFrame.Parent = targetParentSounds
     Instance.new("UICorner", ResetBtnFrame).CornerRadius = UDim.new(0, 6)
+    
     local rbsStr = Instance.new("UIStroke", ResetBtnFrame)
-    rbsStr.Color = Color3.fromRGB(40,40,40)
+    rbsStr.Color = Color3.fromRGB(40, 40, 40)
+    rbsStr.Thickness = 1
 
-    ResetBtnFrame.MouseEnter:Connect(function() TweenService:Create(rbsStr, TweenInfo.new(0.3), {Color = Theme.CloseRed}):Play() end)
-    ResetBtnFrame.MouseLeave:Connect(function() TweenService:Create(rbsStr, TweenInfo.new(0.3), {Color = Color3.fromRGB(40, 40, 40)}):Play() end)
+    ResetBtnFrame.MouseEnter:Connect(function() 
+        TweenService:Create(ResetBtnFrame, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(255, 100, 100)}):Play()
+        TweenService:Create(rbsStr, TweenInfo.new(0.2), {Color = Color3.fromRGB(220, 80, 80)}):Play() 
+    end)
+    ResetBtnFrame.MouseLeave:Connect(function() 
+        TweenService:Create(ResetBtnFrame, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(150, 150, 150)}):Play()
+        TweenService:Create(rbsStr, TweenInfo.new(0.2), {Color = Color3.fromRGB(40, 40, 40)}):Play() 
+    end)
     
     ResetBtnFrame.MouseButton1Click:Connect(function()
         CurrentSoundIDs.Running = "0"
@@ -407,6 +625,12 @@ return function(env)
         updateButtonVisuals(FallButtons, "0")
         RefreshAllSounds()
     end)
+
+    CreateSoundCard(targetParentSounds, "NorthDxv1Ces", {
+        {Name = "Walk", ID = "119933956036500", Type = "Walk"},
+        {Name = "Jump", ID = "87683560682449", Type = "Jump"},
+        {Name = "Fall", ID = "73586375325988", Type = "Fall"}
+    })
 
     CreateSoundCard(targetParentSounds, "michawell", {
         {Name = "Walk", ID = "116140177933689", Type = "Walk"},
