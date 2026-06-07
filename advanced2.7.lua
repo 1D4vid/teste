@@ -145,7 +145,7 @@ return function(env)
         end
     end
 
-    Library:CreateSection(Page, "Survivor")
+    Library:CreateSection(Page, "Survivor112")
 
     Library:CreateToggle(Page, "Beast Untie Player", false, function(state)
         getgenv().BeastUntieLigado = state
