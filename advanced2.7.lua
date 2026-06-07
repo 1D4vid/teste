@@ -150,7 +150,7 @@ return function(env)
         return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
     end
 
-    Library:CreateSection(Page, "Survivor")
+    Library:CreateSection(Page, "Survivor11")
 
     Library:CreateToggle(Page, "Beast Untie Player", false, function(state)
         getgenv().BeastUntieLigado = state
