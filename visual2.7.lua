@@ -26,6 +26,16 @@ return function(env)
         end
     end
 
+    -- Verificação ultrarrápida se um objeto pertence a um personagem (evita lag)
+    local function isCharacterPart(part)
+        local parent = part.Parent
+        if not parent then return false end
+        if parent:FindFirstChildOfClass("Humanoid") then return true end
+        local grandparent = parent.Parent
+        if grandparent and grandparent:FindFirstChildOfClass("Humanoid") then return true end
+        return false
+    end
+
     -- Modificação local temporária para estilizar e ampliar os Inputs de texto do módulo
     local originalCreateInput = Library.CreateInput
     Library.CreateInput = function(self, targetPage, Text, Default, Callback)
@@ -533,7 +543,7 @@ return function(env)
                 if clonedPart then clonedPart:Destroy() end
             end
             table.clear(clonedEnvironment)
-            folder:ClearAllChildren()
+            if folder then folder:ClearAllChildren() end
             if cam then cam.CFrame = OUT_OF_BOUNDS_CFRAME end
         end
     end
@@ -1145,6 +1155,67 @@ return function(env)
         end)
     end)
 
+    local function restoreOtherPlayer(realName)
+        if not realName then return end
+        spoofedOthers[realName] = nil
+        
+        local backup = othersOriginalData[realName]
+        local player = Players:FindFirstChild(realName)
+        if player and player.Character and backup then
+            local hum = player.Character:FindFirstChildOfClass("Humanoid")
+            if hum then pcall(function() hum.DisplayName = backup.DisplayName end) end
+        end
+        
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
+        if namesFrame then
+            local playerFrame = namesFrame:FindFirstChild(realName .. "PlayerFrame")
+            if playerFrame then
+                local iconLabel = playerFrame:FindFirstChild("IconLabel")
+                local nameLabel = playerFrame:FindFirstChild("NameLabel")
+                local levelLabel = playerFrame:FindFirstChild("LevelLabel")
+                
+                if iconLabel then
+                    iconLabel.ImageTransparency = 0
+                    local fakeIcon = iconLabel:FindFirstChild("IconeFakeCorrigido")
+                    if fakeIcon then fakeIcon.Visible = false end
+                end
+                if nameLabel and backup then nameLabel.Text = backup.Name end
+                if levelLabel and backup then levelLabel.Text = backup.Level end
+            end
+        end
+        updateTrackers()
+    end
+
+    local function applySpoofToTarget()
+        if targetOrigName == "Select Player" or targetOrigName == "" then return end
+        local p = Players:FindFirstChild(targetOrigName)
+        if p then
+            if not othersOriginalData[p.Name] then
+                local origName = p.DisplayName
+                local origLevel = "1"
+                local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+                local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
+                if namesFrame then
+                    local playerFrame = namesFrame:FindFirstChild(p.Name .. "PlayerFrame")
+                    if playerFrame then
+                        local nLabel = playerFrame:FindFirstChild("NameLabel")
+                        local lLabel = playerFrame:FindFirstChild("LevelLabel")
+                        if nLabel then origName = nLabel.Text end
+                        if lLabel then origLevel = lLabel.Text end
+                    end
+                end
+                othersOriginalData[p.Name] = { Name = origName, Level = origLevel, DisplayName = p.DisplayName }
+            end
+            spoofedOthers[p.Name] = {
+                spoofName = targetFakeName, 
+                spoofLevel = targetFakeLevel, 
+                spoofIcon = targetFakeIcon
+            }
+            if spoofOthersEnabled then updateTrackers() end
+        end
+    end
+
     local stretchConnection = nil
 
     Library:CreateSection(Page, "Camera & UI", "Left")
@@ -1231,26 +1302,47 @@ return function(env)
             end
             local function cleanPart(part)
                 if not part:IsA("BasePart") then return end
-                if part.Transparency == 1 then return end
+                if part.Transparency >= 1 then return end
+                if part.CanCollide then return end -- Pula blocos sólidos de forma ultrarrápida
                 if part.Name == "HumanoidRootPart" then return end
-                if not part.CanCollide then
-                    local mat = part.Material
+                
+                if isCharacterPart(part) then return end
+
+                local mat = part.Material
+                local isFoliage = false
+                
+                if mat == Enum.Material.Grass or mat == Enum.Material.LeafyGrass then
+                    isFoliage = true
+                else
                     local name = part.Name:lower()
-                    if name:find("leaf") or name:find("bush") or name:find("grass") or name:find("tree") or mat == Enum.Material.Grass or mat == Enum.Material.LeafyGrass or isGreen(part) then
-                        if not (part.Parent:FindFirstChild("Humanoid") or part.Parent.Parent:FindFirstChild("Humanoid")) then
-                             if not hiddenParts[part] then
-                                hiddenParts[part] = part.Transparency 
-                                part.Transparency = 1
-                            end
-                        end
+                    if name:find("leaf") or name:find("bush") or name:find("grass") or name:find("tree") then
+                        isFoliage = true
+                    elseif isGreen(part) then
+                        isFoliage = true
+                    end
+                end
+
+                if isFoliage then
+                    if not hiddenParts[part] then
+                        hiddenParts[part] = part.Transparency 
+                        part.Transparency = 1
                     end
                 end
             end
+
             task.spawn(function()
                 local desc = workspace:GetDescendants()
                 batchProcess(desc, cleanPart, 300)
             end)
-            HideLeavesConnection = workspace.DescendantAdded:Connect(cleanPart)
+
+            -- Ouvinte diferido (task.defer) para remover folhagens de novos mapas automaticamente
+            HideLeavesConnection = workspace.DescendantAdded:Connect(function(part)
+                task.defer(function()
+                    if part and part.Parent then
+                        cleanPart(part)
+                    end
+                end)
+            end)
         else
             if HideLeavesConnection then HideLeavesConnection:Disconnect() end
             for part, originalTrans in pairs(hiddenParts) do
@@ -1280,14 +1372,14 @@ return function(env)
     local WallhopConn = nil
 
     local function applyWallhopESP(part)
-        if part.ClassName == "Part" or part.ClassName == "TrussPart" then
-            if part.ClassName == "Part" and part.Shape ~= Enum.PartType.Block then return end
+        local className = part.ClassName
+        if className == "Part" or className == "TrussPart" then
+            if className == "Part" and part.Shape ~= Enum.PartType.Block then return end
             if part.Transparency > 0.8 or not part.CanCollide then return end
+            if part.Size.Y <= 2 then return end -- Otimização: Pula partes pequenas de cara
             if part:FindFirstChildWhichIsA("DataModelMesh") then return end
-            if part.Size.Y <= 2 then return end
-
-            local ancestorModel = part:FindFirstAncestorOfClass("Model")
-            if ancestorModel and ancestorModel:FindFirstChildOfClass("Humanoid") then return end
+            
+            if isCharacterPart(part) then return end
 
             if WallhopFolder and not part:FindFirstChild("WallhopSelectionBox") then
                 local box = Instance.new("SelectionBox")
@@ -1315,9 +1407,12 @@ return function(env)
                 batchProcess(desc, applyWallhopESP, 300)
             end)
 
+            -- Ouvinte diferido (task.defer) para aplicar linhas de Wallhop em novos mapas automaticamente
             WallhopConn = Workspace.DescendantAdded:Connect(function(part)
                 task.defer(function()
-                    if WallhopFolder then applyWallhopESP(part) end
+                    if part and part.Parent then
+                        applyWallhopESP(part)
+                    end
                 end)
             end)
         else
