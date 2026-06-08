@@ -22,10 +22,11 @@ return function(env)
     local originalWS = {}
     local wsRunConnection
     
-    -- Hitbox Extender Variables
+    -- Hitbox Extender Variables (Optimized)
     local hbEnabled = false
     local hbShowVisual = false
     local hbSizeX, hbSizeY, hbSizeZ = 2, 2, 2
+    local targetHitboxSize = Vector3.new(2, 2, 2)
     local hbLoop = nil
     
     local infJumpEnabled = false
@@ -42,11 +43,6 @@ return function(env)
     local hitAuraRange = 10
     local slowBeastAuraRange = 15 
 
-    -- Beast Untie Variables (Separated Features)
-    local beastUntieAllEnabled = false
-    local beastUntieSpecificEnabled = false
-    local untieTargetPlayer = "Select Player"
-
     -- Variáveis e conexões do No Jump Delay (NJD)
     local njdEnabledLocal = false
     local njdConnectionLocal = nil
@@ -61,6 +57,11 @@ return function(env)
     local arV2CharConn = nil
     local arV2HpConn = nil
     local arV2StateConn = nil
+
+    -- Caches locais para otimização de performance
+    local cachedHammerEvent = nil
+    local cachedPowersEvent = nil
+    local cachedStaminaValue = nil
 
     local function checkNJD(char)
         if not char then return false end
@@ -262,101 +263,58 @@ return function(env)
         if hum and originalWS[char] then hum.WalkSpeed = originalWS[char] end
     end
 
-    local function isPlayerTied(player)
-        if not player then return false end
-        local stats = player:FindFirstChild("TempPlayerStatsModule")
-        if stats then
-            local captured = stats:FindFirstChild("Captured")
-            if captured and captured:IsA("BoolValue") and captured.Value == true then
-                return true
+    -- Otimizado: Busca o Martelo uma única vez e mantém cache local enquanto for válido
+    local function ObterEventoMarreta()
+        if cachedHammerEvent and cachedHammerEvent.Parent and cachedHammerEvent:IsDescendantOf(workspace) then
+            return cachedHammerEvent
+        end
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local hammer = player.Character:FindFirstChild("Hammer")
+                if hammer then
+                    local event = hammer:FindFirstChild("HammerEvent", true)
+                    if event then
+                        cachedHammerEvent = event
+                        return event
+                    end
+                end
             end
         end
-        return false
+        return nil
+    end
+
+    -- Otimizado: Precomputa o vetor de tamanho para evitar alocações de memória desnecessárias
+    local function updateTargetHitboxSize()
+        targetHitboxSize = Vector3.new(hbSizeX, hbSizeY, hbSizeZ)
     end
     
     local function updateHitboxes()
-        for _, v in pairs(Players:GetPlayers()) do
-            if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
-                local hrp = v.Character.HumanoidRootPart
-                local targetSize = Vector3.new(hbSizeX, hbSizeY, hbSizeZ)
-                if hrp.Size ~= targetSize then hrp.Size = targetSize end
-                local targetTrans = hbShowVisual and 0.6 or 1
-                if hrp.Transparency ~= targetTrans then hrp.Transparency = targetTrans end
-                hrp.CanCollide = false
+        local targetTrans = hbShowVisual and 0.6 or 1
+        for _, v in ipairs(Players:GetPlayers()) do
+            if v ~= LocalPlayer then
+                local char = v.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    if hrp.Size ~= targetHitboxSize then hrp.Size = targetHitboxSize end
+                    if hrp.Transparency ~= targetTrans then hrp.Transparency = targetTrans end
+                    hrp.CanCollide = false
+                end
             end
         end
     end
 
     Library:CreateSection(Page, "Survivor")
 
-    -- 1. Untie All (Liga-Desliga Geral)
     Library:CreateToggle(Page, "Beast Untie Player", false, function(state)
-        beastUntieAllEnabled = state
+        getgenv().BeastUntieLigado = state
         if state then
             task.spawn(function()
-                local function ObterEventoMarreta()
-                    for _, player in pairs(Players:GetPlayers()) do
-                        if player ~= LocalPlayer and player.Character then
-                            if player.Character:FindFirstChild("Hammer") then
-                                return player.Character:FindFirstChild("HammerEvent", true)
-                            end
-                        end
-                    end
-                    return nil
-                end
-
-                while beastUntieAllEnabled do
-                    local shouldUntie = false
-                    for _, p in ipairs(Players:GetPlayers()) do
-                        if p ~= LocalPlayer and isPlayerTied(p) then
-                            shouldUntie = true
-                            break
-                        end
-                    end
-
-                    if shouldUntie then
-                        local eventoMarreta = ObterEventoMarreta()
-                        if eventoMarreta and eventoMarreta:IsA("RemoteEvent") then
-                            pcall(function()
-                                eventoMarreta:FireServer("HammerClick", true)
-                            end)
-                        end
-                    end
-                    task.wait(0.05) 
-                end
-            end)
-        end
-    end)
-
-    -- 2. Untie Specific Player (Dropdown & Toggle Separados)
-    Library:CreatePlayerDropdown(Page, "Select Player to Untie", "Select Player", function(val)
-        untieTargetPlayer = val
-    end)
-
-    Library:CreateToggle(Page, "Untie Specific Player", false, function(state)
-        beastUntieSpecificEnabled = state
-        if state then
-            task.spawn(function()
-                local function ObterEventoMarreta()
-                    for _, player in pairs(Players:GetPlayers()) do
-                        if player ~= LocalPlayer and player.Character then
-                            if player.Character:FindFirstChild("Hammer") then
-                                return player.Character:FindFirstChild("HammerEvent", true)
-                            end
-                        end
-                    end
-                    return nil
-                end
-
-                while beastUntieSpecificEnabled do
-                    local target = Players:FindFirstChild(untieTargetPlayer)
-                    if target and isPlayerTied(target) then
-                        local eventoMarreta = ObterEventoMarreta()
-                        if eventoMarreta and eventoMarreta:IsA("RemoteEvent") then
-                            pcall(function()
-                                eventoMarreta:FireServer("HammerClick", true)
-                            end)
-                        end
+                while getgenv().BeastUntieLigado do
+                    local eventoMarreta = ObterEventoMarreta()
+                    if eventoMarreta and eventoMarreta:IsA("RemoteEvent") then
+                        pcall(function()
+                            eventoMarreta:FireServer("HammerClick", true)
+                        end)
                     end
                     task.wait(0.05) 
                 end
@@ -422,7 +380,7 @@ return function(env)
         if state then
             task.spawn(function()
                 local function ObterEventoMarretaao()
-                    for _, player in pairs(Players:GetPlayers()) do
+                    for _, player in ipairs(Players:GetPlayers()) do
                         if player ~= LocalPlayer and player.Character then
                             if player.Character:FindFirstChild("BeastPowers") then
                                 return player.Character:FindFirstChild("PowersEvent", true)
@@ -451,6 +409,9 @@ return function(env)
             task.spawn(function()
                 local energiaAnterior = 100
                 local function ObterDadosDaFera()
+                    if cachedPowersEvent and cachedPowersEvent.Parent and cachedStaminaValue and cachedStaminaValue.Parent then
+                        return cachedPowersEvent, cachedStaminaValue
+                    end
                     for _, player in ipairs(Players:GetPlayers()) do
                         if player ~= LocalPlayer and player.Character then
                             local beastPowers = player.Character:FindFirstChild("BeastPowers")
@@ -459,6 +420,8 @@ return function(env)
                                 local staminaValue = beastPowers:FindFirstChildOfClass("NumberValue")
                                 
                                 if powersEvent and staminaValue then
+                                    cachedPowersEvent = powersEvent
+                                    cachedStaminaValue = staminaValue
                                     return powersEvent, staminaValue
                                 end
                             end
@@ -701,7 +664,7 @@ return function(env)
                         local MinhaRaiz = ObterRaiz(MeuPersonagem)
                         if not MeuEventoMarreta or not MinhaRaiz then return end
 
-                        for _, alvo in pairs(Players:GetPlayers()) do
+                        for _, alvo in ipairs(Players:GetPlayers()) do
                             if alvo ~= LocalPlayer and alvo.Character then
                                 local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
                                 if Stats then
@@ -745,7 +708,7 @@ return function(env)
                         local MinhaRaiz = ObterRaiz(MeuPersonagem)
                         if not MeuEventoMarreta or not MinhaRaiz then return end
 
-                        for _, alvo in pairs(Players:GetPlayers()) do
+                        for _, alvo in ipairs(Players:GetPlayers()) do
                             if alvo ~= LocalPlayer and alvo.Character then
                                 local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
                                 if Stats then
@@ -820,7 +783,7 @@ return function(env)
                         
                         if not MeuEventoMarreta or not MinhaRaiz then return end
 
-                        for _, alvo in pairs(Players:GetPlayers()) do
+                        for _, alvo in ipairs(Players:GetPlayers()) do
                             if alvo ~= LocalPlayer and alvo.Character then
                                _G.Stats = alvo:FindFirstChild("TempPlayerStatsModule")
                                 local Stats = alvo:FindFirstChild("TempPlayerStatsModule")
@@ -911,7 +874,7 @@ return function(env)
                     local HammerEvent = meChar:FindFirstChild("HammerEvent", true)
                     if not HammerEvent then continue end
 
-                    for _, alvo in pairs(Players:GetPlayers()) do
+                    for _, alvo in ipairs(Players:GetPlayers()) do
                         if alvo ~= LocalPlayer then
                             local stats = alvo:FindFirstChild("TempPlayerStatsModule")
                             if not stats then continue end
@@ -954,7 +917,7 @@ return function(env)
             end)
         else 
             if hbLoop then task.cancel(hbLoop) hbLoop = nil end
-            for _, v in pairs(Players:GetPlayers()) do 
+            for _, v in ipairs(Players:GetPlayers()) do 
                 if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then 
                     v.Character.HumanoidRootPart.Size = Vector3.new(2, 2, 1)
                     v.Character.HumanoidRootPart.Transparency = 1
@@ -966,14 +929,17 @@ return function(env)
 
     Library:CreateSlider(Page, "Hitbox X", 2, 10, 2, function(val)
         hbSizeX = val
+        updateTargetHitboxSize()
     end)
 
     Library:CreateSlider(Page, "Hitbox Y", 2, 10, 2, function(val)
         hbSizeY = val
+        updateTargetHitboxSize()
     end)
 
     Library:CreateSlider(Page, "Hitbox Z", 2, 10, 2, function(val)
         hbSizeZ = val
+        updateTargetHitboxSize()
     end)
 
     Library:CreateToggle(Page, "Show Hitbox", false, function(state)
@@ -1141,6 +1107,7 @@ return function(env)
                             flyBg.CFrame = CFrame.new(charHrp.Position, charHrp.Position + Camera.CFrame.LookVector)
                             local moveDir = charHum.MoveDirection
                             if moveDir.Magnitude > 0 then
+                               _G.flatLook = Vector3.new(Camera.CFrame.LookVector.X, 0, Camera.CFrame.LookVector.Z).Unit
                                 local camLook = Camera.CFrame.LookVector
                                 local camRight = Camera.CFrame.RightVector
                                 local flatLook = Vector3.new(camLook.X, 0, camLook.Z).Unit
