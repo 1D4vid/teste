@@ -37,11 +37,14 @@ return function(env)
     }
     local originalTexts = setmetatable({}, {__mode = "k"})
     
-    -- Váriaveis do sistema de máscara dos outros jogadores
-    local changeOthersEnabled = false
-    local othersMaskName = "Player"
-    local originalOtherTexts = setmetatable({}, {__mode = "k"})
-    local changing = false
+    -- Configurações de Spoof de outros jogadores
+    local spoofOthersEnabled = false
+    local targetOrigName = "Select Player"
+    local targetFakeName = "Fake Name"
+    local targetFakeLevel = 100
+    local targetFakeIcon = ""
+    local spoofedOthers = {}
+    local othersOriginalData = {}
 
     local function patchElement(e)
         if not e or not e:IsA("GuiObject") then return end
@@ -63,6 +66,22 @@ return function(env)
             end
         end
         
+        if spoofOthersEnabled then
+            for origNameKey, fakeData in pairs(spoofedOthers) do
+                local fakeName = fakeData.spoofName
+                if newTxt:find(origNameKey, 1, true) then
+                    newTxt = newTxt:gsub(origNameKey, fakeName)
+                    changed = true
+                end
+                local backup = othersOriginalData[origNameKey]
+                local origDisp = backup and backup.DisplayName
+                if origDisp and newTxt:find(origDisp, 1, true) then
+                    newTxt = newTxt:gsub(origDisp, fakeName)
+                    changed = true
+                end
+            end
+        end
+        
         if changed then
             if not originalTexts[e] then originalTexts[e] = txt end
             pcall(function() e.Text = newTxt end)
@@ -73,6 +92,17 @@ return function(env)
                 
                 if spoofVisualsEnabled and (orig:find(originalName, 1, true) or (originalDisplayName and orig:find(originalDisplayName, 1, true))) then
                     shouldBeSpoofed = true
+                end
+                
+                if spoofOthersEnabled and not shouldBeSpoofed then
+                    for origNameKey, _ in pairs(spoofedOthers) do
+                        local backup = othersOriginalData[origNameKey]
+                        local origDisp = backup and backup.DisplayName
+                        if orig:find(origNameKey, 1, true) or (origDisp and orig:find(origDisp, 1, true)) then
+                            shouldBeSpoofed = true
+                            break
+                        end
+                    end
                 end
                 
                 if not shouldBeSpoofed then
@@ -113,10 +143,56 @@ return function(env)
     end
 
     spoofVisualsLoop = RunService.Heartbeat:Connect(function()
-        if not spoofVisualsEnabled then return end
+        if not spoofVisualsEnabled and not spoofOthersEnabled then return end
         pcall(function()
             local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
             local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
+
+            if spoofOthersEnabled then
+                for origNameKey, data in pairs(spoofedOthers) do
+                    local player = Players:FindFirstChild(origNameKey)
+                    if player and player.Character then
+                        local hum = player.Character:FindFirstChildOfClass("Humanoid")
+                        if hum then 
+                            pcall(function() hum.DisplayName = data.spoofName end) 
+                        end
+                    end
+                    
+                    if namesFrame then
+                        local playerFrame = namesFrame:FindFirstChild(origNameKey .. "PlayerFrame")
+                        if playerFrame then
+                            local levelLabel = playerFrame:FindFirstChild("LevelLabel")
+                            local nameLabel  = playerFrame:FindFirstChild("NameLabel")
+                            local iconLabel  = playerFrame:FindFirstChild("IconLabel")
+                            
+                            if levelLabel then levelLabel.Text = tostring(data.spoofLevel) end
+                            if nameLabel then nameLabel.Text = data.spoofName end
+                            if iconLabel then 
+                                iconLabel.ImageTransparency = 1
+                                local fakeIcon = iconLabel:FindFirstChild("IconeFakeCorrigido")
+                                if not fakeIcon then
+                                    fakeIcon = Instance.new("ImageLabel")
+                                    fakeIcon.Name = "IconeFakeCorrigido"
+                                    fakeIcon.BackgroundTransparency = 1
+                                    fakeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+                                    fakeIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+                                    fakeIcon.ZIndex = iconLabel.ZIndex + 1
+                                    fakeIcon.Parent = iconLabel
+                                end
+                                fakeIcon.Image = data.spoofIcon
+                                fakeIcon.Visible = true
+                                fakeIcon.ScaleType = Enum.ScaleType.Fit
+                                
+                                if data.spoofIcon == meusIcones.QA or data.spoofIcon == meusIcones.CON then
+                                    fakeIcon.Size = UDim2.new(1.35, 0, 1.35, 0) 
+                                else
+                                    fakeIcon.Size = UDim2.new(1.0, 0, 1.0, 0)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
             
             if spoofVisualsEnabled then
                 local char = LocalPlayer.Character
@@ -170,126 +246,78 @@ return function(env)
         end)
     end)
 
-    -- Lógica interna do sistema de máscara de nomes para outros jogadores
-    local function isTextObject(e)
-        return e:IsA("TextLabel") or e:IsA("TextButton") or e:IsA("TextBox")
-    end
-
-    local function maskText(text)
-        if not text or text == "" then return text end
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= LocalPlayer then
-                local nm, dn = plr.Name, plr.DisplayName
-                if nm and text:find(nm, 1, true) then
-                    text = text:gsub(nm, othersMaskName)
-                end
-                if dn and text:find(dn, 1, true) then
-                    text = text:gsub(dn, othersMaskName)
-                end
-            end
-        end
-        return text
-    end
-
-    local function patch(e)
-        if changing then return end
-        if not isTextObject(e) then return end
-        local t = e.Text
+    local function restoreOtherPlayer(realName)
+        if not realName then return end
+        spoofedOthers[realName] = nil
         
-        if changeOthersEnabled then
-            if not originalOtherTexts[e] then
-                originalOtherTexts[e] = t
-            end
-            local masked = maskText(t)
-            if masked ~= t then
-                changing = true
-                pcall(function() e.Text = masked end)
-                changing = false
-            end
-        else
-            local orig = originalOtherTexts[e]
-            if orig and t ~= orig then
-                changing = true
-                pcall(function() e.Text = orig end)
-                changing = false
+        local backup = othersOriginalData[realName]
+        local player = Players:FindFirstChild(realName)
+        if player and player.Character and backup then
+            local hum = player.Character:FindFirstChildOfClass("Humanoid")
+            if hum then 
+                pcall(function() hum.DisplayName = backup.DisplayName end) 
             end
         end
-    end
-
-    local function track(e)
-        if isTextObject(e) then
-            patch(e)
-            e:GetPropertyChangedSignal("Text"):Connect(function()
-                patch(e)
-            end)
-        end
-    end
-
-    local function trackOverheadForCharacter(char)
-        if not char then return end
-        local head = char:FindFirstChild("Head")
-        if not head then return end
-        for _, gui in ipairs(head:GetChildren()) do
-            if gui:IsA("BillboardGui") then
-                for _, d in ipairs(gui:GetDescendants()) do
-                    if isTextObject(d) then
-                        patch(d)
-                        d:GetPropertyChangedSignal("Text"):Connect(function()
-                            patch(d)
-                        end)
-                    end
+        
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
+        if namesFrame then
+            local playerFrame = namesFrame:FindFirstChild(realName .. "PlayerFrame")
+            if playerFrame then
+                local iconLabel = playerFrame:FindFirstChild("IconLabel")
+                local nameLabel = playerFrame:FindFirstChild("NameLabel")
+                local levelLabel = playerFrame:FindFirstChild("LevelLabel")
+                
+                if iconLabel then
+                    iconLabel.ImageTransparency = 0
+                    local fakeIcon = iconLabel:FindFirstChild("IconeFakeCorrigido")
+                    if fakeIcon then fakeIcon.Visible = false end
                 end
-                gui.DescendantAdded:Connect(track)
-            end
-        end
-    end
-
-    -- Escuta de carregamento de personagens (Overheads)
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            if plr.Character then
-                trackOverheadForCharacter(plr.Character)
-            end
-            plr.CharacterAdded:Connect(function(char)
-                task.wait(0.5)
-                trackOverheadForCharacter(char)
-            end)
-        end
-    end
-
-    Players.PlayerAdded:Connect(function(plr)
-        if plr == LocalPlayer then return end
-        plr.CharacterAdded:Connect(function(char)
-            task.wait(0.5)
-            trackOverheadForCharacter(char)
-        end)
-    end)
-
-    -- Varredura inicial de interfaces
-    for _, gui in pairs(CoreGui:GetDescendants()) do
-        track(gui)
-    end
-    CoreGui.DescendantAdded:Connect(track)
-
-    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-    for _, gui in pairs(playerGui:GetDescendants()) do
-        track(gui)
-    end
-    playerGui.DescendantAdded:Connect(track)
-
-    -- Loop leve de atualização secundária
-    task.spawn(function()
-        while true do
-            task.wait(1)
-            if changeOthersEnabled then
-                for _, plr in ipairs(Players:GetPlayers()) do
-                    if plr ~= LocalPlayer and plr.Character then
-                        trackOverheadForCharacter(plr.Character)
-                    end
+                
+                if nameLabel and backup then
+                    nameLabel.Text = backup.Name
+                end
+                if levelLabel and backup then
+                    levelLabel.Text = backup.Level
                 end
             end
         end
-    end)
+        updateTrackers()
+    end
+
+    local function applySpoofToTarget()
+        if targetOrigName == "Select Player" or targetOrigName == "" then return end
+        local p = Players:FindFirstChild(targetOrigName)
+        if p then
+            if not othersOriginalData[p.Name] then
+                local origName = p.DisplayName
+                local origLevel = "1"
+                
+                local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+                local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
+                if namesFrame then
+                    local playerFrame = namesFrame:FindFirstChild(p.Name .. "PlayerFrame")
+                    if playerFrame then
+                        local nLabel = playerFrame:FindFirstChild("NameLabel")
+                        local lLabel = playerFrame:FindFirstChild("LevelLabel")
+                        if nLabel then origName = nLabel.Text end
+                        if lLabel then origLevel = lLabel.Text end
+                    end
+                end
+                othersOriginalData[p.Name] = { Name = origName, Level = origLevel, DisplayName = p.DisplayName }
+            end
+            
+            spoofedOthers[p.Name] = {
+                spoofName = targetFakeName, 
+                spoofLevel = targetFakeLevel, 
+                spoofIcon = targetFakeIcon
+            }
+            
+            if spoofOthersEnabled then
+                updateTrackers()
+            end
+        end
+    end
 
     local stretchConnection = nil
 
@@ -474,20 +502,46 @@ return function(env)
         spoofIconId = meusIcones[val] or "" 
     end)
 
-    -- Nova Seção: Change names other players
+    -- Nova Seção de Spoof de Outros Jogadores de forma compacta e direta
     Library:CreateSection(Page, "Change names other players.", "Right")
-    Library:CreateToggle(Page, "Enable Name Changer", false, function(state) 
-        changeOthersEnabled = state
-        for e, _ in pairs(originalOtherTexts) do
-            if e and e.Parent then patch(e) end
+    
+    Library:CreateToggle(Page, "Enable Others Spoofing", false, function(state)
+        spoofOthersEnabled = state
+        if state then
+            applySpoofToTarget()
+        else
+            for origNameKey, _ in pairs(spoofedOthers) do
+                restoreOtherPlayer(origNameKey)
+            end
+            table.clear(spoofedOthers)
         end
     end)
-    Library:CreateInput(Page, "New Name Pattern", "Player", function(val) 
-        othersMaskName = val
-        if changeOthersEnabled then
-            for e, _ in pairs(originalOtherTexts) do
-                if e and e.Parent then patch(e) end
-            end
+
+    Library:CreatePlayerDropdown(Page, "Target Player", "Select Player", function(val) 
+        targetOrigName = val
+        if spoofOthersEnabled then
+            applySpoofToTarget()
+        end
+    end)
+
+    Library:CreateInput(Page, "Target Fake Name", "Fake Name", function(val) 
+        targetFakeName = val
+        if spoofOthersEnabled then
+            applySpoofToTarget()
+        end
+    end)
+    
+    Library:CreateInput(Page, "Target Fake Level", "100", function(val) 
+        targetFakeLevel = tonumber(val) or 100
+        if spoofOthersEnabled then
+            applySpoofToTarget()
+        end
+    end)
+    
+    Library:CreateDropdown(Page, "Target Fake Icon", {"VIP", "QA", "CON", "Mod", "Dev", "Manager", "MrWindy", "Nenhum"}, "VIP", function(val) 
+        targetFakeIcon = meusIcones[val] or ""
+        if spoofOthersEnabled then
+            applySpoofToTarget()
         end
     end)
 end
