@@ -22,7 +22,7 @@ return function(env)
     local originalWS = {}
     local wsRunConnection
     
-    -- Hitbox Extender Variables (Optimized)
+    -- Hitbox Extender Variables
     local hbEnabled = false
     local hbShowVisual = false
     local hbSizeX, hbSizeY, hbSizeZ = 2, 2, 2
@@ -58,10 +58,22 @@ return function(env)
     local arV2HpConn = nil
     local arV2StateConn = nil
 
-    -- Caches locais para otimização de performance
+    -- Caches locais de performance
     local cachedHammerEvent = nil
     local cachedPowersEvent = nil
     local cachedStaminaValue = nil
+    
+    -- Cache para Runner Speed Boost (Evita buscas repetitivas em tempo de Stepped)
+    local lastRunnerCharacter = nil
+    local cachedRunnerPowers = nil
+    local cachedRunnerStamina = nil
+    local cachedRunnerHumanoid = nil
+
+    -- Parâmetros de Raycast pré-configurados do Fast Double Jump (Evita instanciar a cada pulo)
+    local jumpRaycastParams = RaycastParams.new()
+    jumpRaycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    jumpRaycastParams.RespectCanCollide = true
+    pcall(function() jumpRaycastParams.CollisionGroup = "PLAYERS_BODIES" end)
 
     local function checkNJD(char)
         if not char then return false end
@@ -192,7 +204,7 @@ return function(env)
     
     local function killJumpFDJ(c)
         if not getconnections then return end
-        for _,x in pairs(getconnections(UserInputService.JumpRequest))do
+        for _,x in ipairs(getconnections(UserInputService.JumpRequest)) do
             pcall(function()
                 local f=x.Function
                 if type(f)=="function"then
@@ -207,7 +219,7 @@ return function(env)
     end
     
     local function restoreJumpFDJ()
-        for _, x in pairs(disabledJumpConns) do
+        for _, x in ipairs(disabledJumpConns) do
             pcall(function() x:Enable() end)
         end
         table.clear(disabledJumpConns)
@@ -263,7 +275,12 @@ return function(env)
         if hum and originalWS[char] then hum.WalkSpeed = originalWS[char] end
     end
 
-    -- Otimizado: Busca o Martelo uma única vez e mantém cache local enquanto for válido
+    -- Limpeza de memória ativa para tabelas fracas
+    Players.PlayerRemoving:Connect(function(player)
+        originalWS[player.Character] = nil
+        originalJP[player.Character] = nil
+    end)
+
     local function ObterEventoMarreta()
         if cachedHammerEvent and cachedHammerEvent.Parent and cachedHammerEvent:IsDescendantOf(workspace) then
             return cachedHammerEvent
@@ -283,7 +300,6 @@ return function(env)
         return nil
     end
 
-    -- Otimizado: Precomputa o vetor de tamanho para evitar alocações de memória desnecessárias
     local function updateTargetHitboxSize()
         targetHitboxSize = Vector3.new(hbSizeX, hbSizeY, hbSizeZ)
     end
@@ -301,6 +317,13 @@ return function(env)
                 end
             end
         end
+    end
+
+    local function ObterRaiz(character)
+        if not character then return nil end
+        local hrp = character:FindFirstChild("HumanoidRootPart")
+        if hrp then return hrp end
+        return character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
     end
 
     Library:CreateSection(Page, "Survivor")
@@ -596,7 +619,7 @@ return function(env)
         if state then
             task.spawn(function()
                 local function RemoverVentBlocks()
-                    for _, obj in pairs(Workspace:GetDescendants()) do
+                    for _, obj in ipairs(Workspace:GetDescendants()) do
                         if obj:IsA("BasePart") and obj.Name == "VentBlock" then
                             obj.CFrame = CFrame.new(0, -10000, 0)
                             obj.CanCollide = false
@@ -637,24 +660,10 @@ return function(env)
         end
     end)
 
-    local autoTieCrosshairEnabled = false
-    local lookSensitivity = 0.85
-    local function EstaOlhandoPara(raizAlvo)
-        if not Camera or not raizAlvo then return false end
-        local direcaoParaAlvo = (raizAlvo.Position - Camera.CFrame.Position).Unit
-        local direcaoOlhar = Camera.CFrame.LookVector
-        local dotProduct = direcaoOlhar:Dot(direcaoParaAlvo)
-        return dotProduct >= lookSensitivity
-    end
-
     Library:CreateToggle(Page, "Auto Tie at Crosshair", false, function(state)
         autoTieCrosshairEnabled = state
         if state then
             task.spawn(function()
-                local function ObterRaiz(character)
-                    if not character then return nil end
-                    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-                end
                 while autoTieCrosshairEnabled do
                     task.wait(0.1) 
                     pcall(function()
@@ -690,15 +699,10 @@ return function(env)
         end
     end)
 
-    local autoTieAfterHit = false
     Library:CreateToggle(Page, "Auto Tie After Hit", false, function(state)
         autoTieAfterHit = state
         if state then
             task.spawn(function()
-                local function ObterRaiz(character)
-                    if not character then return nil end
-                    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-                end
                 local JaAmarrados = {}
                 while autoTieAfterHit do
                     task.wait(0.05)
@@ -767,11 +771,6 @@ return function(env)
         getgenv().AutoTieLigado = state
         if state then
             task.spawn(function()
-                local function ObterRaiz(character)
-                    if not character then return nil end
-                    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-                end
-
                 while getgenv().AutoTieLigado do
                     task.wait(0.15) 
                     pcall(function()
@@ -827,17 +826,20 @@ return function(env)
                 pcall(function()
                     local MeuPersonagem = LocalPlayer.Character
                     if not MeuPersonagem then return end
-                    local beastPowers = MeuPersonagem:FindFirstChild("BeastPowers")
-                    if not beastPowers then return end
-                    local numberValue = beastPowers:FindFirstChildOfClass("NumberValue")
-                    if not numberValue then return end
-                    local energiaAtual = numberValue.Value
+                    
+                    -- Cache dinâmico para evitar FindFirstChild redundante a cada quadro físico
+                    if MeuPersonagem ~= lastRunnerCharacter then
+                        lastRunnerCharacter = MeuPersonagem
+                        cachedRunnerPowers = MeuPersonagem:FindFirstChild("BeastPowers")
+                        cachedRunnerStamina = cachedRunnerPowers and cachedRunnerPowers:FindFirstChildOfClass("NumberValue")
+                        cachedRunnerHumanoid = MeuPersonagem:FindFirstChildWhichIsA("Humanoid")
+                    end
+                    
+                    if not cachedRunnerStamina or not cachedRunnerHumanoid then return end
+                    local energiaAtual = cachedRunnerStamina.Value
                     
                     if energiaAtual < ultimaEnergia then
-                        local Humanoid = MeuPersonagem:FindFirstChildWhichIsA("Humanoid")
-                        if Humanoid then
-                            Humanoid.WalkSpeed = runnerSpeedVal
-                        end
+                        cachedRunnerHumanoid.WalkSpeed = runnerSpeedVal
                     end
                     ultimaEnergia = energiaAtual
                 end)
@@ -847,6 +849,10 @@ return function(env)
                 conexaoRunnerBoost:Disconnect()
                 conexaoRunnerBoost = nil
             end
+            lastRunnerCharacter = nil
+            cachedRunnerPowers = nil
+            cachedRunnerStamina = nil
+            cachedRunnerHumanoid = nil
         end
     end)
 
@@ -858,16 +864,11 @@ return function(env)
         getgenv().HitAuraAtivo = state
         if state then
             task.spawn(function()
-                local function getRoot(character)
-                    if not character then return nil end
-                    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-                end
-
                 while getgenv().HitAuraAtivo do
                     task.wait(0.15) 
 
                     local meChar = LocalPlayer.Character
-                    local meRoot = getRoot(meChar)
+                    local meRoot = ObterRaiz(meChar)
 
                     if not meChar or not meRoot then continue end
 
@@ -885,7 +886,7 @@ return function(env)
                             if isRagdoll and isCaptured then
                                 if not isRagdoll.Value and not isCaptured.Value then
                                     local alvoChar = alvo.Character
-                                    local alvoRoot = getRoot(alvoChar)
+                                    local alvoRoot = ObterRaiz(alvoChar)
                                     
                                     if alvoRoot then
                                         local distanciaAtual = (alvoRoot.Position - meRoot.Position).Magnitude
@@ -1107,7 +1108,6 @@ return function(env)
                             flyBg.CFrame = CFrame.new(charHrp.Position, charHrp.Position + Camera.CFrame.LookVector)
                             local moveDir = charHum.MoveDirection
                             if moveDir.Magnitude > 0 then
-                               _G.flatLook = Vector3.new(Camera.CFrame.LookVector.X, 0, Camera.CFrame.LookVector.Z).Unit
                                 local camLook = Camera.CFrame.LookVector
                                 local camRight = Camera.CFrame.RightVector
                                 local flatLook = Vector3.new(camLook.X, 0, camLook.Z).Unit
@@ -1178,18 +1178,18 @@ return function(env)
             local JP = 36
 
             if getgenv().ConexoesFTF then
-                for _,c in pairs(getgenv().ConexoesFTF)do pcall(function()c:Disconnect()end) end
+                for _,c in ipairs(getgenv().ConexoesFTF) do pcall(function()c:Disconnect()end) end
             end
             getgenv().ConexoesFTF={}
 
             if getgenv().PulosOriginais then
-                for _,x in pairs(getgenv().PulosOriginais)do pcall(function()x:Enable()end) end
+                for _,x in ipairs(getgenv().PulosOriginais) do pcall(function()x:Enable()end) end
             end
             getgenv().PulosOriginais={}
 
             local function killJump(c)
                 if not getconnections then return end
-                for _,x in pairs(getconnections(U.JumpRequest))do
+                for _,x in ipairs(getconnections(U.JumpRequest)) do
                     pcall(function()
                         local f=x.Function
                         if type(f)=="function"then
@@ -1307,15 +1307,11 @@ return function(env)
                 local jm=U.JumpRequest:Connect(function()
                     if not h or not r or not r.Parent then return end
 
-                        local p=RaycastParams.new()
-                        p.FilterType=Enum.RaycastFilterType.Exclude
-                        p.FilterDescendantsInstances={c}
-                        p.RespectCanCollide=true
-                        pcall(function()p.CollisionGroup="PLAYERS_BODIES"end)
+                        jumpRaycastParams.FilterDescendantsInstances={c}
 
                         local d=16
                         local ok,hit=pcall(function()
-                            return workspace:Blockcast(r.CFrame,Vector3.new(2.2,2,1.4),Vector3.new(0,-16,0),p)
+                            return workspace:Blockcast(r.CFrame,Vector3.new(2.2,2,1.4),Vector3.new(0,-16,0),jumpRaycastParams)
                         end)
                         if ok and hit then d=hit.Distance end
 
@@ -1345,12 +1341,12 @@ return function(env)
         else
             if fdjConnection then fdjConnection:Disconnect(); fdjConnection = nil end
             if getgenv().ConexoesFTF then
-                for _,c in pairs(getgenv().ConexoesFTF)do pcall(function()c:Disconnect()end) end
+                for _,c in ipairs(getgenv().ConexoesFTF) do pcall(function()c:Disconnect()end) end
             end
             getgenv().ConexoesFTF={}
 
             if getgenv().PulosOriginais then
-                for _,x in pairs(getgenv().PulosOriginais)do pcall(function()x:Enable()end) end
+                for _,x in ipairs(getgenv().PulosOriginais) do pcall(function()x:Enable()end) end
             end
             getgenv().PulosOriginais={}
         end
