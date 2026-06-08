@@ -11,15 +11,55 @@ return function(env)
     local SendNotification = env.SendNotification
     local isMobile = env.isMobile
 
-    -- Modificação local para forçar os Inputs deste módulo a ficarem preto transparente
+    -- Modificação local temporária para estilizar e ampliar os Inputs de texto do módulo
     local originalCreateInput = Library.CreateInput
     Library.CreateInput = function(self, targetPage, Text, Default, Callback)
         originalCreateInput(self, targetPage, Text, Default, Callback)
         task.defer(function()
             for _, descendant in ipairs(targetPage:GetDescendants()) do
                 if descendant:IsA("TextBox") then
+                    -- Fundo preto transparente
                     descendant.BackgroundColor3 = Color3.new(0, 0, 0)
                     descendant.BackgroundTransparency = 0.55
+                    
+                    -- Ampliação do espaço para evitar corte de texto
+                    descendant.Size = UDim2.new(0, 110, 0, 24)
+                    descendant.Position = UDim2.new(1, -115, 0.5, -12)
+                    descendant.TextXAlignment = Enum.TextXAlignment.Center
+                    
+                    -- Ajuste dinâmico do texto do rótulo para não sobrepor
+                    local container = descendant.Parent
+                    if container then
+                        local label = container:FindFirstChildWhichIsA("TextLabel")
+                        if label and label ~= descendant then
+                            label.Size = UDim2.new(1, -125, 1, 0)
+                        end
+                    end
+                end
+            end
+        end)
+    end
+
+    -- Modificação local temporária para alinhar perfeitamente as setas (▼) de todos os Dropdowns
+    local originalCreateDropdown = Library.CreateDropdown
+    Library.CreateDropdown = function(self, targetPage, Text, Options, Default, Callback)
+        originalCreateDropdown(self, targetPage, Text, Options, Default, Callback)
+        task.defer(function()
+            for _, descendant in ipairs(targetPage:GetDescendants()) do
+                if descendant:IsA("TextLabel") and (descendant.Text == "▼" or descendant.Text == "▲") then
+                    descendant.Position = UDim2.new(1, -20, 0.5, -10)
+                end
+            end
+        end)
+    end
+
+    local originalCreatePlayerDropdown = Library.CreatePlayerDropdown
+    Library.CreatePlayerDropdown = function(self, targetPage, Text, Default, Callback)
+        originalCreatePlayerDropdown(self, targetPage, Text, Default, Callback)
+        task.defer(function()
+            for _, descendant in ipairs(targetPage:GetDescendants()) do
+                if descendant:IsA("TextLabel") and (descendant.Text == "▼" or descendant.Text == "▲") then
+                    descendant.Position = UDim2.new(1, -20, 0.5, -10)
                 end
             end
         end)
@@ -421,6 +461,15 @@ return function(env)
         end
     end)
 
+    -- Novas Toggles vazias adicionadas no Visual Environment
+    Library:CreateToggle(Page, "Hide Player Names", false, function(state)
+        -- Vazia por enquanto
+    end)
+
+    Library:CreateToggle(Page, "Players Cam", false, function(state)
+        -- Vazia por enquanto
+    end)
+
     local WallhopFolder = nil
     local WallhopConn = nil
 
@@ -516,7 +565,7 @@ return function(env)
         spoofIconId = meusIcones[val] or "" 
     end)
 
-    -- Seção agrupada de Spoof de outros jogadores
+    -- Seção agrupada de Spoof de outros jogadores agrupada
     Library:CreateSection(Page, "Change names other players.", "Right")
     
     Library:CreateToggle(Page, "Enable Others Spoofing", false, function(state)
@@ -559,6 +608,8 @@ return function(env)
         end
     end)
 
-    -- Restaura a função CreateInput ao comportamento padrão da Library global após o carregamento
+    -- Restaura as funções originais da Library para evitar efeitos colaterais em outras abas
     Library.CreateInput = originalCreateInput
+    Library.CreateDropdown = originalCreateDropdown
+    Library.CreatePlayerDropdown = originalCreatePlayerDropdown
 end
