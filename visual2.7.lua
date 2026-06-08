@@ -93,7 +93,7 @@ return function(env)
     local spoofOthersEnabled = false
     local targetOrigName = "Select Player"
     local targetFakeName = "Fake Name"
-    local targetFakeLevel = 100
+    local targetFakeLevel = 67
     local targetFakeIcon = ""
     local spoofedOthers = {}
     local othersOriginalData = {}
