@@ -12,20 +12,6 @@ return function(env)
     local isMobile = env.isMobile
     local UserInputService = game:GetService("UserInputService")
 
-    -- Helper de Otimização: Processamento de loops em blocos para evitar congelar o jogo
-    local function batchProcess(instances, processFunc, batchSize)
-        batchSize = batchSize or 250
-        local count = 0
-        for _, obj in ipairs(instances) do
-            processFunc(obj)
-            count = count + 1
-            if count >= batchSize then
-                task.wait()
-                count = 0
-            end
-        end
-    end
-
     -- Modificação local temporária para estilizar e ampliar os Inputs de texto do módulo
     local originalCreateInput = Library.CreateInput
     Library.CreateInput = function(self, targetPage, Text, Default, Callback)
@@ -221,17 +207,6 @@ return function(env)
     local originalHeadDisplayTypes = {}
     local originalUiTexts = setmetatable({}, {__mode = "k"})
     local changingUi = false
-    local playerNamesCache = {}
-
-    local function updatePlayerNamesCache()
-        table.clear(playerNamesCache)
-        for _, p in ipairs(Players:GetPlayers()) do
-            local name = p.Name
-            local disp = p.DisplayName
-            if name then playerNamesCache[name] = true end
-            if disp and disp ~= "" then playerNamesCache[disp] = true end
-        end
-    end
 
     local function applyOcultarNomeCabeca(player)
         local function aplicar(char)
@@ -266,9 +241,13 @@ return function(env)
             end
             
             local mudou = false
-            for targetName, _ in pairs(playerNamesCache) do
-                if txt:find(targetName, 1, true) then
-                    txt = txt:gsub(targetName, "")
+            for _, p in ipairs(Players:GetPlayers()) do
+                if txt:find(p.Name, 1, true) then
+                    txt = txt:gsub(p.Name, "")
+                    mudou = true
+                end
+                if p.DisplayName and p.DisplayName ~= "" and txt:find(p.DisplayName, 1, true) then
+                    txt = txt:gsub(p.DisplayName, "")
                     mudou = true
                 end
             end
@@ -288,32 +267,21 @@ return function(env)
     local function setHidePlayerNames(state)
         hidePlayerNamesEnabled = state
         if state then
-            updatePlayerNamesCache()
-            table.insert(playerNamesConnections, Players.PlayerAdded:Connect(function(p)
-                updatePlayerNamesCache()
-                applyOcultarNomeCabeca(p)
-            end))
-            table.insert(playerNamesConnections, Players.PlayerRemoving:Connect(updatePlayerNamesCache))
-
             for _, player in ipairs(Players:GetPlayers()) do 
                 applyOcultarNomeCabeca(player) 
             end
+            local pAddedConn = Players.PlayerAdded:Connect(applyOcultarNomeCabeca)
+            table.insert(playerNamesConnections, pAddedConn)
 
             local playerGui = LocalPlayer:WaitForChild("PlayerGui", 5)
             if playerGui then
-                task.spawn(function()
-                    local desc = playerGui:GetDescendants()
-                    batchProcess(desc, limparTextoUI, 150)
-                end)
+                for _, desc in ipairs(playerGui:GetDescendants()) do limparTextoUI(desc) end
                 local pgConn = playerGui.DescendantAdded:Connect(limparTextoUI)
                 table.insert(playerNamesConnections, pgConn)
             end
 
             pcall(function()
-                task.spawn(function()
-                    local desc = CoreGui:GetDescendants()
-                    batchProcess(desc, limparTextoUI, 150)
-                end)
+                for _, desc in ipairs(CoreGui:GetDescendants()) do limparTextoUI(desc) end
                 local cgConn = CoreGui.DescendantAdded:Connect(limparTextoUI)
                 table.insert(playerNamesConnections, cgConn)
             end)
@@ -338,7 +306,6 @@ return function(env)
             end
             changingUi = false
             table.clear(originalUiTexts)
-            table.clear(playerNamesCache)
         end
     end
 
@@ -1002,18 +969,11 @@ return function(env)
         if not trackersInitialized then
             trackersInitialized = true
             pcall(function()
-                task.spawn(function()
-                    local coreDesc = CoreGui:GetDescendants()
-                    batchProcess(coreDesc, trackElement, 150)
-                end)
+                for _, gui in ipairs(CoreGui:GetDescendants()) do trackElement(gui) end
                 CoreGui.DescendantAdded:Connect(trackElement)
-                
                 local playerGui = LocalPlayer:WaitForChild("PlayerGui", 5)
                 if playerGui then
-                    task.spawn(function()
-                        local playerDesc = playerGui:GetDescendants()
-                        batchProcess(playerDesc, trackElement, 150)
-                    end)
+                    for _, gui in ipairs(playerGui:GetDescendants()) do trackElement(gui) end
                     playerGui.DescendantAdded:Connect(trackElement)
                 end
             end)
@@ -1026,28 +986,11 @@ return function(env)
         end
     end
 
-    local cachedNamesFrame = nil
-    local function getNamesFrame()
-        if cachedNamesFrame and cachedNamesFrame.Parent then
-            return cachedNamesFrame
-        end
-        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-        local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
-        cachedNamesFrame = namesFrame
-        return namesFrame
-    end
-
-    local updateAccumulator = 0
-    spoofVisualsLoop = RunService.Heartbeat:Connect(function(dt)
+    spoofVisualsLoop = RunService.Heartbeat:Connect(function()
         if not spoofVisualsEnabled and not spoofOthersEnabled then return end
-        
-        -- Cap das atualizações de nomes para 20 vezes por segundo para economizar CPU
-        updateAccumulator = updateAccumulator + dt
-        if updateAccumulator < 0.05 then return end
-        updateAccumulator = 0
-        
         pcall(function()
-            local namesFrame = getNamesFrame()
+            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+            local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
 
             if spoofOthersEnabled then
                 for origNameKey, data in pairs(spoofedOthers) do
@@ -1248,7 +1191,10 @@ return function(env)
             end
             task.spawn(function()
                 local desc = workspace:GetDescendants()
-                batchProcess(desc, cleanPart, 300)
+                for i, v in ipairs(desc) do
+                    cleanPart(v)
+                    if i % 300 == 0 then task.wait() end
+                end
             end)
             HideLeavesConnection = workspace.DescendantAdded:Connect(cleanPart)
         else
@@ -1274,56 +1220,6 @@ return function(env)
 
     Library:CreateToggle(Page, "Cam Blur", false, function(state)
         setupCamBlur(state)
-    end)
-
-    local WallhopFolder = nil
-    local WallhopConn = nil
-
-    local function applyWallhopESP(part)
-        if part.ClassName == "Part" or part.ClassName == "TrussPart" then
-            if part.ClassName == "Part" and part.Shape ~= Enum.PartType.Block then return end
-            if part.Transparency > 0.8 or not part.CanCollide then return end
-            if part:FindFirstChildWhichIsA("DataModelMesh") then return end
-            if part.Size.Y <= 2 then return end
-
-            local ancestorModel = part:FindFirstAncestorOfClass("Model")
-            if ancestorModel and ancestorModel:FindFirstChildOfClass("Humanoid") then return end
-
-            if WallhopFolder and not part:FindFirstChild("WallhopSelectionBox") then
-                local box = Instance.new("SelectionBox")
-                box.Name = "WallhopSelectionBox"
-                box.Adornee = part
-                box.Color3 = Color3.fromRGB(255, 255, 255)
-                box.LineThickness = 0.03
-                box.SurfaceTransparency = 1
-                box.Parent = WallhopFolder
-            end
-        end
-    end
-
-    Library:CreateToggle(Page, "Wallhop Lines", false, function(state)
-        if state then
-            if not WallhopFolder then
-                WallhopFolder = Instance.new("Folder")
-                WallhopFolder.Name = "WallhopESPFolder"
-                local s = pcall(function() WallhopFolder.Parent = CoreGui end)
-                if not s then WallhopFolder.Parent = LocalPlayer:WaitForChild("PlayerGui") end
-            end
-
-            task.spawn(function()
-                local desc = Workspace:GetDescendants()
-                batchProcess(desc, applyWallhopESP, 300)
-            end)
-
-            WallhopConn = Workspace.DescendantAdded:Connect(function(part)
-                task.defer(function()
-                    if WallhopFolder then applyWallhopESP(part) end
-                end)
-            end)
-        else
-            if WallhopConn then WallhopConn:Disconnect() WallhopConn = nil end
-            if WallhopFolder then WallhopFolder:Destroy() WallhopFolder = nil end
-        end
     end)
 
     Library:CreateSection(Page, "Visual Name/Level", "Right")
