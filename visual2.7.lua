@@ -12,6 +12,20 @@ return function(env)
     local isMobile = env.isMobile
     local UserInputService = game:GetService("UserInputService")
 
+    -- Helper de Otimização: Processamento de loops em blocos para evitar congelar o jogo
+    local function batchProcess(instances, processFunc, batchSize)
+        batchSize = batchSize or 250
+        local count = 0
+        for _, obj in ipairs(instances) do
+            processFunc(obj)
+            count = count + 1
+            if count >= batchSize then
+                task.wait()
+                count = 0
+            end
+        end
+    end
+
     -- Modificação local temporária para estilizar e ampliar os Inputs de texto do módulo
     local originalCreateInput = Library.CreateInput
     Library.CreateInput = function(self, targetPage, Text, Default, Callback)
@@ -207,6 +221,17 @@ return function(env)
     local originalHeadDisplayTypes = {}
     local originalUiTexts = setmetatable({}, {__mode = "k"})
     local changingUi = false
+    local playerNamesCache = {}
+
+    local function updatePlayerNamesCache()
+        table.clear(playerNamesCache)
+        for _, p in ipairs(Players:GetPlayers()) do
+            local name = p.Name
+            local disp = p.DisplayName
+            if name then playerNamesCache[name] = true end
+            if disp and disp ~= "" then playerNamesCache[disp] = true end
+        end
+    end
 
     local function applyOcultarNomeCabeca(player)
         local function aplicar(char)
@@ -229,7 +254,7 @@ return function(env)
 
     local function limparTextoUI(element)
         if not hidePlayerNamesEnabled then return end
-        if not element:IsA("TextLabel") and not element:IsA("TextBox") then return end
+        if not element:IsA("TextLabel") and not element:IsA("TextButton") and not element:IsA("TextBox") then return end
         
         local function verificar()
             if changingUi then return end
@@ -241,13 +266,9 @@ return function(env)
             end
             
             local mudou = false
-            for _, p in ipairs(Players:GetPlayers()) do
-                if txt:find(p.Name, 1, true) then
-                    txt = txt:gsub(p.Name, "")
-                    mudou = true
-                end
-                if p.DisplayName and p.DisplayName ~= "" and txt:find(p.DisplayName, 1, true) then
-                    txt = txt:gsub(p.DisplayName, "")
+            for targetName, _ in pairs(playerNamesCache) do
+                if txt:find(targetName, 1, true) then
+                    txt = txt:gsub(targetName, "")
                     mudou = true
                 end
             end
@@ -267,21 +288,32 @@ return function(env)
     local function setHidePlayerNames(state)
         hidePlayerNamesEnabled = state
         if state then
+            updatePlayerNamesCache()
+            table.insert(playerNamesConnections, Players.PlayerAdded:Connect(function(p)
+                updatePlayerNamesCache()
+                applyOcultarNomeCabeca(p)
+            end))
+            table.insert(playerNamesConnections, Players.PlayerRemoving:Connect(updatePlayerNamesCache))
+
             for _, player in ipairs(Players:GetPlayers()) do 
                 applyOcultarNomeCabeca(player) 
             end
-            local pAddedConn = Players.PlayerAdded:Connect(applyOcultarNomeCabeca)
-            table.insert(playerNamesConnections, pAddedConn)
 
             local playerGui = LocalPlayer:WaitForChild("PlayerGui", 5)
             if playerGui then
-                for _, desc in ipairs(playerGui:GetDescendants()) do limparTextoUI(desc) end
+                task.spawn(function()
+                    local desc = playerGui:GetDescendants()
+                    batchProcess(desc, limparTextoUI, 150)
+                end)
                 local pgConn = playerGui.DescendantAdded:Connect(limparTextoUI)
                 table.insert(playerNamesConnections, pgConn)
             end
 
             pcall(function()
-                for _, desc in ipairs(CoreGui:GetDescendants()) do limparTextoUI(desc) end
+                task.spawn(function()
+                    local desc = CoreGui:GetDescendants()
+                    batchProcess(desc, limparTextoUI, 150)
+                end)
                 local cgConn = CoreGui.DescendantAdded:Connect(limparTextoUI)
                 table.insert(playerNamesConnections, cgConn)
             end)
@@ -306,6 +338,7 @@ return function(env)
             end
             changingUi = false
             table.clear(originalUiTexts)
+            table.clear(playerNamesCache)
         end
     end
 
@@ -501,7 +534,7 @@ return function(env)
             end
             table.clear(clonedEnvironment)
             folder:ClearAllChildren()
-            cam.CFrame = OUT_OF_BOUNDS_CFRAME
+            if cam then cam.CFrame = OUT_OF_BOUNDS_CFRAME end
         end
     end
 
@@ -963,17 +996,24 @@ return function(env)
             pcall(function() e:GetPropertyChangedSignal("Text"):Connect(function() patchElement(e) end) end)
         end
     end
+    
     local trackersInitialized = false
-
     local function updateTrackers()
         if not trackersInitialized then
             trackersInitialized = true
             pcall(function()
-                for _, gui in ipairs(CoreGui:GetDescendants()) do trackElement(gui) end
+                task.spawn(function()
+                    local coreDesc = CoreGui:GetDescendants()
+                    batchProcess(coreDesc, trackElement, 150)
+                end)
                 CoreGui.DescendantAdded:Connect(trackElement)
+                
                 local playerGui = LocalPlayer:WaitForChild("PlayerGui", 5)
                 if playerGui then
-                    for _, gui in ipairs(playerGui:GetDescendants()) do trackElement(gui) end
+                    task.spawn(function()
+                        local playerDesc = playerGui:GetDescendants()
+                        batchProcess(playerDesc, trackElement, 150)
+                    end)
                     playerGui.DescendantAdded:Connect(trackElement)
                 end
             end)
@@ -986,11 +1026,28 @@ return function(env)
         end
     end
 
-    spoofVisualsLoop = RunService.Heartbeat:Connect(function()
+    local cachedNamesFrame = nil
+    local function getNamesFrame()
+        if cachedNamesFrame and cachedNamesFrame.Parent then
+            return cachedNamesFrame
+        end
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
+        cachedNamesFrame = namesFrame
+        return namesFrame
+    end
+
+    local updateAccumulator = 0
+    spoofVisualsLoop = RunService.Heartbeat:Connect(function(dt)
         if not spoofVisualsEnabled and not spoofOthersEnabled then return end
+        
+        -- Cap das atualizações de nomes para 20 vezes por segundo para economizar CPU
+        updateAccumulator = updateAccumulator + dt
+        if updateAccumulator < 0.05 then return end
+        updateAccumulator = 0
+        
         pcall(function()
-            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-            local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
+            local namesFrame = getNamesFrame()
 
             if spoofOthersEnabled then
                 for origNameKey, data in pairs(spoofedOthers) do
@@ -1088,67 +1145,6 @@ return function(env)
         end)
     end)
 
-    local function restoreOtherPlayer(realName)
-        if not realName then return end
-        spoofedOthers[realName] = nil
-        
-        local backup = othersOriginalData[realName]
-        local player = Players:FindFirstChild(realName)
-        if player and player.Character and backup then
-            local hum = player.Character:FindFirstChildOfClass("Humanoid")
-            if hum then pcall(function() hum.DisplayName = backup.DisplayName end) end
-        end
-        
-        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-        local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
-        if namesFrame then
-            local playerFrame = namesFrame:FindFirstChild(realName .. "PlayerFrame")
-            if playerFrame then
-                local iconLabel = playerFrame:FindFirstChild("IconLabel")
-                local nameLabel = playerFrame:FindFirstChild("NameLabel")
-                local levelLabel = playerFrame:FindFirstChild("LevelLabel")
-                
-                if iconLabel then
-                    iconLabel.ImageTransparency = 0
-                    local fakeIcon = iconLabel:FindFirstChild("IconeFakeCorrigido")
-                    if fakeIcon then fakeIcon.Visible = false end
-                end
-                if nameLabel and backup then nameLabel.Text = backup.Name end
-                if levelLabel and backup then levelLabel.Text = backup.Level end
-            end
-        end
-        updateTrackers()
-    end
-
-    local function applySpoofToTarget()
-        if targetOrigName == "Select Player" or targetOrigName == "" then return end
-        local p = Players:FindFirstChild(targetOrigName)
-        if p then
-            if not othersOriginalData[p.Name] then
-                local origName = p.DisplayName
-                local origLevel = "1"
-                local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-                local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
-                if namesFrame then
-                    local playerFrame = namesFrame:FindFirstChild(p.Name .. "PlayerFrame")
-                    if playerFrame then
-                        local nLabel = playerFrame:FindFirstChild("NameLabel")
-                        local lLabel = playerFrame:FindFirstChild("LevelLabel")
-                        if nLabel then origName = nLabel.Text end
-                        if lLabel then origLevel = lLabel.Text end
-                    end
-                end
-                othersOriginalData[p.Name] = { Name = origName, Level = origLevel, DisplayName = p.DisplayName }
-            end
-            spoofedOthers[p.Name] = {
-                spoofName = targetFakeName, 
-                spoofLevel = targetFakeLevel, 
-                spoofIcon = targetFakeIcon
-            }
-            if spoofOthersEnabled then updateTrackers() end
-        end
-    end
-
     local stretchConnection = nil
 
     Library:CreateSection(Page, "Camera & UI", "Left")
@@ -1186,7 +1182,7 @@ return function(env)
         end)
     end)
 
-    -- Configuração dinâmica de Touch Sensitivity com travamento de PC integrado
+    -- Touch Sensitivity com proteção para apenas mobiles
     local touchToggle
     touchToggle = Library:CreateToggle(Page, "Touch Sensitivity", false, function(state)
         if state then
@@ -1250,7 +1246,10 @@ return function(env)
                     end
                 end
             end
-            for _, v in pairs(workspace:GetDescendants()) do cleanPart(v) end
+            task.spawn(function()
+                local desc = workspace:GetDescendants()
+                batchProcess(desc, cleanPart, 300)
+            end)
             HideLeavesConnection = workspace.DescendantAdded:Connect(cleanPart)
         else
             if HideLeavesConnection then HideLeavesConnection:Disconnect() end
@@ -1311,9 +1310,10 @@ return function(env)
                 if not s then WallhopFolder.Parent = LocalPlayer:WaitForChild("PlayerGui") end
             end
 
-            for _, part in ipairs(Workspace:GetDescendants()) do
-                applyWallhopESP(part)
-            end
+            task.spawn(function()
+                local desc = Workspace:GetDescendants()
+                batchProcess(desc, applyWallhopESP, 300)
+            end)
 
             WallhopConn = Workspace.DescendantAdded:Connect(function(part)
                 task.defer(function()
