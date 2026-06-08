@@ -409,6 +409,8 @@ return function(env)
             if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then task.defer(applyFont, d) end 
         end)
     end)
+
+    Library:CreateSection(Page, "Visual Environment", "Left")
     
     Library:CreateToggle(Page, "stretch screen", false, function(state) 
         if state then 
@@ -426,7 +428,6 @@ return function(env)
         end 
     end)
 
-    Library:CreateSection(Page, "Visual Environment", "Left")
     Library:CreateToggle(Page, "Hide Leaves (Only Homestead)", false, function(state) 
         if state then
             local function isGreen(part)
@@ -461,12 +462,19 @@ return function(env)
         end
     end)
 
-    -- Novas Toggles vazias adicionadas no Visual Environment
     Library:CreateToggle(Page, "Hide Player Names", false, function(state)
         -- Vazia por enquanto
     end)
 
     Library:CreateToggle(Page, "Players Cam", false, function(state)
+        -- Vazia por enquanto
+    end)
+
+    Library:CreateToggle(Page, "Remove Black Screen", false, function(state)
+        -- Vazia por enquanto
+    end)
+
+    Library:CreateToggle(Page, "Cam Blur", false, function(state)
         -- Vazia por enquanto
     end)
 
