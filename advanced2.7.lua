@@ -384,7 +384,7 @@ return function(env)
         end
     end)
 
-    Library:CreateToggle(Page, "Anti Ragdoll V2", false, function(state)
+    Library:CreateToggle(Page, "Anti Ragdoll V233", false, function(state)
         arV2Enabled = state
         if state then
             if LocalPlayer.Character then task.spawn(arV2Monitor, LocalPlayer.Character) end
