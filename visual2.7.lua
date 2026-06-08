@@ -10,6 +10,7 @@ return function(env)
     local UserConfigs = env.UserConfigs
     local SendNotification = env.SendNotification
     local isMobile = env.isMobile
+    local UserInputService = game:GetService("UserInputService")
 
     -- Modificação local temporária para estilizar e ampliar os Inputs de texto do módulo
     local originalCreateInput = Library.CreateInput
@@ -99,6 +100,214 @@ return function(env)
     local targetFakeIcon = ""
     local spoofedOthers = {}
     local othersOriginalData = {}
+
+    -- Variáveis e mecânicas internas de Touch Sensitivity
+    local touchSensEnabled = false
+    local touchSensValue = 1.0
+    local hookActive = false
+
+    local function setupCameraHook()
+        local success = false
+        pcall(function()
+            local playerScripts = LocalPlayer:FindFirstChild("PlayerScripts")
+            if not playerScripts then return end
+            local playerModule = playerScripts:FindFirstChild("PlayerModule")
+            if not playerModule then return end
+            local cameraModule = playerModule:FindFirstChild("CameraModule")
+            if cameraModule then
+                local cameraInput = cameraModule:FindFirstChild("CameraInput")
+                if cameraInput then
+                    local cameraInputModule = require(cameraInput)
+                    if cameraInputModule and cameraInputModule.getRotation then
+                        local originalGetRotation = cameraInputModule.getRotation
+                        cameraInputModule.getRotation = function(disableRotation)
+                            local rotation = originalGetRotation(disableRotation)
+                            if touchSensEnabled and UserInputService.TouchEnabled then
+                                return rotation * touchSensValue
+                            end
+                            return rotation
+                        end
+                        success = true
+                        hookActive = true
+                    end
+                end
+            end
+        end)
+        if not success then
+            pcall(function()
+                local oldIndex
+                oldIndex = hookmetamethod(game, "__index", function(self, key)
+                    if self == UserInputService and key == "MouseDelta" then
+                        local original = oldIndex(self, key)
+                        if touchSensEnabled and UserInputService.TouchEnabled then
+                            return original * touchSensValue
+                        end
+                        return original
+                    end
+                    return oldIndex(self, key)
+                end)
+                success = true
+                hookActive = true
+            end)
+        end
+        return success
+    end
+    setupCameraHook()
+
+    -- Variáveis e mecânicas internas do Remove Black Screen
+    local removeBlackScreenEnabled = false
+    local blackoutConn = nil
+    local blackoutCharConn = nil
+
+    local function bypassScreen(child)
+        if removeBlackScreenEnabled and child.Name == "BlackOutScreenGui" then
+            task.wait()
+            child:Destroy()
+            local cam = workspace.CurrentCamera
+            if cam then cam.CameraType = Enum.CameraType.Custom end
+        end
+    end
+
+    local function setupBlackoutBypass(state)
+        removeBlackScreenEnabled = state
+        if state then
+            local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 5)
+            if PlayerGui then
+                local existing = PlayerGui:FindFirstChild("BlackOutScreenGui")
+                if existing then
+                    existing:Destroy()
+                    local cam = workspace.CurrentCamera
+                    if cam then cam.CameraType = Enum.CameraType.Custom end
+                end
+                blackoutConn = PlayerGui.ChildAdded:Connect(bypassScreen)
+            end
+            
+            blackoutCharConn = LocalPlayer.CharacterAdded:Connect(function()
+                local pGui = LocalPlayer:WaitForChild("PlayerGui", 5)
+                if pGui then
+                    local existingOnSpawn = pGui:FindFirstChild("BlackOutScreenGui")
+                    if existingOnSpawn then
+                        existingOnSpawn:Destroy()
+                        local cam = workspace.CurrentCamera
+                        if cam then cam.CameraType = Enum.CameraType.Custom end
+                    end
+                    if blackoutConn then blackoutConn:Disconnect() end
+                    blackoutConn = pGui.ChildAdded:Connect(bypassScreen)
+                end
+            end)
+        else
+            if blackoutConn then blackoutConn:Disconnect() blackoutConn = nil end
+            if blackoutCharConn then blackoutCharConn:Disconnect() blackoutCharConn = nil end
+        end
+    end
+
+    -- Variáveis e mecânicas internas do Ocultar Nomes dos Jogadores
+    local hidePlayerNamesEnabled = false
+    local playerNamesConnections = {}
+    local originalHeadDisplayTypes = {}
+    local originalUiTexts = setmetatable({}, {__mode = "k"})
+    local changingUi = false
+
+    local function applyOcultarNomeCabeca(player)
+        local function aplicar(char)
+            local hum = char:WaitForChild("Humanoid", 10)
+            if hum then
+                if not originalHeadDisplayTypes[hum] then
+                    originalHeadDisplayTypes[hum] = hum.DisplayDistanceType
+                end
+                if hidePlayerNamesEnabled then
+                    hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+                end
+            end
+        end
+        if hidePlayerNamesEnabled then
+            local charAddedConn = player.CharacterAdded:Connect(aplicar)
+            table.insert(playerNamesConnections, charAddedConn)
+            if player.Character then aplicar(player.Character) end
+        end
+    end
+
+    local function limparTextoUI(element)
+        if not hidePlayerNamesEnabled then return end
+        if not element:IsA("TextLabel") and not element:IsA("TextBox") then return end
+        
+        local function verificar()
+            if changingUi then return end
+            local txt = element.Text
+            if txt == "" then return end
+            
+            if not originalUiTexts[element] then
+                originalUiTexts[element] = txt
+            end
+            
+            local mudou = false
+            for _, p in ipairs(Players:GetPlayers()) do
+                if txt:find(p.Name, 1, true) then
+                    txt = txt:gsub(p.Name, "")
+                    mudou = true
+                end
+                if p.DisplayName and p.DisplayName ~= "" and txt:find(p.DisplayName, 1, true) then
+                    txt = txt:gsub(p.DisplayName, "")
+                    mudou = true
+                end
+            end
+            
+            if mudou then
+                changingUi = true
+                pcall(function() element.Text = txt end)
+                changingUi = false
+            end
+        end
+        
+        verificar()
+        local textConn = element:GetPropertyChangedSignal("Text"):Connect(verificar)
+        table.insert(playerNamesConnections, textConn)
+    end
+
+    local function setHidePlayerNames(state)
+        hidePlayerNamesEnabled = state
+        if state then
+            for _, player in ipairs(Players:GetPlayers()) do 
+                applyOcultarNomeCabeca(player) 
+            end
+            local pAddedConn = Players.PlayerAdded:Connect(applyOcultarNomeCabeca)
+            table.insert(playerNamesConnections, pAddedConn)
+
+            local playerGui = LocalPlayer:WaitForChild("PlayerGui", 5)
+            if playerGui then
+                for _, desc in ipairs(playerGui:GetDescendants()) do limparTextoUI(desc) end
+                local pgConn = playerGui.DescendantAdded:Connect(limparTextoUI)
+                table.insert(playerNamesConnections, pgConn)
+            end
+
+            pcall(function()
+                for _, desc in ipairs(CoreGui:GetDescendants()) do limparTextoUI(desc) end
+                local cgConn = CoreGui.DescendantAdded:Connect(limparTextoUI)
+                table.insert(playerNamesConnections, cgConn)
+            end)
+        else
+            for _, conn in ipairs(playerNamesConnections) do
+                if conn then conn:Disconnect() end
+            end
+            table.clear(playerNamesConnections)
+
+            for hum, originalType in pairs(originalHeadDisplayTypes) do
+                if hum and hum.Parent then
+                    pcall(function() hum.DisplayDistanceType = originalType end)
+                end
+            end
+            table.clear(originalHeadDisplayTypes)
+
+            changingUi = true
+            for element, originalText in pairs(originalUiTexts) do
+                if element and element.Parent then
+                    pcall(function() element.Text = originalText end)
+                end
+            end
+            changingUi = false
+            table.clear(originalUiTexts)
+        end
+    end
 
     local function patchElement(e)
         if not e or not e:IsA("GuiObject") then return end
@@ -410,6 +619,26 @@ return function(env)
         end)
     end)
 
+    -- Configuração dinâmica de Touch Sensitivity para Mobile dentro da aba de Câmera
+    local touchToggleRef
+    Library:CreateToggle(Page, "Touch Sensitivity", false, function(state)
+        if state then
+            if not UserInputService.TouchEnabled then
+                SendNotification("This feature is only available on Touch/Mobile devices!", 3)
+                touchSensEnabled = false
+                return
+            end
+            touchSensEnabled = true
+        else
+            touchSensEnabled = false
+        end
+    end)
+
+    Library:CreateSlider(Page, "Sensitivity Value", 1, 100, 10, function(val)
+        touchSensValue = val / 10
+    end)
+
+    -- Seção Visual Environment reunida
     Library:CreateSection(Page, "Visual Environment", "Left")
     
     Library:CreateToggle(Page, "stretch screen", false, function(state) 
@@ -463,7 +692,7 @@ return function(env)
     end)
 
     Library:CreateToggle(Page, "Hide Player Names", false, function(state)
-        -- Vazia por enquanto
+        setHidePlayerNames(state)
     end)
 
     Library:CreateToggle(Page, "Players Cam", false, function(state)
@@ -471,7 +700,7 @@ return function(env)
     end)
 
     Library:CreateToggle(Page, "Remove Black Screen", false, function(state)
-        -- Vazia por enquanto
+        setupBlackoutBypass(state)
     end)
 
     Library:CreateToggle(Page, "Cam Blur", false, function(state)
@@ -573,7 +802,7 @@ return function(env)
         spoofIconId = meusIcones[val] or "" 
     end)
 
-    -- Seção agrupada de Spoof de outros jogadores agrupada
+    -- Seção de Spoof de outros jogadores
     Library:CreateSection(Page, "Change names other players.", "Right")
     
     Library:CreateToggle(Page, "Enable Others Spoofing", false, function(state)
