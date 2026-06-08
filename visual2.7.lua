@@ -22,15 +22,6 @@ return function(env)
     local spoofName = LocalPlayer.Name
     local spoofLevel = 100
     local spoofIconId = "rbxassetid://1188562340"
-    
-    local spoofedOthers = {}
-    local othersOriginalData = {}
-    local spoofOthersEnabled = false
-    
-    local targetOrigName = "Select Player"
-    local targetFakeName = "Fake Name"
-    local targetFakeLevel = 100
-    local targetFakeIcon = ""
 
     local spoofVisualsEnabled = false
     local spoofVisualsLoop
@@ -66,22 +57,6 @@ return function(env)
             end
         end
         
-        if spoofOthersEnabled then
-            for origNameKey, fakeData in pairs(spoofedOthers) do
-                local fakeName = fakeData.spoofName
-                if newTxt:find(origNameKey, 1, true) then
-                    newTxt = newTxt:gsub(origNameKey, fakeName)
-                    changed = true
-                end
-                local backup = othersOriginalData[origNameKey]
-                local origDisp = backup and backup.DisplayName
-                if origDisp and newTxt:find(origDisp, 1, true) then
-                    newTxt = newTxt:gsub(origDisp, fakeName)
-                    changed = true
-                end
-            end
-        end
-        
         if changed then
             if not originalTexts[e] then originalTexts[e] = txt end
             pcall(function() e.Text = newTxt end)
@@ -92,17 +67,6 @@ return function(env)
                 
                 if spoofVisualsEnabled and (orig:find(originalName, 1, true) or (originalDisplayName and orig:find(originalDisplayName, 1, true))) then
                     shouldBeSpoofed = true
-                end
-                
-                if spoofOthersEnabled and not shouldBeSpoofed then
-                    for origNameKey, _ in pairs(spoofedOthers) do
-                        local backup = othersOriginalData[origNameKey]
-                        local origDisp = backup and backup.DisplayName
-                        if orig:find(origNameKey, 1, true) or (origDisp and orig:find(origDisp, 1, true)) then
-                            shouldBeSpoofed = true
-                            break
-                        end
-                    end
                 end
                 
                 if not shouldBeSpoofed then
@@ -143,56 +107,10 @@ return function(env)
     end
 
     spoofVisualsLoop = RunService.Heartbeat:Connect(function()
-        if not spoofVisualsEnabled and not spoofOthersEnabled then return end
+        if not spoofVisualsEnabled then return end
         pcall(function()
             local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
             local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
-
-            if spoofOthersEnabled then
-                for origNameKey, data in pairs(spoofedOthers) do
-                    local player = Players:FindFirstChild(origNameKey)
-                    if player and player.Character then
-                        local hum = player.Character:FindFirstChildOfClass("Humanoid")
-                        if hum then 
-                            pcall(function() hum.DisplayName = data.spoofName end) 
-                        end
-                    end
-                    
-                    if namesFrame then
-                        local playerFrame = namesFrame:FindFirstChild(origNameKey .. "PlayerFrame")
-                        if playerFrame then
-                            local levelLabel = playerFrame:FindFirstChild("LevelLabel")
-                            local nameLabel  = playerFrame:FindFirstChild("NameLabel")
-                            local iconLabel  = playerFrame:FindFirstChild("IconLabel")
-                            
-                            if levelLabel then levelLabel.Text = tostring(data.spoofLevel) end
-                            if nameLabel then nameLabel.Text = data.spoofName end
-                            if iconLabel then 
-                                iconLabel.ImageTransparency = 1
-                                local fakeIcon = iconLabel:FindFirstChild("IconeFakeCorrigido")
-                                if not fakeIcon then
-                                    fakeIcon = Instance.new("ImageLabel")
-                                    fakeIcon.Name = "IconeFakeCorrigido"
-                                    fakeIcon.BackgroundTransparency = 1
-                                    fakeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-                                    fakeIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
-                                    fakeIcon.ZIndex = iconLabel.ZIndex + 1
-                                    fakeIcon.Parent = iconLabel
-                                end
-                                fakeIcon.Image = data.spoofIcon
-                                fakeIcon.Visible = true
-                                fakeIcon.ScaleType = Enum.ScaleType.Fit
-                                
-                                if data.spoofIcon == meusIcones.QA or data.spoofIcon == meusIcones.CON then
-                                    fakeIcon.Size = UDim2.new(1.35, 0, 1.35, 0) 
-                                else
-                                    fakeIcon.Size = UDim2.new(1.0, 0, 1.0, 0)
-                                end
-                            end
-                        end
-                    end
-                end
-            end
             
             if spoofVisualsEnabled then
                 local char = LocalPlayer.Character
@@ -246,99 +164,7 @@ return function(env)
         end)
     end)
 
-    local function restoreOtherPlayer(realName)
-        if not realName then return end
-        spoofedOthers[realName] = nil
-        
-        local backup = othersOriginalData[realName]
-        local player = Players:FindFirstChild(realName)
-        if player and player.Character and backup then
-            local hum = player.Character:FindFirstChildOfClass("Humanoid")
-            if hum then 
-                pcall(function() hum.DisplayName = backup.DisplayName end) 
-            end
-        end
-        
-        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-        local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
-        if namesFrame then
-            local playerFrame = namesFrame:FindFirstChild(realName .. "PlayerFrame")
-            if playerFrame then
-                local iconLabel = playerFrame:FindFirstChild("IconLabel")
-                local nameLabel = playerFrame:FindFirstChild("NameLabel")
-                local levelLabel = playerFrame:FindFirstChild("LevelLabel")
-                
-                if iconLabel then
-                    iconLabel.ImageTransparency = 0
-                    local fakeIcon = iconLabel:FindFirstChild("IconeFakeCorrigido")
-                    if fakeIcon then fakeIcon.Visible = false end
-                end
-                
-                if nameLabel and backup then
-                    nameLabel.Text = backup.Name
-                end
-                if levelLabel and backup then
-                    levelLabel.Text = backup.Level
-                end
-            end
-        end
-        updateTrackers()
-    end
-
     local stretchConnection = nil
-    local grayConns = {}
-    local grayBackups = setmetatable({}, {__mode = "k"})
-
-    local function makeGray(char)
-        if not char then return end
-        if not grayBackups[char] then
-            grayBackups[char] = { parts = setmetatable({}, {__mode="k"}), meshes = setmetatable({}, {__mode="k"}), clothes = {} }
-        end
-        local backup = grayBackups[char]
-        
-        for _, obj in ipairs(char:GetDescendants()) do
-            if obj:FindFirstAncestorWhichIsA("Tool") then continue end
-            if obj:IsA("BasePart") then
-                if not backup.parts[obj] then
-                    backup.parts[obj] = { Color = obj.Color, Material = obj.Material }
-                end
-                obj.Color = Color3.fromRGB(150, 150, 150)
-                obj.Material = Enum.Material.SmoothPlastic
-                if obj:IsA("MeshPart") then
-                    if not backup.meshes[obj] then backup.meshes[obj] = obj.TextureID end
-                    obj.TextureID = ""
-                end
-            elseif obj:IsA("SpecialMesh") then
-                if not backup.meshes[obj] then backup.meshes[obj] = obj.TextureId end
-                obj.TextureId = ""
-            elseif obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") or obj:IsA("BodyColors") or (obj:IsA("Decal") and obj.Name ~= "face") then
-                table.insert(backup.clothes, {obj = obj, parent = obj.Parent})
-                obj.Parent = nil
-            end
-        end
-    end
-    
-    local function restoreGray(char)
-        local backup = grayBackups[char]
-        if not backup then return end
-        
-        for part, data in pairs(backup.parts) do
-            if part and part.Parent then
-                part.Color = data.Color
-                part.Material = data.Material
-            end
-        end
-        for mesh, tex in pairs(backup.meshes) do
-            if mesh and mesh.Parent then
-                if mesh:IsA("MeshPart") then mesh.TextureID = tex
-                elseif mesh:IsA("SpecialMesh") then mesh.TextureId = tex end
-            end
-        end
-        for _, clothData in ipairs(backup.clothes) do
-            if clothData.obj then clothData.obj.Parent = clothData.parent end
-        end
-        grayBackups[char] = nil
-    end
 
     Library:CreateSection(Page, "Camera & UI", "Left")
     local FovVal = 70
@@ -391,63 +217,6 @@ return function(env)
         end 
     end)
 
-    Library:CreateSection(Page, "Spoof Actions", "Left")
-    Library:CreateButton(Page, "Apply To Selected Player", function()
-        if targetOrigName ~= "Select Player" and targetFakeName ~= "" then
-            local p = Players:FindFirstChild(targetOrigName)
-            if p then
-                if not othersOriginalData[p.Name] then
-                    local origName = p.DisplayName
-                    local origLevel = "1"
-                    
-                    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-                    local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
-                    if namesFrame then
-                        local playerFrame = namesFrame:FindFirstChild(p.Name .. "PlayerFrame")
-                        if playerFrame then
-                            local nLabel = playerFrame:FindFirstChild("NameLabel")
-                            local lLabel = playerFrame:FindFirstChild("LevelLabel")
-                            if nLabel then origName = nLabel.Text end
-                            if lLabel then origLevel = lLabel.Text end
-                        end
-                    end
-                    othersOriginalData[p.Name] = { Name = origName, Level = origLevel, DisplayName = p.DisplayName }
-                end
-                
-                spoofedOthers[p.Name] = {
-                    spoofName = targetFakeName, 
-                    spoofLevel = targetFakeLevel, 
-                    spoofIcon = targetFakeIcon
-                }
-                
-                SendNotification("Applied fake data to " .. p.Name, 3)
-                
-                if spoofOthersEnabled then
-                    updateTrackers()
-                end
-            end
-        else
-            SendNotification("Select a valid player first!", 3)
-        end
-    end)
-    
-    Library:CreateButton(Page, "Reset Selected Player", function()
-        if targetOrigName ~= "Select Player" then
-            restoreOtherPlayer(targetOrigName)
-            SendNotification("Restored " .. targetOrigName, 3)
-        end
-    end)
-    
-    Library:CreateButton(Page, "Clear All Spoofed Players", function()
-        local keys = {}
-        for name, _ in pairs(spoofedOthers) do table.insert(keys, name) end
-        for _, name in ipairs(keys) do
-            restoreOtherPlayer(name)
-        end
-        table.clear(spoofedOthers)
-        SendNotification("All spoofed players restored.", 3)
-    end)
-
     Library:CreateSection(Page, "Visual Environment", "Left")
     Library:CreateToggle(Page, "Hide Leaves (Only Homestead)", false, function(state) 
         if state then
@@ -481,76 +250,6 @@ return function(env)
             end
             table.clear(hiddenParts)
         end
-    end)
-
-    Library:CreateToggle(Page, "Gray characters", false, function(state) 
-        if state then
-            local function setupCharacter(character)
-                local player = Players:GetPlayerFromCharacter(character)
-                if player and not player:HasAppearanceLoaded() then
-                    player.CharacterAppearanceLoaded:Wait()
-                end
-                task.wait(0.1)
-                if not character or not character.Parent then return end
-                makeGray(character)
-                
-                local c1 = character.DescendantAdded:Connect(function(obj)
-                    task.wait()
-                    if obj and obj.Parent then
-                        if obj:FindFirstAncestorWhichIsA("Tool") then return end
-                        if obj:IsA("BasePart") then
-                            if not grayBackups[character].parts[obj] then
-                                grayBackups[character].parts[obj] = { Color = obj.Color, Material = obj.Material }
-                            end
-                            obj.Color = Color3.fromRGB(150, 150, 150)
-                            obj.Material = Enum.Material.SmoothPlastic
-                            if obj:IsA("MeshPart") then
-                                if not grayBackups[character].meshes[obj] then
-                                    grayBackups[character].meshes[obj] = obj.TextureID
-                                end
-                                obj.TextureID = ""
-                            end
-                        elseif obj:IsA("SpecialMesh") then
-                            if not grayBackups[character].meshes[obj] then
-                                grayBackups[character].meshes[obj] = obj.TextureId
-                            end
-                            obj.TextureId = ""
-                        elseif obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") or obj:IsA("BodyColors") or (obj:IsA("Decal") and obj.Name ~= "face") then
-                            table.insert(grayBackups[character].clothes, {obj = obj, parent = obj.Parent})
-                            obj.Parent = nil
-                        end
-                    end
-                end)
-                table.insert(grayConns, c1)
-            end
-
-            local function onPlayerAdded(player)
-                if player == LocalPlayer then return end
-                if player.Character then task.spawn(setupCharacter, player.Character) end
-                local c2 = player.CharacterAdded:Connect(setupCharacter)
-                table.insert(grayConns, c2)
-            end
-
-            for _, player in ipairs(Players:GetPlayers()) do
-                onPlayerAdded(player)
-            end
-            local c3 = Players.PlayerAdded:Connect(onPlayerAdded)
-            table.insert(grayConns, c3)
-        else
-            for _, c in ipairs(grayConns) do if c then c:Disconnect() end end
-            table.clear(grayConns)
-            
-            for char, _ in pairs(grayBackups) do
-                restoreGray(char)
-            end
-        end
-    end)
-
-    if not getgenv().NexFloorbang then
-        getgenv().NexFloorbang = loadstring(game:HttpGet("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/floorbang.lua"))()
-    end
-    Library:CreateToggle(Page, "Floorbang", false, function(state)
-        getgenv().NexFloorbang.Toggle(state)
     end)
 
     local WallhopFolder = nil
@@ -600,59 +299,6 @@ return function(env)
             if WallhopConn then WallhopConn:Disconnect() WallhopConn = nil end
             if WallhopFolder then WallhopFolder:Destroy() WallhopFolder = nil end
         end
-    end)
-
-    Library:CreateSection(Page, "Spoof Settings", "Right")
-    Library:CreateToggle(Page, "Enable Others Spoofing", false, function(state)
-        spoofOthersEnabled = state
-        if state then
-            updateTrackers()
-        else
-            for origNameKey, _ in pairs(spoofedOthers) do
-                local backup = othersOriginalData[origNameKey]
-                local p = Players:FindFirstChild(origNameKey)
-                if p and p.Character and backup then
-                    local hum = p.Character:FindFirstChildOfClass("Humanoid")
-                    if hum then pcall(function() hum.DisplayName = backup.DisplayName end) end
-                end
-                
-                local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-                local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
-                if namesFrame then
-                    local playerFrame = namesFrame:FindFirstChild(origNameKey .. "PlayerFrame")
-                    if playerFrame then
-                        local iconLabel = playerFrame:FindFirstChild("IconLabel")
-                        local nameLabel = playerFrame:FindFirstChild("NameLabel")
-                        local levelLabel = playerFrame:FindFirstChild("LevelLabel")
-                        
-                        if iconLabel then
-                            iconLabel.ImageTransparency = 0
-                            local fakeIcon = iconLabel:FindFirstChild("IconeFakeCorrigido")
-                            if fakeIcon then fakeIcon.Visible = false end
-                        end
-                        if nameLabel and backup then nameLabel.Text = backup.Name end
-                        if levelLabel and backup then levelLabel.Text = backup.Level end
-                    end
-                end
-            end
-            updateTrackers()
-        end
-    end)
-
-    Library:CreatePlayerDropdown(Page, "Target Player", "Select Player", function(val) 
-        targetOrigName = val 
-    end)
-
-    Library:CreateInput(Page, "Target Fake Name", "Fake Name", function(val) 
-        targetFakeName = val 
-    end)
-    
-    Library:CreateInput(Page, "Target Fake Level", "100", function(val) 
-        targetFakeLevel = tonumber(val) or 100 
-    end)
-    
-    Library:CreateDropdown(Page, "Target Fake Icon", {"VIP", "QA", "CON", "Mod", "Dev", "Manager", "MrWindy", "Nenhum"}, "VIP", function(val) 
-        targetFakeIcon = meusIcones[val] or "" 
     end)
 
     Library:CreateSection(Page, "Visual Name/Level", "Right")
