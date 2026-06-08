@@ -22,7 +22,7 @@ return function(env)
     local originalWS = {}
     local wsRunConnection
     
-    -- Hitbox Extender Variables
+    -- Hitbox Extender Variables (Optimized)
     local hbEnabled = false
     local hbShowVisual = false
     local hbSizeX, hbSizeY, hbSizeZ = 2, 2, 2
@@ -58,31 +58,10 @@ return function(env)
     local arV2HpConn = nil
     local arV2StateConn = nil
 
-    -- Cache local de dados do jogador local para altíssima performance
-    local localCharacter = nil
-    local localHumanoid = nil
-    local localHrp = nil
-
-    -- Caches locais para otimização de busca de instâncias
+    -- Caches locais para otimização de performance
     local cachedHammerEvent = nil
     local cachedPowersEvent = nil
     local cachedStaminaValue = nil
-
-    local function updateLocalCharacterCache(char)
-        localCharacter = char
-        if char then
-            localHumanoid = char:WaitForChild("Humanoid", 5)
-            localHrp = char:WaitForChild("HumanoidRootPart", 5)
-        else
-            localHumanoid = nil
-            localHrp = nil
-        end
-    end
-
-    LocalPlayer.CharacterAdded:Connect(updateLocalCharacterCache)
-    if LocalPlayer.Character then
-        updateLocalCharacterCache(LocalPlayer.Character)
-    end
 
     local function checkNJD(char)
         if not char then return false end
@@ -111,38 +90,43 @@ return function(env)
         arV2Swimming = false
         if arV2Swimbeat then arV2Swimbeat:Disconnect() arV2Swimbeat = nil end
         workspace.Gravity = arV2OldGrav
-        if localHumanoid then
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
             local enums = Enum.HumanoidStateType:GetEnumItems()
-            for _, s in ipairs(enums) do localHumanoid:SetStateEnabled(s, true) end
-            localHumanoid:ChangeState(Enum.HumanoidStateType.Running)
+            for _, s in pairs(enums) do hum:SetStateEnabled(s, true) end
+            hum:ChangeState(Enum.HumanoidStateType.Running)
         end
     end
 
     local function arV2Swim()
         if arV2Swimming then return end
-        if not localCharacter or not localHumanoid or localHumanoid.Health <= 0 then return end
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not char or not hum or hum.Health <= 0 then return end
         
         arV2OldGrav = workspace.Gravity
         workspace.Gravity = 0
         arV2Swimming = true
         
         if arV2Swimbeat then arV2Swimbeat:Disconnect() end
-        localHumanoid:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
-        for _, s in ipairs(Enum.HumanoidStateType:GetEnumItems()) do
+        hum:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
+        for _, s in pairs(Enum.HumanoidStateType:GetEnumItems()) do
             if s ~= Enum.HumanoidStateType.None and s ~= Enum.HumanoidStateType.Swimming then
-                localHumanoid:SetStateEnabled(s, false)
+                hum:SetStateEnabled(s, false)
             end
         end
-        localHumanoid:ChangeState(Enum.HumanoidStateType.Swimming)
+        hum:ChangeState(Enum.HumanoidStateType.Swimming)
         
         arV2Swimbeat = RunService.Heartbeat:Connect(function()
             pcall(function()
-                if localHrp and localHumanoid then
-                    local moving = (localHumanoid.MoveDirection ~= Vector3.new() or UserInputService:IsKeyDown(Enum.KeyCode.Space))
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if root and hum then
+                    local moving = (hum.MoveDirection ~= Vector3.new() or UserInputService:IsKeyDown(Enum.KeyCode.Space))
                     if not moving then
-                        localHrp.Velocity = Vector3.new(0, 0, 0)
-                        if pcall(function() return localHrp.AssemblyLinearVelocity end) then
-                            localHrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                        root.Velocity = Vector3.new(0, 0, 0)
+                        if pcall(function() return root.AssemblyLinearVelocity end) then
+                            root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                         end
                     end
                 end
@@ -208,7 +192,7 @@ return function(env)
     
     local function killJumpFDJ(c)
         if not getconnections then return end
-        for _,x in ipairs(getconnections(UserInputService.JumpRequest))do
+        for _,x in pairs(getconnections(UserInputService.JumpRequest))do
             pcall(function()
                 local f=x.Function
                 if type(f)=="function"then
@@ -223,14 +207,17 @@ return function(env)
     end
     
     local function restoreJumpFDJ()
-        for _, x in ipairs(disabledJumpConns) do
+        for _, x in pairs(disabledJumpConns) do
             pcall(function() x:Enable() end)
         end
         table.clear(disabledJumpConns)
     end
     
     local function enforceOfficialSync()
-        if not localHumanoid then return end
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local cam = Workspace.CurrentCamera
+        if not hum then return end
         if not userGameSettings then pcall(function() userGameSettings = UserSettings():GetService("UserGameSettings") end) end
         if userGameSettings then
             if userGameSettings.RotationType ~= Enum.RotationType.CameraRelative then
@@ -238,11 +225,11 @@ return function(env)
             end
         end
         UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-        local dist = (Camera.Focus.Position - Camera.CFrame.Position).Magnitude
+        local dist = (cam.Focus.Position - cam.CFrame.Position).Magnitude
         if dist > 1 then 
-            local rawCFrame = Camera.CFrame
-            Camera.CFrame = rawCFrame * CFrame.new(1.75, 0, 0)
-            Camera.Focus = Camera.CFrame * CFrame.new(0, 0, -dist)
+            local rawCFrame = cam.CFrame
+            cam.CFrame = rawCFrame * CFrame.new(1.75, 0, 0)
+            cam.Focus = cam.CFrame * CFrame.new(0, 0, -dist)
         end
     end
     
@@ -838,18 +825,21 @@ return function(env)
             if conexaoRunnerBoost then conexaoRunnerBoost:Disconnect() end
             conexaoRunnerBoost = RunService.Stepped:Connect(function()
                 pcall(function()
-                    if localCharacter then
-                        local beastPowers = localCharacter:FindFirstChild("BeastPowers")
-                        if not beastPowers then return end
-                        local numberValue = beastPowers:FindFirstChildOfClass("NumberValue")
-                        if not numberValue then return end
-                        local energiaAtual = numberValue.Value
-                        
-                        if energiaAtual < ultimaEnergia and localHumanoid then
-                            localHumanoid.WalkSpeed = runnerSpeedVal
+                    local MeuPersonagem = LocalPlayer.Character
+                    if not MeuPersonagem then return end
+                    local beastPowers = MeuPersonagem:FindFirstChild("BeastPowers")
+                    if not beastPowers then return end
+                    local numberValue = beastPowers:FindFirstChildOfClass("NumberValue")
+                    if not numberValue then return end
+                    local energiaAtual = numberValue.Value
+                    
+                    if energiaAtual < ultimaEnergia then
+                        local Humanoid = MeuPersonagem:FindFirstChildWhichIsA("Humanoid")
+                        if Humanoid then
+                            Humanoid.WalkSpeed = runnerSpeedVal
                         end
-                        ultimaEnergia = energiaAtual
                     end
+                    ultimaEnergia = energiaAtual
                 end)
             end)
         else
@@ -1023,9 +1013,10 @@ return function(env)
             if LocalPlayer.Character then BackupSpeed(LocalPlayer.Character) end
             if not wsRunConnection then
                 wsRunConnection = RunService.Stepped:Connect(function()
-                    if wsEnabled and localHumanoid and localHumanoid.Parent then
-                        if not originalWS[localCharacter] then BackupSpeed(localCharacter) end
-                        localHumanoid.WalkSpeed = wsValue
+                    if wsEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                        local hum = LocalPlayer.Character.Humanoid
+                        if not originalWS[LocalPlayer.Character] then BackupSpeed(LocalPlayer.Character) end
+                        hum.WalkSpeed = wsValue
                     end
                 end)
             end
@@ -1051,11 +1042,12 @@ return function(env)
             if LocalPlayer.Character then BackupJump(LocalPlayer.Character) end
             if not jpRunConnection then
                 jpRunConnection = RunService.Stepped:Connect(function()
-                    if jpEnabled and localHumanoid and localHumanoid.Parent then
-                        if not originalJP[localCharacter] then BackupJump(localCharacter) end
-                        localHumanoid.UseJumpPower = true
-                        localHumanoid.JumpPower = jpVal
-                        localHumanoid.JumpHeight = jpVal / 2
+                    if jpEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                        local hum = LocalPlayer.Character.Humanoid
+                        if not originalJP[LocalPlayer.Character] then BackupJump(LocalPlayer.Character) end
+                        hum.UseJumpPower = true
+                        hum.JumpPower = jpVal
+                        hum.JumpHeight = jpVal / 2
                     end
                 end)
             end
@@ -1107,21 +1099,26 @@ return function(env)
             end
             if not flyConnection then
                 flyConnection = RunService.RenderStepped:Connect(function()
-                    if flyEnabled and flyBg and flyBv and localHrp and localHumanoid and localHumanoid.Parent then
-                        localHumanoid.PlatformStand = true
-                        flyBg.CFrame = CFrame.new(localHrp.Position, localHrp.Position + Camera.CFrame.LookVector)
-                        local moveDir = localHumanoid.MoveDirection
-                        if moveDir.Magnitude > 0 then
-                            local camLook = Camera.CFrame.LookVector
-                            local camRight = Camera.CFrame.RightVector
-                            local flatLook = Vector3.new(camLook.X, 0, camLook.Z).Unit
-                            local flatRight = Vector3.new(camRight.X, 0, camRight.Z).Unit
-                            local forwardInput = moveDir:Dot(flatLook)
-                            local rightInput = moveDir:Dot(flatRight)
-                            local flyVelocity = (Camera.CFrame.LookVector * forwardInput) + (Camera.CFrame.RightVector * rightInput)
-                            flyBv.Velocity = flyVelocity.Unit * flySpeed
-                        else
-                            flyBv.Velocity = Vector3.new(0, 0, 0)
+                    if flyEnabled and flyBg and flyBv and LocalPlayer.Character then
+                        local charHrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        local charHum = LocalPlayer.Character:FindFirstChild("Humanoid")
+                        if charHrp and charHum then
+                            charHum.PlatformStand = true
+                            flyBg.CFrame = CFrame.new(charHrp.Position, charHrp.Position + Camera.CFrame.LookVector)
+                            local moveDir = charHum.MoveDirection
+                            if moveDir.Magnitude > 0 then
+                               _G.flatLook = Vector3.new(Camera.CFrame.LookVector.X, 0, Camera.CFrame.LookVector.Z).Unit
+                                local camLook = Camera.CFrame.LookVector
+                                local camRight = Camera.CFrame.RightVector
+                                local flatLook = Vector3.new(camLook.X, 0, camLook.Z).Unit
+                                local flatRight = Vector3.new(camRight.X, 0, camRight.Z).Unit
+                                local forwardInput = moveDir:Dot(flatLook)
+                                local rightInput = moveDir:Dot(flatRight)
+                                local flyVelocity = (Camera.CFrame.LookVector * forwardInput) + (Camera.CFrame.RightVector * rightInput)
+                                flyBv.Velocity = flyVelocity.Unit * flySpeed
+                            else
+                                flyBv.Velocity = Vector3.new(0, 0, 0)
+                            end
                         end
                     end
                 end)
@@ -1147,9 +1144,11 @@ return function(env)
         if state then
             if crawlConnection then crawlConnection:Disconnect() end
             crawlConnection = RunService.RenderStepped:Connect(function()
-                if localHumanoid and localHumanoid.Parent then
-                    if localHumanoid.WalkSpeed > 1 and localHumanoid.WalkSpeed < 11 then
-                        localHumanoid.WalkSpeed = crawlBoostSpeed
+                local char = LocalPlayer.Character
+                local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    if humanoid.WalkSpeed > 1 and humanoid.WalkSpeed < 11 then
+                        humanoid.WalkSpeed = crawlBoostSpeed
                     end
                 end
             end)
@@ -1179,18 +1178,18 @@ return function(env)
             local JP = 36
 
             if getgenv().ConexoesFTF then
-                for _,c in ipairs(getgenv().ConexoesFTF)do pcall(function()c:Disconnect()end) end
+                for _,c in pairs(getgenv().ConexoesFTF)do pcall(function()c:Disconnect()end) end
             end
             getgenv().ConexoesFTF={}
 
             if getgenv().PulosOriginais then
-                for _,x in ipairs(getgenv().PulosOriginais)do pcall(function()x:Enable()end) end
+                for _,x in pairs(getgenv().PulosOriginais)do pcall(function()x:Enable()end) end
             end
             getgenv().PulosOriginais={}
 
             local function killJump(c)
                 if not getconnections then return end
-                for _,x in ipairs(getconnections(U.JumpRequest))do
+                for _,x in pairs(getconnections(U.JumpRequest))do
                     pcall(function()
                         local f=x.Function
                         if type(f)=="function"then
@@ -1346,12 +1345,12 @@ return function(env)
         else
             if fdjConnection then fdjConnection:Disconnect(); fdjConnection = nil end
             if getgenv().ConexoesFTF then
-                for _,c in ipairs(getgenv().ConexoesFTF)do pcall(function()c:Disconnect()end) end
+                for _,c in pairs(getgenv().ConexoesFTF)do pcall(function()c:Disconnect()end) end
             end
             getgenv().ConexoesFTF={}
 
             if getgenv().PulosOriginais then
-                for _,x in ipairs(getgenv().PulosOriginais)do pcall(function()x:Enable()end) end
+                for _,x in pairs(getgenv().PulosOriginais)do pcall(function()x:Enable()end) end
             end
             getgenv().PulosOriginais={}
         end
@@ -1430,19 +1429,24 @@ return function(env)
         infJumpEnabled = state
         if state then
             if not infJumpConnection then
-                infJumpConnection = RunService.Heartbeat:Connect(function()
-                    if infJumpEnabled and localHumanoid and localHrp and localHumanoid.Parent then
-                        local isHoldingJump = UserInputService:IsKeyDown(Enum.KeyCode.Space) or localHumanoid.Jump
-                        if isHoldingJump then
-                            local jumpPowerValue = 50
-                            if localHumanoid.UseJumpPower then
-                                jumpPowerValue = localHumanoid.JumpPower
-                            else
-                                jumpPowerValue = math.sqrt(2 * Workspace.Gravity * localHumanoid.JumpHeight)
+                infJumpConnection = UserInputService.JumpRequest:Connect(function()
+                    if infJumpEnabled then
+                        pcall(function()
+                            local character = LocalPlayer.Character
+                            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+                            local hrp = character and character:FindFirstChild("HumanoidRootPart")
+                            if humanoid and hrp then
+                                local jumpPowerValue = 50
+                                if humanoid.UseJumpPower then
+                                    jumpPowerValue = humanoid.JumpPower
+                                else
+                                    local grav = Workspace.Gravity
+                                    jumpPowerValue = math.sqrt(2 * grav * humanoid.JumpHeight)
+                                end
+                                local currentVel = hrp.AssemblyLinearVelocity
+                                hrp.AssemblyLinearVelocity = Vector3.new(currentVel.X, jumpPowerValue, currentVel.Z)
                             end
-                            local currentVel = localHrp.AssemblyLinearVelocity
-                            localHrp.AssemblyLinearVelocity = Vector3.new(currentVel.X, jumpPowerValue, currentVel.Z)
-                        end
+                        end)
                     end
                 end)
             end
