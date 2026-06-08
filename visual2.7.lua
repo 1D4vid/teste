@@ -1373,7 +1373,7 @@ return function(env)
     end)
 
     -- Seção de Spoof de outros jogadores
-    Library:CreateSection(Page, "Change names other players232323.", "Right")
+    Library:CreateSection(Page, "Change names other players.", "Right")
     
     Library:CreateToggle(Page, "Enable Others Spoofing", false, function(state)
         spoofOthersEnabled = state
