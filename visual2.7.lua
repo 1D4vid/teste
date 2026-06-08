@@ -37,6 +37,12 @@ return function(env)
     }
     local originalTexts = setmetatable({}, {__mode = "k"})
     
+    -- Váriaveis do sistema de máscara dos outros jogadores
+    local changeOthersEnabled = false
+    local othersMaskName = "Player"
+    local originalOtherTexts = setmetatable({}, {__mode = "k"})
+    local changing = false
+
     local function patchElement(e)
         if not e or not e:IsA("GuiObject") then return end
         if not (e:IsA("TextLabel") or e:IsA("TextButton") or e:IsA("TextBox")) then return end
@@ -162,6 +168,127 @@ return function(env)
                 playerFrame.LayoutOrder = -spoofLevel
             end
         end)
+    end)
+
+    -- Lógica interna do sistema de máscara de nomes para outros jogadores
+    local function isTextObject(e)
+        return e:IsA("TextLabel") or e:IsA("TextButton") or e:IsA("TextBox")
+    end
+
+    local function maskText(text)
+        if not text or text == "" then return text end
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer then
+                local nm, dn = plr.Name, plr.DisplayName
+                if nm and text:find(nm, 1, true) then
+                    text = text:gsub(nm, othersMaskName)
+                end
+                if dn and text:find(dn, 1, true) then
+                    text = text:gsub(dn, othersMaskName)
+                end
+            end
+        end
+        return text
+    end
+
+    local function patch(e)
+        if changing then return end
+        if not isTextObject(e) then return end
+        local t = e.Text
+        
+        if changeOthersEnabled then
+            if not originalOtherTexts[e] then
+                originalOtherTexts[e] = t
+            end
+            local masked = maskText(t)
+            if masked ~= t then
+                changing = true
+                pcall(function() e.Text = masked end)
+                changing = false
+            end
+        else
+            local orig = originalOtherTexts[e]
+            if orig and t ~= orig then
+                changing = true
+                pcall(function() e.Text = orig end)
+                changing = false
+            end
+        end
+    end
+
+    local function track(e)
+        if isTextObject(e) then
+            patch(e)
+            e:GetPropertyChangedSignal("Text"):Connect(function()
+                patch(e)
+            end)
+        end
+    end
+
+    local function trackOverheadForCharacter(char)
+        if not char then return end
+        local head = char:FindFirstChild("Head")
+        if not head then return end
+        for _, gui in ipairs(head:GetChildren()) do
+            if gui:IsA("BillboardGui") then
+                for _, d in ipairs(gui:GetDescendants()) do
+                    if isTextObject(d) then
+                        patch(d)
+                        d:GetPropertyChangedSignal("Text"):Connect(function()
+                            patch(d)
+                        end)
+                    end
+                end
+                gui.DescendantAdded:Connect(track)
+            end
+        end
+    end
+
+    -- Escuta de carregamento de personagens (Overheads)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            if plr.Character then
+                trackOverheadForCharacter(plr.Character)
+            end
+            plr.CharacterAdded:Connect(function(char)
+                task.wait(0.5)
+                trackOverheadForCharacter(char)
+            end)
+        end
+    end
+
+    Players.PlayerAdded:Connect(function(plr)
+        if plr == LocalPlayer then return end
+        plr.CharacterAdded:Connect(function(char)
+            task.wait(0.5)
+            trackOverheadForCharacter(char)
+        end)
+    end)
+
+    -- Varredura inicial de interfaces
+    for _, gui in pairs(CoreGui:GetDescendants()) do
+        track(gui)
+    end
+    CoreGui.DescendantAdded:Connect(track)
+
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+    for _, gui in pairs(playerGui:GetDescendants()) do
+        track(gui)
+    end
+    playerGui.DescendantAdded:Connect(track)
+
+    -- Loop leve de atualização secundária
+    task.spawn(function()
+        while true do
+            task.wait(1)
+            if changeOthersEnabled then
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr ~= LocalPlayer and plr.Character then
+                        trackOverheadForCharacter(plr.Character)
+                    end
+                end
+            end
+        end
     end)
 
     local stretchConnection = nil
@@ -345,5 +472,22 @@ return function(env)
     end)
     Library:CreateDropdown(Page, "Select Icon", {"VIP", "QA", "CON", "Mod", "Dev", "Manager", "MrWindy", "Nenhum"}, "VIP", function(val) 
         spoofIconId = meusIcones[val] or "" 
+    end)
+
+    -- Nova Seção: Change names other players
+    Library:CreateSection(Page, "Change names other players.", "Right")
+    Library:CreateToggle(Page, "Enable Name Changer", false, function(state) 
+        changeOthersEnabled = state
+        for e, _ in pairs(originalOtherTexts) do
+            if e and e.Parent then patch(e) end
+        end
+    end)
+    Library:CreateInput(Page, "New Name Pattern", "Player", function(val) 
+        othersMaskName = val
+        if changeOthersEnabled then
+            for e, _ in pairs(originalOtherTexts) do
+                if e and e.Parent then patch(e) end
+            end
+        end
     end)
 end
