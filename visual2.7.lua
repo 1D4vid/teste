@@ -1,18 +1,15 @@
-return function(Env)
-    local Library = Env.Library
-    local Page = Env.Page
-    local Players = Env.Players
-    local LocalPlayer = Env.LocalPlayer
-    local Workspace = Env.Workspace
-    local RunService = Env.RunService
-    local CoreGui = Env.CoreGui
-    local SendNotification = Env.SendNotification
-
-    -- Variáveis para o sistema de Spoof
-    local targetOrigName = "Select Player"
-    local targetFakeName = ""
-    local targetFakeLevel = 100
-    local targetFakeIcon = ""
+return function(env)
+    local Library = env.Library
+    local Page = env.Page
+    local Workspace = env.Workspace
+    local Players = env.Players
+    local LocalPlayer = env.LocalPlayer
+    local RunService = env.RunService
+    local CoreGui = env.CoreGui
+    local Theme = env.Theme
+    local UserConfigs = env.UserConfigs
+    local SendNotification = env.SendNotification
+    local isMobile = env.isMobile
 
     local HideLeavesConnection = nil
     local hiddenParts = setmetatable({}, {__mode = "k"}) 
@@ -30,6 +27,11 @@ return function(Env)
     local othersOriginalData = {}
     local spoofOthersEnabled = false
     
+    local targetOrigName = "Select Player"
+    local targetFakeName = "Fake Name"
+    local targetFakeLevel = 100
+    local targetFakeIcon = ""
+
     local spoofVisualsEnabled = false
     local spoofVisualsLoop
     local meusIcones = {
@@ -338,7 +340,6 @@ return function(Env)
         grayBackups[char] = nil
     end
 
-    -- Criação dos botões da Interface UI:
     Library:CreateSection(Page, "Camera & UI", "Left")
     local FovVal = 70
     Library:CreateSlider(Page, "Fov Changer", 70, 120, 70, function(v) 
@@ -447,105 +448,6 @@ return function(Env)
         SendNotification("All spoofed players restored.", 3)
     end)
 
-    Library:CreateSection(Page, "Spoof Settings", "Right")
-    Library:CreateToggle(Page, "Enable Others Spoofing", false, function(state)
-        spoofOthersEnabled = state
-        if state then
-            updateTrackers()
-        else
-            for origNameKey, _ in pairs(spoofedOthers) do
-                local backup = othersOriginalData[origNameKey]
-                local p = Players:FindFirstChild(origNameKey)
-                if p and p.Character and backup then
-                    local hum = p.Character:FindFirstChildOfClass("Humanoid")
-                    if hum then pcall(function() hum.DisplayName = backup.DisplayName end) end
-                end
-                
-                local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-                local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
-                if namesFrame then
-                    local playerFrame = namesFrame:FindFirstChild(origNameKey .. "PlayerFrame")
-                    if playerFrame then
-                        local iconLabel = playerFrame:FindFirstChild("IconLabel")
-                        local nameLabel = playerFrame:FindFirstChild("NameLabel")
-                        local levelLabel = playerFrame:FindFirstChild("LevelLabel")
-                        
-                        if iconLabel then
-                            iconLabel.ImageTransparency = 0
-                            local fakeIcon = iconLabel:FindFirstChild("IconeFakeCorrigido")
-                            if fakeIcon then fakeIcon.Visible = false end
-                        end
-                        if nameLabel and backup then nameLabel.Text = backup.Name end
-                        if levelLabel and backup then levelLabel.Text = backup.Level end
-                    end
-                end
-            end
-            updateTrackers()
-        end
-    end)
-
-    Library:CreatePlayerDropdown(Page, "Target Player", "Select Player", function(val) 
-        targetOrigName = val 
-    end)
-
-    Library:CreateInput(Page, "Target Fake Name", "Fake Name", function(val) 
-        targetFakeName = val 
-    end)
-    
-    Library:CreateInput(Page, "Target Fake Level", "100", function(val) 
-        targetFakeLevel = tonumber(val) or 100 
-    end)
-    
-    Library:CreateDropdown(Page, "Target Fake Icon", {"VIP", "QA", "CON", "Mod", "Dev", "Manager", "MrWindy", "Nenhum"}, "VIP", function(val) 
-        targetFakeIcon = meusIcones[val] or "" 
-    end)
-
-    Library:CreateSection(Page, "Visual Name/Level", "Right")
-    Library:CreateToggle(Page, "Enable Visuals", false, function(state) 
-        spoofVisualsEnabled = state
-        if state then
-            updateTrackers()
-        else
-            pcall(function()
-                local char = LocalPlayer.Character
-                if char then
-                    local hum = char:FindFirstChildOfClass("Humanoid")
-                    if hum then pcall(function() hum.DisplayName = originalDisplayName end) end
-                end
-                local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-                if not playerGui then return end
-                local namesFrame = playerGui:FindFirstChild("PlayerNamesFrame", true)
-                if namesFrame then
-                    local playerFrame = namesFrame:FindFirstChild(LocalPlayer.Name .. "PlayerFrame")
-                    if playerFrame then
-                        local levelLabel = playerFrame:FindFirstChild("LevelLabel")
-                        local nameLabel  = playerFrame:FindFirstChild("NameLabel")
-                        local iconLabel  = playerFrame:FindFirstChild("IconLabel")
-                        if levelLabel then levelLabel.Text = tostring(originalLevel) end
-                        if nameLabel then nameLabel.Text = originalDisplayName end
-                        if iconLabel then 
-                            iconLabel.ImageTransparency = 0
-                            local fakeIcon = iconLabel:FindFirstChild("IconeFakeCorrigido")
-                            if fakeIcon then fakeIcon.Visible = false end
-                        end
-                        playerFrame.LayoutOrder = -tonumber(originalLevel)
-                    end
-                end
-            end)
-            updateTrackers()
-        end
-    end)
-    Library:CreateInput(Page, "Fake Name", LocalPlayer.Name, function(val) 
-        spoofName = val 
-        if spoofVisualsEnabled then updateTrackers() end
-    end)
-    Library:CreateInput(Page, "Fake Level", "67", function(val) 
-        spoofLevel = tonumber(val) or 100 
-    end)
-    Library:CreateDropdown(Page, "Select Icon", {"VIP", "QA", "CON", "Mod", "Dev", "Manager", "MrWindy", "Nenhum"}, "VIP", function(val) 
-        spoofIconId = meusIcones[val] or "" 
-    end)
-
     Library:CreateSection(Page, "Visual Environment", "Left")
     Library:CreateToggle(Page, "Hide Leaves (Only Homestead)", false, function(state) 
         if state then
@@ -643,11 +545,11 @@ return function(Env)
             end
         end
     end)
-    
+
+    if not getgenv().NexFloorbang then
+        getgenv().NexFloorbang = loadstring(game:HttpGet("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/floorbang.lua"))()
+    end
     Library:CreateToggle(Page, "Floorbang", false, function(state)
-        if not getgenv().NexFloorbang then
-            getgenv().NexFloorbang = loadstring(game:HttpGet("https://raw.githubusercontent.com/1D4vid/FTFNexVoid/refs/heads/main/floorbang.lua"))()
-        end
         getgenv().NexFloorbang.Toggle(state)
     end)
 
@@ -698,5 +600,104 @@ return function(Env)
             if WallhopConn then WallhopConn:Disconnect() WallhopConn = nil end
             if WallhopFolder then WallhopFolder:Destroy() WallhopFolder = nil end
         end
+    end)
+
+    Library:CreateSection(Page, "Spoof Settings", "Right")
+    Library:CreateToggle(Page, "Enable Others Spoofing", false, function(state)
+        spoofOthersEnabled = state
+        if state then
+            updateTrackers()
+        else
+            for origNameKey, _ in pairs(spoofedOthers) do
+                local backup = othersOriginalData[origNameKey]
+                local p = Players:FindFirstChild(origNameKey)
+                if p and p.Character and backup then
+                    local hum = p.Character:FindFirstChildOfClass("Humanoid")
+                    if hum then pcall(function() hum.DisplayName = backup.DisplayName end) end
+                end
+                
+                local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+                local namesFrame = playerGui and playerGui:FindFirstChild("PlayerNamesFrame", true)
+                if namesFrame then
+                    local playerFrame = namesFrame:FindFirstChild(origNameKey .. "PlayerFrame")
+                    if playerFrame then
+                        local iconLabel = playerFrame:FindFirstChild("IconLabel")
+                        local nameLabel = playerFrame:FindFirstChild("NameLabel")
+                        local levelLabel = playerFrame:FindFirstChild("LevelLabel")
+                        
+                        if iconLabel then
+                            iconLabel.ImageTransparency = 0
+                            local fakeIcon = iconLabel:FindFirstChild("IconeFakeCorrigido")
+                            if fakeIcon then fakeIcon.Visible = false end
+                        end
+                        if nameLabel and backup then nameLabel.Text = backup.Name end
+                        if levelLabel and backup then levelLabel.Text = backup.Level end
+                    end
+                end
+            end
+            updateTrackers()
+        end
+    end)
+
+    Library:CreatePlayerDropdown(Page, "Target Player", "Select Player", function(val) 
+        targetOrigName = val 
+    end)
+
+    Library:CreateInput(Page, "Target Fake Name", "Fake Name", function(val) 
+        targetFakeName = val 
+    end)
+    
+    Library:CreateInput(Page, "Target Fake Level", "100", function(val) 
+        targetFakeLevel = tonumber(val) or 100 
+    end)
+    
+    Library:CreateDropdown(Page, "Target Fake Icon", {"VIP", "QA", "CON", "Mod", "Dev", "Manager", "MrWindy", "Nenhum"}, "VIP", function(val) 
+        targetFakeIcon = meusIcones[val] or "" 
+    end)
+
+    Library:CreateSection(Page, "Visual Name/Level", "Right")
+    Library:CreateToggle(Page, "Enable Visuals", false, function(state) 
+        spoofVisualsEnabled = state
+        if state then
+            updateTrackers()
+        else
+            pcall(function()
+                local char = LocalPlayer.Character
+                if char then
+                    local hum = char:FindFirstChildOfClass("Humanoid")
+                    if hum then pcall(function() hum.DisplayName = originalDisplayName end) end
+                end
+                local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+                if not playerGui then return end
+                local namesFrame = playerGui:FindFirstChild("PlayerNamesFrame", true)
+                if namesFrame then
+                    local playerFrame = namesFrame:FindFirstChild(LocalPlayer.Name .. "PlayerFrame")
+                    if playerFrame then
+                        local levelLabel = playerFrame:FindFirstChild("LevelLabel")
+                        local nameLabel  = playerFrame:FindFirstChild("NameLabel")
+                        local iconLabel  = playerFrame:FindFirstChild("IconLabel")
+                        if levelLabel then levelLabel.Text = tostring(originalLevel) end
+                        if nameLabel then nameLabel.Text = originalDisplayName end
+                        if iconLabel then 
+                            iconLabel.ImageTransparency = 0
+                            local fakeIcon = iconLabel:FindFirstChild("IconeFakeCorrigido")
+                            if fakeIcon then fakeIcon.Visible = false end
+                        end
+                        playerFrame.LayoutOrder = -tonumber(originalLevel)
+                    end
+                end
+            end)
+            updateTrackers()
+        end
+    end)
+    Library:CreateInput(Page, "Fake Name", LocalPlayer.Name, function(val) 
+        spoofName = val 
+        if spoofVisualsEnabled then updateTrackers() end
+    end)
+    Library:CreateInput(Page, "Fake Level", "67", function(val) 
+        spoofLevel = tonumber(val) or 100 
+    end)
+    Library:CreateDropdown(Page, "Select Icon", {"VIP", "QA", "CON", "Mod", "Dev", "Manager", "MrWindy", "Nenhum"}, "VIP", function(val) 
+        spoofIconId = meusIcones[val] or "" 
     end)
 end
