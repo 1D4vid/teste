@@ -11,6 +11,20 @@ return function(env)
     local SendNotification = env.SendNotification
     local isMobile = env.isMobile
 
+    -- Modificação local para forçar os Inputs deste módulo a ficarem preto transparente
+    local originalCreateInput = Library.CreateInput
+    Library.CreateInput = function(self, targetPage, Text, Default, Callback)
+        originalCreateInput(self, targetPage, Text, Default, Callback)
+        task.defer(function()
+            for _, descendant in ipairs(targetPage:GetDescendants()) do
+                if descendant:IsA("TextBox") then
+                    descendant.BackgroundColor3 = Color3.new(0, 0, 0)
+                    descendant.BackgroundTransparency = 0.55
+                end
+            end
+        end)
+    end
+
     local HideLeavesConnection = nil
     local hiddenParts = setmetatable({}, {__mode = "k"}) 
     local currentFont = "Default"
@@ -502,7 +516,7 @@ return function(env)
         spoofIconId = meusIcones[val] or "" 
     end)
 
-    -- Nova Seção de Spoof de Outros Jogadores de forma compacta e direta
+    -- Seção agrupada de Spoof de outros jogadores
     Library:CreateSection(Page, "Change names other players.", "Right")
     
     Library:CreateToggle(Page, "Enable Others Spoofing", false, function(state)
@@ -524,6 +538,13 @@ return function(env)
         end
     end)
 
+    Library:CreateDropdown(Page, "Target Fake Icon", {"VIP", "QA", "CON", "Mod", "Dev", "Manager", "MrWindy", "Nenhum"}, "VIP", function(val) 
+        targetFakeIcon = meusIcones[val] or ""
+        if spoofOthersEnabled then
+            applySpoofToTarget()
+        end
+    end)
+
     Library:CreateInput(Page, "Target Fake Name", "Fake Name", function(val) 
         targetFakeName = val
         if spoofOthersEnabled then
@@ -537,11 +558,7 @@ return function(env)
             applySpoofToTarget()
         end
     end)
-    
-    Library:CreateDropdown(Page, "Target Fake Icon", {"VIP", "QA", "CON", "Mod", "Dev", "Manager", "MrWindy", "Nenhum"}, "VIP", function(val) 
-        targetFakeIcon = meusIcones[val] or ""
-        if spoofOthersEnabled then
-            applySpoofToTarget()
-        end
-    end)
+
+    -- Restaura a função CreateInput ao comportamento padrão da Library global após o carregamento
+    Library.CreateInput = originalCreateInput
 end
