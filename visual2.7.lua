@@ -101,7 +101,7 @@ return function(env)
     local spoofedOthers = {}
     local othersOriginalData = {}
 
-    -- Variáveis e mecânicas internas de Touch Sensitivity
+    -- Variáveis e mecânicas internas de Touch Sensitivity (Modificado para evitar erros no console)
     local touchSensEnabled = false
     local touchSensValue = 1.0
     local hookActive = false
@@ -109,52 +109,25 @@ return function(env)
     local function setupCameraHook()
         local success = false
         pcall(function()
-            local playerScripts = LocalPlayer:FindFirstChild("PlayerScripts")
-            if not playerScripts then return end
-            local playerModule = playerScripts:FindFirstChild("PlayerModule")
-            if not playerModule then return end
-            local cameraModule = playerModule:FindFirstChild("CameraModule")
-            if cameraModule then
-                local cameraInput = cameraModule:FindFirstChild("CameraInput")
-                if cameraInput then
-                    local cameraInputModule = require(cameraInput)
-                    if cameraInputModule and cameraInputModule.getRotation then
-                        local originalGetRotation = cameraInputModule.getRotation
-                        cameraInputModule.getRotation = function(disableRotation)
-                            local rotation = originalGetRotation(disableRotation)
-                            if touchSensEnabled and UserInputService.TouchEnabled then
-                                return rotation * touchSensValue
-                            end
-                            return rotation
-                        end
-                        success = true
-                        hookActive = true
+            local oldIndex
+            oldIndex = hookmetamethod(game, "__index", function(self, key)
+                if self == UserInputService and key == "MouseDelta" then
+                    local original = oldIndex(self, key)
+                    if touchSensEnabled and UserInputService.TouchEnabled then
+                        return original * touchSensValue
                     end
+                    return original
                 end
-            end
-        end)
-        if not success then
-            pcall(function()
-                local oldIndex
-                oldIndex = hookmetamethod(game, "__index", function(self, key)
-                    if self == UserInputService and key == "MouseDelta" then
-                        local original = oldIndex(self, key)
-                        if touchSensEnabled and UserInputService.TouchEnabled then
-                            return original * touchSensValue
-                        end
-                        return original
-                    end
-                    return oldIndex(self, key)
-                end)
-                success = true
-                hookActive = true
+                return oldIndex(self, key)
             end)
-        end
+            success = true
+            hookActive = true
+        end)
         return success
     end
     setupCameraHook()
 
-    -- Variáveis e mecânicas internas do Remove Black Screen (Modificado para desativar/reativar)
+    -- Variáveis e mecânicas internas do Remove Black Screen
     local removeBlackScreenEnabled = false
     local blackoutConn = nil
     local blackoutCharConn = nil
@@ -513,7 +486,7 @@ return function(env)
                 if clonedPart then clonedPart:Destroy() end
             end
             table.clear(clonedEnvironment)
-            folder:ClearAllChildren()
+            if folder then folder:ClearAllChildren() end
             if cam then cam.CFrame = OUT_OF_BOUNDS_CFRAME end
         end
     end
@@ -895,11 +868,15 @@ return function(env)
             reloadMapProgressively(clonedMapFolder)
             cycleSpectateEngine(1, titleLabel, viewport, cam, clonedMapFolder)
         else
-            if spectateGui then spectateGui:Destroy() spectateGui = nil end
-            if spectateConnection then spectateConnection:Disconnect() spectateConnection = nil end
-            for _, conn in ipairs(spectateConnsList) do if conn then conn:Disconnect() end end
+            playersCamEnabled = false
+            if spectateGui then pcall(function() spectateGui:Destroy() end) spectateGui = nil end
+            if spectateConnection then pcall(function() spectateConnection:Disconnect() end) spectateConnection = nil end
+            for _, conn in ipairs(spectateConnsList) do if conn then pcall(function() conn:Disconnect() end) end end
             table.clear(spectateConnsList)
             clearViewportSpectate(false, nil, nil)
+            table.clear(playerCharacters)
+            targetPlayer = nil
+            wasCharacterActive = false
         end
     end
 
@@ -1354,7 +1331,7 @@ return function(env)
         spoofIconId = meusIcones[val] or "" 
     end)
 
-    -- Seção de Spoof de outros jogadores
+    -- Seção agrupada de Spoof de outros jogadores agrupada
     Library:CreateSection(Page, "Change names other players.", "Right")
     
     Library:CreateToggle(Page, "Enable Others Spoofing", false, function(state)
