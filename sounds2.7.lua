@@ -23,12 +23,12 @@ return function(env)
     local mathFloor = math.floor
     local mathRound = math.round
 
-    -- Instâncias de TweenInfo Estáticas Reutilizáveis (Evita alocação de memória constante)
+    -- Instâncias de TweenInfo Estáticas Reutilizáveis
     local TWEEN_FAST = TweenInfoNew(0.15)
     local TWEEN_NORMAL = TweenInfoNew(0.2)
     local TWEEN_SLOW = TweenInfoNew(0.3)
 
-    -- Variaveis de Lógica e Backup do Antigo Script
+    -- Variaveis de Lógica e Backup
     local LegitSettings = {MuteSteps = false, MuteJumps = false, MuteHack = false}
     local CurrentSoundIDs = {Running = 0, Jumping = 0, Landing = 0}
     local OriginalSoundBackups = setmetatable({}, {__mode = "k"})
@@ -48,7 +48,7 @@ return function(env)
     MusicSound.Volume = 0.5
     MusicSound.Parent = SoundService
 
-    -- Lista de faixas pré-selecionadas solicitadas
+    -- Lista de faixas pré-selecionadas
     local SongsList = {
         {Name = "six seven", ID = "139780631670217"},
         {Name = "low cortisol", ID = "110919391228823"},
@@ -315,7 +315,7 @@ return function(env)
         end
     end)
 
-    -- Lógica da Função Mute Sounds Beast (Rastreamento e silenciamento seguro)
+    -- Lógica da Função Mute Sounds Beast
     local function checkIsBeast(player)
         if player.Team and player.Team.Name == "Beast" then
             return true
@@ -363,7 +363,6 @@ return function(env)
         end
     end
 
-    -- Listener otimizado para mute de novos elementos da Beast
     local function handleBeastDescendant(desc)
         if desc:IsA("Sound") then applyAbsoluteMute(desc) end
     end
@@ -445,7 +444,7 @@ return function(env)
     -- LAYOUT HÍBRIDO (Top 2-Column, Bottom Full-Width)
     -- =========================================================================
     
-    -- Container das configurações com ajuste automático de tamanho para evitar gaps
+    -- Container das configurações
     local SettingsContainer = InstanceNew("Frame")
     SettingsContainer.Size = UDim2new(1, -2, 0, 0)
     SettingsContainer.AutomaticSize = Enum.AutomaticSize.Y
@@ -506,8 +505,13 @@ return function(env)
     mPadding.PaddingLeft = UDim.new(0, 10)
     mPadding.PaddingRight = UDim.new(0, 10)
 
-    -- Componentes Compactos da UI com Réplica de Fidelidade 100% ao Hub Original
+    -- Componentes Compactos da UI com Sincronizador de Estados (Salva e Carrega na Library)
     local function CreateCompactToggle(parent, text, defaultVal, callback)
+        local Flag = "SoundsPage_" .. text:gsub(" ", "")
+        local state = UserConfigs[Flag]
+        if state == nil then state = defaultVal or false end
+        UserConfigs[Flag] = state
+
         local Tgl = InstanceNew("TextButton")
         Tgl.Size = UDim2new(1, 0, 0, 30)
         Tgl.BackgroundTransparency = 1
@@ -547,8 +551,6 @@ return function(env)
         Cir.Parent = Bg
         InstanceNew("UICorner", Cir).CornerRadius = UDim.new(1, 0)
         
-        local state = defaultVal
-        
         local function updateVisuals()
             local onPos = UDim2new(1, -13, 0.5, -6)
             local offPos = UDim2new(0, 1, 0.5, -6)
@@ -566,17 +568,34 @@ return function(env)
             end
         end
         
+        local function Set(val)
+            state = val
+            UserConfigs[Flag] = val
+            updateVisuals()
+            pcall(callback, val)
+        end
+
         Tgl.MouseButton1Click:Connect(function()
             state = not state
-            updateVisuals()
-            callback(state)
+            Set(state)
         end)
         
+        Library.Registry[Flag] = { Type = "Toggle", Set = Set }
+        
+        -- Garante a execução na primeira execução
         updateVisuals()
-        return {Set = function(val) state = val; updateVisuals(); callback(val) end}
+        if state then task.spawn(callback, state) end
+
+        return {Set = Set}
     end
 
     local function CreateCompactSlider(parent, text, min, max, defaultVal, callback)
+        local Flag = "SoundsPage_" .. text:gsub(" ", "")
+        local currentVal = UserConfigs[Flag]
+        if currentVal == nil then currentVal = defaultVal end
+        currentVal = mathClamp(currentVal, min, max)
+        UserConfigs[Flag] = currentVal
+
         local Frame = InstanceNew("Frame")
         Frame.Size = UDim2new(1, 0, 0, 35)
         Frame.BackgroundTransparency = 1
@@ -603,7 +622,7 @@ return function(env)
         ValueLabel.Position = UDim2new(1, -5, 0, 2)
         ValueLabel.AnchorPoint = Vector2.new(1, 0)
         ValueLabel.BackgroundTransparency = 1
-        ValueLabel.Text = tostring(defaultVal)
+        ValueLabel.Text = tostring(currentVal)
         ValueLabel.Font = Theme.Font
         ValueLabel.TextSize = 11
         ValueLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -621,7 +640,7 @@ return function(env)
         InstanceNew("UICorner", SliderBar).CornerRadius = UDim.new(1, 0)
         
         local Fill = InstanceNew("Frame")
-        Fill.Size = UDim2new((defaultVal - min) / (max - min), 0, 1, 0)
+        Fill.Size = UDim2new((currentVal - min) / (max - min), 0, 1, 0)
         Fill.BackgroundColor3 = Theme.Accent
         Fill.BorderSizePixel = 0
         Fill.ZIndex = Frame.ZIndex + 2
@@ -635,16 +654,21 @@ return function(env)
         Trigger.Text = ""
         Trigger.Parent = SliderBar
         
-        local currentVal = defaultVal
         local dragging = false
         
+        local function setVal(v)
+            currentVal = mathClamp(v, min, max)
+            UserConfigs[Flag] = currentVal
+            local pos = (currentVal - min) / (max - min)
+            TweenService:Create(Fill, TWEEN_NORMAL, {Size = UDim2new(pos, 0, 1, 0)}):Play()
+            ValueLabel.Text = tostring(currentVal)
+            pcall(callback, currentVal)
+        end
+
         local function update(input)
-            local pos = UDim2new(mathClamp((input.Position.X - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X, 0, 1), 0, 1, 0)
-            Fill.Size = pos
-            local val = mathFloor(min + ((max - min) * pos.X.Scale))
-            ValueLabel.Text = tostring(val)
-            currentVal = val
-            callback(val)
+            local ratio = mathClamp((input.Position.X - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X, 0, 1)
+            local val = mathFloor(min + ((max - min) * ratio))
+            setVal(val)
         end
         
         Trigger.InputBegan:Connect(function(input)
@@ -666,14 +690,9 @@ return function(env)
             end
         end)
         
-        local function setVal(v)
-            currentVal = mathClamp(v, min, max)
-            local pos = (currentVal - min) / (max - min)
-            TweenService:Create(Fill, TWEEN_NORMAL, {Size = UDim2new(pos, 0, 1, 0)}):Play()
-            ValueLabel.Text = tostring(currentVal)
-            callback(currentVal)
-        end
-        
+        Library.Registry[Flag] = { Type = "Slider", Set = setVal }
+
+        setVal(currentVal)
         return {Set = setVal}
     end
 
@@ -725,22 +744,18 @@ return function(env)
 
     CreateCompactToggle(VolumeBlock, "Enable Volume Modifier", VolumesEnabled, function(state)
         VolumesEnabled = state
-        UserConfigs["Vol_Enabled"] = state
     end)
     
     local FootstepsSlider = CreateCompactSlider(VolumeBlock, "FootSteps Volume", 0, 10, FootstepsVolMultiplier, function(val)
         FootstepsVolMultiplier = val
-        UserConfigs["Vol_FootstepsMultiplier"] = val
     end)
     
     local JumpSlider = CreateCompactSlider(VolumeBlock, "Jump Volume", 0, 10, JumpVolMultiplier, function(val)
         JumpVolMultiplier = val
-        UserConfigs["Vol_JumpMultiplier"] = val
     end)
     
     local FallSlider = CreateCompactSlider(VolumeBlock, "Fall Volume", 0, 10, FallVolMultiplier, function(val)
         FallVolMultiplier = val
-        UserConfigs["Vol_FallMultiplier"] = val
     end)
 
     CreateCompactButton(VolumeBlock, "Reset Volumes", function()
@@ -820,7 +835,6 @@ return function(env)
         end
     end)
 
-    -- Inserindo o novo modificador "Mute Sounds Beast" no bloco direito (Mute Settings)
     CreateCompactToggle(MuteBlock, "Mute Sounds Beast", false, function(state)
         toggleMuteBeast(state)
     end)
@@ -829,12 +843,12 @@ return function(env)
     -- MUSIC PLAYER (Design Elegante, Compacto com Dropdown Flutuante)
     -- =========================================================================
     local MusicBlock = InstanceNew("Frame")
-    MusicBlock.Size = UDim2new(1, -2, 0, 95) -- Tamanho aumentado para 95px de segurança total contra colisões
+    MusicBlock.Size = UDim2new(1, -2, 0, 95)
     MusicBlock.BackgroundColor3 = Color3.new(0, 0, 0)
     MusicBlock.BackgroundTransparency = 0.45
     MusicBlock.BorderSizePixel = 0
-    MusicBlock.ClipsDescendants = false -- Permite que a lista flutue perfeitamente sobre os cards
-    MusicBlock.ZIndex = 100 -- ZIndex muito alto para priorizar todos os herdeiros
+    MusicBlock.ClipsDescendants = false 
+    MusicBlock.ZIndex = 100 
     MusicBlock.Parent = Page
     
     local muStroke = InstanceNew("UIStroke", MusicBlock)
@@ -858,14 +872,14 @@ return function(env)
     MusicTitle.ZIndex = 101
     MusicTitle.Parent = MusicBlock
 
-    -- Entrada Customizada de ID (Fundo preto transparente integrado)
+    -- Entrada Customizada de ID
     local textBox = InstanceNew("TextBox")
     textBox.Size = UDim2new(0.32, -6, 0, 28)
-    textBox.Position = UDim2new(0, 0, 0, 42) -- Alinhado perfeitamente na parte inferior
+    textBox.Position = UDim2new(0, 0, 0, 42)
     textBox.PlaceholderText = "Insert ID..."
     textBox.Text = ""
-    textBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Fundo preto
-    textBox.BackgroundTransparency = 0.45 -- Transparência idêntica
+    textBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    textBox.BackgroundTransparency = 0.45
     textBox.TextColor3 = Theme.Text
     textBox.PlaceholderColor3 = Theme.TextDark
     textBox.Font = Theme.Font
@@ -877,12 +891,12 @@ return function(env)
     local tbStroke = InstanceNew("UIStroke", textBox)
     tbStroke.Color = Color3fromRGB(40, 40, 40)
 
-    -- Botão Seletor de Faixas (Pre-seleções) (Fundo preto transparente integrado)
+    -- Botão Seletor de Faixas (Pre-seleções)
     local songDropdown = InstanceNew("TextButton")
     songDropdown.Size = UDim2new(0.32, -6, 0, 28)
-    songDropdown.Position = UDim2new(0.32, 6, 0, 42) -- Alinhado no centro inferior
-    songDropdown.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Fundo preto
-    songDropdown.BackgroundTransparency = 0.45 -- Transparência idêntica
+    songDropdown.Position = UDim2new(0.32, 6, 0, 42)
+    songDropdown.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    songDropdown.BackgroundTransparency = 0.45
     songDropdown.Text = "Select Song"
     songDropdown.Font = Theme.Font
     songDropdown.TextSize = 10
@@ -904,12 +918,12 @@ return function(env)
     sdArrow.ZIndex = 103
     sdArrow.Parent = songDropdown
 
-    -- Container Flutuante do Menu de Músicas com Opacidade Total e Fundo Preto Transparente
+    -- Container Flutuante do Menu de Músicas
     local SongMenu = InstanceNew("Frame")
     SongMenu.Size = UDim2new(1, 0, 0, 134)
     SongMenu.Position = UDim2new(0, 0, 1, 4)
-    SongMenu.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Preto
-    SongMenu.BackgroundTransparency = 0.15 -- Transparente/Translúcido elegante
+    SongMenu.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    SongMenu.BackgroundTransparency = 0.15
     SongMenu.BorderSizePixel = 0
     SongMenu.Visible = false
     SongMenu.ZIndex = 200
@@ -971,7 +985,6 @@ return function(env)
         sdArrow.Text = SongMenu.Visible and "▲" or "▼"
     end)
 
-    -- Sincroniza o seletor quando o ID é colado manualmente
     textBox:GetPropertyChangedSignal("Text"):Connect(function()
         local currentText = textBox.Text
         local found = false
@@ -987,10 +1000,10 @@ return function(env)
         end
     end)
 
-    -- Botão Play/Stop de Canto Inferior Direito sem colisão de Y
+    -- Botão Play/Stop
     local playBtn = InstanceNew("TextButton")
     playBtn.Size = UDim2new(0.34, -12, 0, 28)
-    playBtn.Position = UDim2new(0.66, 12, 0, 42) -- Alinhado à direita inferior (Sem colisão com o slider que fica em Y = -4)
+    playBtn.Position = UDim2new(0.66, 12, 0, 42)
     playBtn.BackgroundColor3 = Color3.new(0, 0, 0)
     playBtn.BackgroundTransparency = 0.45
     playBtn.Text = "Play"
@@ -1040,10 +1053,10 @@ return function(env)
         end
     end)
 
-    -- Slider de Volume da Música (Y = -4 para espaçamento de folga)
+    -- Slider de Volume da Música
     local sliderFrame = InstanceNew("Frame")
     sliderFrame.Size = UDim2new(0.4, 0, 0, 35)
-    sliderFrame.Position = UDim2new(0.6, 0, 0, -4) -- Posicionado no topo direito do bloco
+    sliderFrame.Position = UDim2new(0.6, 0, 0, -4)
     sliderFrame.BackgroundTransparency = 1
     sliderFrame.ZIndex = 101
     sliderFrame.Parent = MusicBlock
@@ -1081,7 +1094,7 @@ return function(env)
     InstanceNew("UICorner", sliderBar).CornerRadius = UDim.new(1, 0)
 
     local sliderFill = InstanceNew("Frame")
-    sliderFill.Size = UDim2new(0.5, 0, 1, 0) -- default 50%
+    sliderFill.Size = UDim2new(0.5, 0, 1, 0)
     sliderFill.BackgroundColor3 = Theme.Accent
     sliderFill.BorderSizePixel = 0
     sliderFill.ZIndex = 103
@@ -1158,7 +1171,7 @@ return function(env)
         Card.BackgroundColor3 = Color3.new(0, 0, 0)
         Card.BackgroundTransparency = 0.45 
         Card.BorderSizePixel = 0
-        Card.ZIndex = 1 -- Definido como baixo para não competir com a lista de música
+        Card.ZIndex = 1 
         Card.Parent = Parent
         
         local cardStroke = InstanceNew("UIStroke", Card)
@@ -1250,10 +1263,10 @@ return function(env)
     ResetBtnFrame.BackgroundColor3 = Color3.new(0, 0, 0)
     ResetBtnFrame.BackgroundTransparency = 0.45
     ResetBtnFrame.Text = "Default Sounds (Reset All)"
-    ResetBtnFrame.TextColor3 = Color3fromRGB(150, 150, 150) -- Cor cinza padrão legível
+    ResetBtnFrame.TextColor3 = Color3fromRGB(150, 150, 150)
     ResetBtnFrame.Font = Enum.Font.GothamBold
     ResetBtnFrame.TextSize = 11
-    ResetBtnFrame.ZIndex = 1 -- Baixo ZIndex de segurança
+    ResetBtnFrame.ZIndex = 1 
     ResetBtnFrame.Parent = Page
     InstanceNew("UICorner", ResetBtnFrame).CornerRadius = UDim.new(0, 6)
     
@@ -1261,7 +1274,6 @@ return function(env)
     rbsStr.Color = Color3fromRGB(40, 40, 40)
     rbsStr.Thickness = 1
 
-    -- Efeitos de hover extremamente legíveis e destacados
     ResetBtnFrame.MouseEnter:Connect(function() 
         TweenService:Create(ResetBtnFrame, TWEEN_NORMAL, {TextColor3 = Color3fromRGB(255, 100, 100)}):Play()
         TweenService:Create(rbsStr, TWEEN_NORMAL, {Color = Color3fromRGB(220, 80, 80)}):Play() 
@@ -1284,7 +1296,7 @@ return function(env)
         RefreshAllSounds()
     end)
 
-    -- Inserindo a categoria de som "NorthDxv1Ces" com os botões normalizados (Walk, Jump, Fall)
+    -- Inserindo os Sound Cards
     CreateSoundCard(Page, "NorthDxv1Ces", {
         {Name = "Walk", ID = "119933956036500", Type = "Walk"},
         {Name = "Jump", ID = "87683560682449", Type = "Jump"},
@@ -1350,4 +1362,30 @@ return function(env)
     updateButtonVisuals(WalkButtons, savedWalk)
     updateButtonVisuals(JumpButtons, savedJump)
     updateButtonVisuals(FallButtons, savedFall)
+
+    -- Registro de conexões de escuta externa para os pacotes de som carregar via .Set() em tempo real
+    Library.Registry["CustomSound_Walk"] = {
+        Type = "Custom",
+        Set = function(val)
+            CurrentSoundIDs.Running = val
+            updateButtonVisuals(WalkButtons, val)
+            RefreshAllSounds()
+        end
+    }
+    Library.Registry["CustomSound_Jump"] = {
+        Type = "Custom",
+        Set = function(val)
+            CurrentSoundIDs.Jumping = val
+            updateButtonVisuals(JumpButtons, val)
+            RefreshAllSounds()
+        end
+    }
+    Library.Registry["CustomSound_Fall"] = {
+        Type = "Custom",
+        Set = function(val)
+            CurrentSoundIDs.Landing = val
+            updateButtonVisuals(FallButtons, val)
+            RefreshAllSounds()
+        end
+    }
 end
