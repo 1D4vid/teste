@@ -12,10 +12,10 @@ return function(env)
     local isMobile = env.isMobile
     local UserInputService = game:GetService("UserInputService")
 
-    -- Modificação local temporária para estilizar e ampliar os Inputs de texto do módulo
+    -- Modificação local temporária para estilizar e ampliar os Inputs de texto do módulo (Corrigido retorno)
     local originalCreateInput = Library.CreateInput
     Library.CreateInput = function(self, targetPage, Text, Default, Callback)
-        originalCreateInput(self, targetPage, Text, Default, Callback)
+        local result = originalCreateInput(self, targetPage, Text, Default, Callback)
         task.defer(function()
             for _, descendant in ipairs(targetPage:GetDescendants()) do
                 if descendant:IsA("TextBox") then
@@ -39,12 +39,13 @@ return function(env)
                 end
             end
         end)
+        return result
     end
 
-    -- Modificação local temporária para alinhar perfeitamente as setas (▼) de todos os Dropdowns
+    -- Modificação local temporária para alinhar as setas de todos os Dropdowns (Corrigido retorno)
     local originalCreateDropdown = Library.CreateDropdown
     Library.CreateDropdown = function(self, targetPage, Text, Options, Default, Callback)
-        originalCreateDropdown(self, targetPage, Text, Options, Default, Callback)
+        local result = originalCreateDropdown(self, targetPage, Text, Options, Default, Callback)
         task.defer(function()
             for _, descendant in ipairs(targetPage:GetDescendants()) do
                 if descendant:IsA("TextLabel") and (descendant.Text == "▼" or descendant.Text == "▲") then
@@ -52,11 +53,12 @@ return function(env)
                 end
             end
         end)
+        return result
     end
 
     local originalCreatePlayerDropdown = Library.CreatePlayerDropdown
     Library.CreatePlayerDropdown = function(self, targetPage, Text, Default, Callback)
-        originalCreatePlayerDropdown(self, targetPage, Text, Default, Callback)
+        local result = originalCreatePlayerDropdown(self, targetPage, Text, Default, Callback)
         task.defer(function()
             for _, descendant in ipairs(targetPage:GetDescendants()) do
                 if descendant:IsA("TextLabel") and (descendant.Text == "▼" or descendant.Text == "▲") then
@@ -64,6 +66,7 @@ return function(env)
                 end
             end
         end)
+        return result
     end
 
     local HideLeavesConnection = nil
@@ -101,7 +104,7 @@ return function(env)
     local spoofedOthers = {}
     local othersOriginalData = {}
 
-    -- Variáveis e mecânicas internas de Touch Sensitivity (Modificado para evitar erros no console)
+    -- Variáveis e mecânicas internas de Touch Sensitivity
     local touchSensEnabled = false
     local touchSensValue = 1.0
     local hookActive = false
@@ -295,7 +298,7 @@ return function(env)
         end
     end
 
-    -- Variáveis e mecânicas internas de Cam Blur (Motion Blur)
+    -- Variáveis e mecânicas internas de Cam Blur
     local camBlurEnabled = false
     local motionBlur = nil
     local camBlurConn = nil
@@ -345,7 +348,7 @@ return function(env)
         end
     end
 
-    -- Variáveis e motor interno do Players Cam (Mini Spectate Viewport)
+    -- Variáveis e motor interno do Players Cam
     local playersCamEnabled = false
     local spectateConnection = nil
     local targetPlayer = nil
