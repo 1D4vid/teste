@@ -53,7 +53,7 @@ return function(env)
         task.spawn(run)
     end
 
-    -- [ RESOLVIDO BUG VISUAL DA CROSSHAIR ]
+    -- Criador do Grid de Itens
     local function createGridContainer(parentTarget)
         local bg = Instance.new("Frame")
         bg.Size = UDim2.new(1, -2, 0, 1) -- Inicializado com 1px para evitar falha no cálculo nativo
@@ -85,7 +85,7 @@ return function(env)
         pad.PaddingBottom = UDim.new(0, 8)
         pad.Parent = wrapper
 
-        -- Recalculador diferido de layout (Força a correção de cores e dimensões imediatamente)
+        -- Recalculador diferido de layout
         task.defer(function()
             bg.AutomaticSize = Enum.AutomaticSize.Y
             wrapper.AutomaticSize = Enum.AutomaticSize.Y
@@ -102,7 +102,7 @@ return function(env)
         local savedPC = UserConfigs["TexturesPage_Crosshair_PC"]
         if savedPC and savedPC ~= "RESET" and not isMobile then
             UserInputService.MouseIconEnabled = false
-            Mouse.Icon = "rbxassetid://0" -- Força textura vazia/invisível para anular o cursor padrão
+            Mouse.Icon = "rbxassetid://0" -- Força textura vazia para anular o cursor padrão
         else
             if Mouse.Icon == "rbxassetid://0" then
                 Mouse.Icon = ""
@@ -631,7 +631,7 @@ return function(env)
 
 
     -- ==========================================================
-    -- DOUBLE JUMP EFFECTS P1 & P2 (Alinhados na Esquerda - Left)
+    -- DOUBLE JUMP EFFECTS P1 & P2
     -- ==========================================================
     Library:CreateSection(Page, "Double Jump Effects (P1)", "Left")
     local targetParentDJ1 = GetParentTarget(Page)
@@ -640,7 +640,7 @@ return function(env)
     local targetParentDJ2 = GetParentTarget(Page)
 
     -- ==========================================================
-    -- CROSSHAIRS P1 & P2 (Alinhados na Direita - Right)
+    -- CROSSHAIRS P1 & P2
     -- ==========================================================
     Library:CreateSection(Page, "Crosshairs (P1)", "Right")
     Library:CreateSlider(Page, "Cursor Size", 10, 100, 24, UpdateCursorSizes)
@@ -720,7 +720,6 @@ return function(env)
             end
         end
 
-        -- Varredura ultrarrápida focada em players atuais
         for _, plr in ipairs(Players:GetPlayers()) do
             local char = plr.Character
             if char then
@@ -732,7 +731,6 @@ return function(env)
             end
         end
 
-        -- Varredura fracionada em segundo plano no Workspace
         task.spawn(function()
             local desc = Workspace:GetDescendants()
             local total = #desc
@@ -752,7 +750,6 @@ return function(env)
             end
         end)
 
-        -- Escuta em tempo real para novos elementos adicionados dinamicamente
         if texturaID ~= "Default" then
             table.insert(currentDoubleJumpConns, Workspace.DescendantAdded:Connect(function(obj)
                 if obj:IsA("ParticleEmitter") or obj:IsA("Sparkles") then
@@ -829,7 +826,6 @@ return function(env)
         end
     end)
 
-    -- [ REMOVIDO ID 84159990264787 CONFORME SOLICITADO ]
     local effectIDs = {
         "81110491136307", "117864251880006", "120181545812734", "74056211768119", 
         "116419901031627", "92247449256845", "113423466689563", "90279999098357", 
@@ -883,7 +879,7 @@ return function(env)
     end
 
     -- ==========================================================
-    -- MOBILE BUTTON JUMP (DIVIDIDO EM P1 NA ESQUERDA E P2 NA DIREITA)
+    -- MOBILE BUTTON JUMP
     -- ==========================================================
     if isMobile then
         Library:CreateSection(Page, "Mobile Button Jump (P1)", "Left")
@@ -1015,7 +1011,6 @@ return function(env)
         mDefaultBtn.MouseLeave:Connect(function() TweenService:Create(mDStr, TweenInfo.new(0.2), {Color=Color3.fromRGB(40,40,40)}):Play() TweenService:Create(defaultBtn, TweenInfo.new(0.2), {TextColor3=Theme.TextDark}):Play() end)
         mDefaultBtn.MouseButton1Click:Connect(function() UserConfigs["TexturesPage_MobileJump"] = "Default" EnableMobileButtonJump("Default") end)
 
-        -- [ IDs DA PARTE 1 ]
         local mJumpIDs_P1 = {
             "126321670529682", "77430663366893", "115979689020396", "101678026501268", 
             "100604012502918", "107988778180975", "106355869384286", "119823685069603"
@@ -1040,7 +1035,6 @@ return function(env)
             end)
         end
 
-        -- [ IDs SOLICITADOS PARA A PARTE 2 ]
         local mJumpIDs_P2 = {
             "70463296258416", "80555494674270", "74056211768119", "115091366896134", 
             "117864251880006", "130200330618832", "77364460442867"
@@ -1067,10 +1061,8 @@ return function(env)
     end
 
     -- ==========================================
-    -- POPULATE CROSSHAIRS (IDs ATUALIZADOS)
+    -- POPULATE CROSSHAIRS
     -- ==========================================
-    -- [ REMOVIDO ID 128514706094926 ]
-    -- [ ADICIONADOS IDs 139192004969086 E 115820239502902 ]
     local CursorList = {
         {Name = "Default", ID = "RESET"},
         {Name = "Use Cursor", ID = "15368174199"}, {Name = "Use Cursor", ID = "12701650945"},
@@ -1219,25 +1211,70 @@ return function(env)
     local usePCCursor = UserInputService.MouseEnabled
     if usePCCursor then CreateCursorSystem(false) else CreateCursorSystem(true) end
 
-    -- INICIALIZADOR DE SALVOS
-    if UserConfigs["TexturesPage_DoubleJump"] then task.spawn(function() EnableDoubleJumpEffect(UserConfigs["TexturesPage_DoubleJump"]) end) end
-    if isMobile and UserConfigs["TexturesPage_MobileJump"] then task.spawn(function() EnableMobileButtonJump(UserConfigs["TexturesPage_MobileJump"]) end) end
+    -- INICIALIZADOR E SINCRONIZADOR DE CONFIGURAÇÕES SALVAS (Via .Set e carregamento direto)
+    local function ApplyDoubleJumpSafe(val)
+        if val then EnableDoubleJumpEffect(val) end
+    end
 
-    task.spawn(function()
+    local function ApplyMobileJumpSafe(val)
+        if isMobile and val then EnableMobileButtonJump(val) end
+    end
+
+    local function ApplyCrosshairPCSafe(val)
         if usePCCursor then
-            local saved = UserConfigs["TexturesPage_Crosshair_PC"]
-            if saved and saved ~= "RESET" then
-                PCSoftwareCursor.Image = saved
+            if val == "RESET" or not val then
+                SetPCCursorActive(false)
+                PCSoftwareCursor.Visible = false
+                UserInputService.MouseIconEnabled = true 
+                Mouse.Icon = ""
+            else
+                PCSoftwareCursor.Image = val
                 SetPCCursorActive(true)
                 PCSoftwareCursor.Visible = true 
                 updateMouseVisibility()
             end
-        else
-            local saved = UserConfigs["TexturesPage_Crosshair_Mobile"]
-            if saved and saved ~= "RESET" then
-                MobileCrosshair.Image = saved
+        end
+    end
+
+    local function ApplyCrosshairMobileSafe(val)
+        if not usePCCursor then
+            if val == "RESET" or not val then
+                MobileCrosshair.Visible = false 
+            else
+                MobileCrosshair.Image = val
                 MobileCrosshair.Visible = true 
             end
         end
-    end)
+    end
+
+    -- Registro de conexões de escuta externa na global da Library (Suporte a carregamento de configs em tempo real)
+    Library.Registry["TexturesPage_DoubleJump"] = {
+        Type = "Custom",
+        Set = ApplyDoubleJumpSafe
+    }
+
+    if isMobile then
+        Library.Registry["TexturesPage_MobileJump"] = {
+            Type = "Custom",
+            Set = ApplyMobileJumpSafe
+        }
+        Library.Registry["TexturesPage_Crosshair_Mobile"] = {
+            Type = "Custom",
+            Set = ApplyCrosshairMobileSafe
+        }
+    else
+        Library.Registry["TexturesPage_Crosshair_PC"] = {
+            Type = "Custom",
+            Set = ApplyCrosshairPCSafe
+        }
+    end
+
+    -- Inicialização primária
+    if UserConfigs["TexturesPage_DoubleJump"] then ApplyDoubleJumpSafe(UserConfigs["TexturesPage_DoubleJump"]) end
+    if isMobile and UserConfigs["TexturesPage_MobileJump"] then ApplyMobileJumpSafe(UserConfigs["TexturesPage_MobileJump"]) end
+    if usePCCursor then
+        ApplyCrosshairPCSafe(UserConfigs["TexturesPage_Crosshair_PC"])
+    else
+        ApplyCrosshairMobileSafe(UserConfigs["TexturesPage_Crosshair_Mobile"])
+    end
 end
